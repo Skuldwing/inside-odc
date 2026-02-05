@@ -1,0 +1,65 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  color: #0f172a;
+  background:
+    radial-gradient(1200px 600px at 10% 0%, #fff7ed 0%, transparent 60%),
+    radial-gradient(1000px 800px at 90% 10%, #eff6ff 0%, transparent 55%),
+    #f8fafc;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .page-title {
+    @apply text-3xl font-semibold text-slate-900 tracking-tight;
+  }
+  .page-subtitle {
+    @apply mt-1 text-sm text-slate-500;
+  }
+  .card {
+    @apply rounded-2xl border border-slate-200/70 bg-white/90 shadow-lg shadow-slate-200/60;
+  }
+  .card-solid {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-lg shadow-slate-200/60;
+  }
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-400/60;
+  }
+  .select {
+    @apply w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-sm text-slate-900 focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-400/60;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition;
+  }
+  .btn-primary {
+    @apply btn bg-orange-500 text-white shadow-sm shadow-orange-200 hover:bg-orange-600;
+  }
+  .btn-dark {
+    @apply btn bg-slate-900 text-white hover:bg-slate-800;
+  }
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100;
+  }
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  .table {
+    @apply w-full text-sm;
+  }
+  .table-head {
+    @apply bg-slate-100/80 text-left text-xs uppercase tracking-wide text-slate-500;
+  }
+  .table-row {
+    @apply border-t hover:bg-orange-50/40;
+  }
+}

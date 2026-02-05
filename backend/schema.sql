@@ -1,0 +1,84 @@
+-- Schema de reference pour Inside ODC (PostgreSQL)
+-- Objectif: aligner les colonnes avec le backend/frontend existant.
+
+CREATE TABLE IF NOT EXISTS partners (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  contact_email TEXT,
+  contact_phone TEXT,
+  objective_beneficiaries INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS devices (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT,
+  category TEXT,
+  color TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id SERIAL PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password TEXT NOT NULL,
+  full_name TEXT,
+  role TEXT NOT NULL CHECK (role IN ('admin','partner','viewer')),
+  partner_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS activities (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  activity_date DATE NOT NULL,
+  duration_hours INTEGER,
+  location TEXT,
+  device_id INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+  partner_id INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS participants (
+  id SERIAL PRIMARY KEY,
+  nom TEXT NOT NULL,
+  prenom TEXT NOT NULL,
+  genre TEXT,
+  email TEXT,
+  telephone TEXT,
+  statut TEXT,
+  structure TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Deduplication: email unique si present
+CREATE UNIQUE INDEX IF NOT EXISTS participants_email_unique
+  ON participants(email)
+  WHERE email IS NOT NULL;
+
+-- Deduplication: telephone unique si present
+CREATE UNIQUE INDEX IF NOT EXISTS participants_telephone_unique
+  ON participants(telephone)
+  WHERE telephone IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS activity_participants (
+  activity_id INTEGER NOT NULL REFERENCES activities(id) ON DELETE CASCADE,
+  participant_id INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  PRIMARY KEY (activity_id, participant_id)
+);
+
+CREATE TABLE IF NOT EXISTS campagnes (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('email','sms')),
+  message TEXT NOT NULL,
+  status TEXT DEFAULT 'programmee',
+  created_at TIMESTAMP DEFAULT NOW()
+);
