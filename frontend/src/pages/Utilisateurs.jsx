@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import {
   Plus,
   User,
@@ -9,8 +8,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-
-const API_URL = "http://localhost:3000/users";
+import api from "../api";
 
 const roles = [
   { value: "admin", label: "Administrateur" },
@@ -30,19 +28,11 @@ export default function Utilisateurs() {
     partner: "",
     status: "active",
   });
-
-  const token = localStorage.getItem("token");
-
-  const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const usersApi = api;
 
   const fetchUsers = async () => {
     try {
-      const res = await api.get("/");
+      const res = await usersApi.get("/users");
       setUsers(res.data);
     } catch (err) {
       console.error("Erreur chargement utilisateurs", err);
@@ -69,9 +59,9 @@ export default function Utilisateurs() {
 
     try {
       if (editing) {
-        await api.put(`/${editing}`, form);
+        await usersApi.put(`/users/${editing}`, form);
       } else {
-        await api.post("/", form);
+        await usersApi.post("/users", form);
       }
 
       fetchUsers();
@@ -98,7 +88,7 @@ export default function Utilisateurs() {
     if (!confirm("Désactiver cet utilisateur ?")) return;
 
     try {
-      await api.delete(`/${id}`);
+      await usersApi.delete(`/users/${id}`);
       fetchUsers();
     } catch (err) {
       console.error("Erreur suppression utilisateur", err);

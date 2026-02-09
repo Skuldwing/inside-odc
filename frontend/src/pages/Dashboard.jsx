@@ -222,8 +222,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (geoBoundary) return;
-    const url =
-      "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/SEN/ADM1/geoBoundaries-SEN-ADM1_simplified.geojson";
+      const url =
+        "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/SEN/ADM1/geoBoundaries-SEN-ADM1_simplified.geojson";
     fetch(url)
       .then((res) => res.json())
       .then((data) => setGeoBoundary(data))

@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { Plus, Layers, Pencil, Trash2, Palette } from "lucide-react";
-
-const API_URL = "http://localhost:3000/devices";
+import api from "../api";
 
 const categories = [
   "formation",
@@ -13,14 +11,7 @@ const categories = [
 ];
 
 export default function Dispositifs() {
-  const token = localStorage.getItem("token");
-
-  const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const devicesApi = api;
 
   const [devices, setDevices] = useState([]);
   const [open, setOpen] = useState(false);
@@ -36,7 +27,7 @@ export default function Dispositifs() {
 
   const fetchDevices = async () => {
     try {
-      const res = await api.get("/");
+      const res = await devicesApi.get("/devices");
       setDevices(res.data);
     } catch (err) {
       console.error("Erreur chargement dispositifs", err);
@@ -63,9 +54,9 @@ export default function Dispositifs() {
 
     try {
       if (editing) {
-        await api.put(`/${editing}`, form);
+        await devicesApi.put(`/devices/${editing}`, form);
       } else {
-        await api.post("/", form);
+        await devicesApi.post("/devices", form);
       }
 
       fetchDevices();
@@ -92,7 +83,7 @@ export default function Dispositifs() {
     if (!confirm("Supprimer ce dispositif ?")) return;
 
     try {
-      await api.delete(`/${id}`);
+      await devicesApi.delete(`/devices/${id}`);
       fetchDevices();
     } catch (err) {
       console.error("Erreur suppression", err);

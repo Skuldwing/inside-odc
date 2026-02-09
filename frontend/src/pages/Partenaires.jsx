@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import {
   Plus,
   Building2,
@@ -9,18 +8,10 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-
-const API_URL = "http://localhost:3000/partners";
+import api from "../api";
 
 export default function Partenaires() {
-  const token = localStorage.getItem("token");
-
-  const api = axios.create({
-    baseURL: API_URL,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
+  const partnersApi = api;
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -37,7 +28,7 @@ export default function Partenaires() {
 
   const fetchPartners = async () => {
     try {
-      const res = await api.get("/");
+      const res = await partnersApi.get("/partners");
       setPartners(res.data);
     } catch (err) {
       console.error("Erreur chargement partenaires", err);
@@ -70,9 +61,9 @@ export default function Partenaires() {
 
     try {
       if (editing) {
-        await api.put(`/${editing}`, payload);
+        await partnersApi.put(`/partners/${editing}`, payload);
       } else {
-        await api.post("/", payload);
+        await partnersApi.post("/partners", payload);
       }
 
       fetchPartners();
@@ -100,7 +91,7 @@ export default function Partenaires() {
     if (!confirm("Supprimer ce partenaire ?")) return;
 
     try {
-      await api.delete(`/${id}`);
+      await partnersApi.delete(`/partners/${id}`);
       fetchPartners();
     } catch (err) {
       console.error("Erreur suppression partenaire", err);

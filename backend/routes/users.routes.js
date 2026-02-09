@@ -7,14 +7,32 @@ const requireAdmin = require("../middleware/role.middleware");
 const router = express.Router();
 const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || "ChangeMe123!";
 
+async function hasUsersIsActiveColumn() {
+  const result = await pool.query(
+    `
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'users'
+      AND column_name = 'is_active'
+    LIMIT 1
+    `
+  );
+  return result.rowCount > 0;
+}
+
 /* ===== GET USERS ===== */
 router.get("/", authMiddleware, requireAdmin, async (req, res) => {
   try {
+    const hasIsActive = await hasUsersIsActiveColumn();
+    const statusExpr = hasIsActive
+      ? "CASE WHEN u.is_active = true THEN 'active' ELSE 'inactive' END"
+      : "'active'";
+
     const result = await pool.query(
       `
       SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
              p.name AS partner,
-             CASE WHEN u.is_active = true THEN 'active' ELSE 'inactive' END AS status
+             ${statusExpr} AS status
       FROM users u
       LEFT JOIN partners p ON u.partner_id = p.id
       ORDER BY u.created_at DESC
@@ -56,15 +74,25 @@ router.post("/", authMiddleware, requireAdmin, async (req, res) => {
     const pwd = password || DEFAULT_PASSWORD;
     const hash = await bcrypt.hash(pwd, 10);
     const isActive = status !== "inactive";
+    const hasIsActive = await hasUsersIsActiveColumn();
 
-    const result = await pool.query(
-      `
-      INSERT INTO users (email, password, role, partner_id, full_name, is_active)
-      VALUES ($1,$2,$3,$4,$5,$6)
-      RETURNING id, email, role, full_name, partner_id
-      `,
-      [email, hash, role, resolvedPartnerId, full_name || null, isActive]
-    );
+    const result = hasIsActive
+      ? await pool.query(
+          `
+          INSERT INTO users (email, password, role, partner_id, full_name, is_active)
+          VALUES ($1,$2,$3,$4,$5,$6)
+          RETURNING id, email, role, full_name, partner_id
+          `,
+          [email, hash, role, resolvedPartnerId, full_name || null, isActive]
+        )
+      : await pool.query(
+          `
+          INSERT INTO users (email, password, role, partner_id, full_name)
+          VALUES ($1,$2,$3,$4,$5)
+          RETURNING id, email, role, full_name, partner_id
+          `,
+          [email, hash, role, resolvedPartnerId, full_name || null]
+        );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -100,20 +128,34 @@ router.put("/:id", authMiddleware, requireAdmin, async (req, res) => {
     }
 
     const isActive = status !== "inactive";
+    const hasIsActive = await hasUsersIsActiveColumn();
 
-    const result = await pool.query(
-      `
-      UPDATE users
-      SET email = $1,
-          role = $2,
-          partner_id = $3,
-          full_name = $4,
-          is_active = $5
-      WHERE id = $6
-      RETURNING id, email, role, full_name, partner_id
-      `,
-      [email, role, resolvedPartnerId, full_name || null, isActive, id]
-    );
+    const result = hasIsActive
+      ? await pool.query(
+          `
+          UPDATE users
+          SET email = $1,
+              role = $2,
+              partner_id = $3,
+              full_name = $4,
+              is_active = $5
+          WHERE id = $6
+          RETURNING id, email, role, full_name, partner_id
+          `,
+          [email, role, resolvedPartnerId, full_name || null, isActive, id]
+        )
+      : await pool.query(
+          `
+          UPDATE users
+          SET email = $1,
+              role = $2,
+              partner_id = $3,
+              full_name = $4
+          WHERE id = $5
+          RETURNING id, email, role, full_name, partner_id
+          `,
+          [email, role, resolvedPartnerId, full_name || null, id]
+        );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Utilisateur introuvable" });
@@ -130,15 +172,25 @@ router.put("/:id", authMiddleware, requireAdmin, async (req, res) => {
 router.delete("/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
-      `
-      UPDATE users
-      SET is_active = false
-      WHERE id = $1
-      RETURNING id
-      `,
-      [id]
-    );
+    const hasIsActive = await hasUsersIsActiveColumn();
+    const result = hasIsActive
+      ? await pool.query(
+          `
+          UPDATE users
+          SET is_active = false
+          WHERE id = $1
+          RETURNING id
+          `,
+          [id]
+        )
+      : await pool.query(
+          `
+          DELETE FROM users
+          WHERE id = $1
+          RETURNING id
+          `,
+          [id]
+        );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Utilisateur introuvable" });
