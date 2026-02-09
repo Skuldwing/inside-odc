@@ -228,10 +228,24 @@ router.get("/summary", authMiddleware, async (req, res) => {
       GROUP BY d.name
     `;
 
+    const partnersIsActiveCheck = await pool.query(
+      `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = 'partners'
+        AND column_name = 'is_active'
+      LIMIT 1
+      `
+    );
+    const partnersActiveWhere =
+      partnersIsActiveCheck.rowCount > 0
+        ? "(status = 'active' OR is_active = true)"
+        : "status = 'active'";
+
     const partnersActiveQuery = `
       SELECT COUNT(*)::int AS active
       FROM partners
-      WHERE status = 'active' OR is_active = true
+      WHERE ${partnersActiveWhere}
       ${partnerId ? "AND id = $1" : ""}
     `;
 
