@@ -4,6 +4,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
+const { createPasswordToken } = require("../services/passwordReset");
 
 const router = express.Router();
 const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || "ChangeMe123!";
@@ -97,28 +98,28 @@ router.post("/", authMiddleware, requireAdmin, async (req, res) => {
 
     const createdUser = result.rows[0];
 
-    // Send welcome email (best-effort)
+    // Send welcome email with password setup link (best-effort)
     try {
       const appUrl =
         process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
+      const token = await createPasswordToken(createdUser.id);
+      const link = `${appUrl}/set-password?token=${token}`;
       const subject = "Votre accès Inside ODC";
       const html = `
         <div>
           <p>Bonjour ${full_name || email},</p>
           <p>Votre compte a été créé.</p>
           <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Mot de passe:</strong> ${pwd}</p>
-          <p>Connectez-vous ici : <a href="${appUrl}/login">${appUrl}/login</a></p>
-          <p>Veuillez changer votre mot de passe après connexion.</p>
+          <p>Définissez votre mot de passe ici : <a href="${link}">${link}</a></p>
+          <p>Ce lien est valable 24h.</p>
         </div>
       `;
       const text =
         `Bonjour ${full_name || email}\n` +
         `Votre compte a été créé.\n` +
         `Email: ${email}\n` +
-        `Mot de passe: ${pwd}\n` +
-        `Connexion: ${appUrl}/login\n` +
-        `Veuillez changer votre mot de passe après connexion.`;
+        `Définir le mot de passe: ${link}\n` +
+        `Ce lien est valable 24h.`;
 
       await sendEmail({
         toEmail: email,
@@ -244,73 +245,49 @@ router.delete("/:id", authMiddleware, requireAdmin, async (req, res) => {
 router.post("/:id/reset-password", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const newPassword =
-      req.body?.password || process.env.DEFAULT_USER_PASSWORD || "ChangeMe123!";
-
-    const hash = await bcrypt.hash(newPassword, 10);
-    const hasIsActive = await hasUsersIsActiveColumn();
 
     const result = await pool.query(
       `
-      UPDATE users
-      SET password = $1
-      WHERE id = $2
-      RETURNING id
+      SELECT id, email, full_name
+      FROM users
+      WHERE id = $1
       `,
-      [hash, id]
+      [id]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Utilisateur introuvable" });
     }
 
-    if (hasIsActive) {
-      // If user was deactivated, reactivate on reset.
-      await pool.query(
-        `
-        UPDATE users
-        SET is_active = true
-        WHERE id = $1
-        `,
-        [id]
-      );
-    }
+    const user = result.rows[0];
 
-    // Send reset email (best-effort)
+    // Send reset email with password setup link (best-effort)
     try {
-      const userRes = await pool.query(
-        "SELECT email, full_name FROM users WHERE id = $1",
-        [id]
-      );
-      const user = userRes.rows[0];
-      if (user?.email) {
-        const appUrl =
-          process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
-        const subject = "Votre mot de passe Inside ODC a été réinitialisé";
-        const html = `
-          <div>
-            <p>Bonjour ${user.full_name || user.email},</p>
-            <p>Votre mot de passe a été réinitialisé.</p>
-            <p><strong>Nouveau mot de passe:</strong> ${newPassword}</p>
-            <p>Connectez-vous ici : <a href="${appUrl}/login">${appUrl}/login</a></p>
-            <p>Veuillez changer votre mot de passe après connexion.</p>
-          </div>
-        `;
-        const text =
-          `Bonjour ${user.full_name || user.email}\n` +
-          `Votre mot de passe a été réinitialisé.\n` +
-          `Nouveau mot de passe: ${newPassword}\n` +
-          `Connexion: ${appUrl}/login\n` +
-          `Veuillez changer votre mot de passe après connexion.`;
+      const appUrl =
+        process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
+      const token = await createPasswordToken(user.id);
+      const link = `${appUrl}/set-password?token=${token}`;
+      const subject = "Réinitialisation du mot de passe Inside ODC";
+      const html = `
+        <div>
+          <p>Bonjour ${user.full_name || user.email},</p>
+          <p>Un lien de réinitialisation a été demandé pour votre compte.</p>
+          <p>Définissez votre mot de passe ici : <a href="${link}">${link}</a></p>
+          <p>Ce lien est valable 24h.</p>
+        </div>
+      `;
+      const text =
+        `Bonjour ${user.full_name || user.email}\n` +
+        `Lien de réinitialisation: ${link}\n` +
+        `Ce lien est valable 24h.`;
 
-        await sendEmail({
-          toEmail: user.email,
-          toName: user.full_name || user.email,
-          subject,
-          html,
-          text,
-        });
-      }
+      await sendEmail({
+        toEmail: user.email,
+        toName: user.full_name || user.email,
+        subject,
+        html,
+        text,
+      });
     } catch (err) {
       console.error("Erreur envoi email reset mot de passe", err);
     }

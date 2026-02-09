@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
+const { consumePasswordToken } = require("../services/passwordReset");
 
 const router = express.Router();
 
@@ -55,5 +56,66 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/* ⚠️ CETTE LIGNE EST OBLIGATOIRE */
+async function hasUsersIsActiveColumn() {
+  const result = await pool.query(
+    `
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'users'
+      AND column_name = 'is_active'
+    LIMIT 1
+    `
+  );
+  return result.rowCount > 0;
+}
+
+/* ================= SET PASSWORD ================= */
+router.post("/set-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password || String(password).length < 6) {
+      return res
+        .status(400)
+        .json({ error: "Token et mot de passe valides requis" });
+    }
+
+    const userId = await consumePasswordToken(token);
+    if (!userId) {
+      return res.status(400).json({ error: "Token invalide ou expir�" });
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+    await pool.query(
+      `
+      UPDATE users
+      SET password = $1
+      WHERE id = $2
+      `,
+      [hash, userId]
+    );
+
+    if (await hasUsersIsActiveColumn()) {
+      await pool.query(
+        `
+        UPDATE users
+        SET is_active = true
+        WHERE id = $1
+        `,
+        [userId]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;
+
+
+
+
+

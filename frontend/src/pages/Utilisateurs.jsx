@@ -101,17 +101,14 @@ export default function Utilisateurs() {
   };
 
   const handleResetPassword = async (id) => {
-    const newPassword = prompt("Nouveau mot de passe (laisser vide pour le mot de passe par defaut) :");
-    if (newPassword === null) return;
+    if (!confirm("Envoyer un lien de reinitialisation par email ?")) return;
 
     try {
-      await usersApi.post(`/users/${id}/reset-password`, {
-        password: newPassword || undefined,
-      });
-      alert("Mot de passe reinitialise.");
+      await usersApi.post(`/users/${id}/reset-password`);
+      alert("Email de reinitialisation envoye.");
     } catch (err) {
       console.error("Erreur reinitialisation mot de passe", err);
-      alert("Erreur lors de la reinitialisation.");
+      alert("Erreur lors de l'envoi.");
     }
   };
 
@@ -310,7 +307,7 @@ export default function Utilisateurs() {
                   <button
                     onClick={() => handleResetPassword(u.id)}
                     className="text-slate-500 hover:text-blue-500 mr-2"
-                    title="Reinitialiser le mot de passe"
+                    title="Envoyer un lien de reinitialisation"
                   >
                     <Shield className="w-4 h-4" />
                   </button>

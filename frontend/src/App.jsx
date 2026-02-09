@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import Layout from "./layout/Layout";
 import Login from "./Login";
+import SetPassword from "./pages/SetPassword";
 
 import Dashboard from "./pages/Dashboard";
 import Activities from "./pages/Activities";
@@ -18,6 +19,7 @@ export default function App() {
     <Routes>
       {/* ===== PUBLIC ===== */}
       <Route path="/login" element={<Login />} />
+      <Route path="/set-password" element={<SetPassword />} />
 
       {/* ===== PROTECTED APP ===== */}
       <Route
