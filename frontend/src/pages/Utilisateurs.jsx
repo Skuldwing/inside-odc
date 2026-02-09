@@ -27,6 +27,7 @@ export default function Utilisateurs() {
     role: "viewer",
     partner: "",
     status: "active",
+    password: "",
   });
   const usersApi = api;
 
@@ -50,6 +51,7 @@ export default function Utilisateurs() {
       role: "viewer",
       partner: "",
       status: "active",
+      password: "",
     });
     setEditing(null);
   };
@@ -58,10 +60,12 @@ export default function Utilisateurs() {
     e.preventDefault();
 
     try {
+      const payload = { ...form };
+      if (!payload.password) delete payload.password;
       if (editing) {
-        await usersApi.put(`/users/${editing}`, form);
+        await usersApi.put(`/users/${editing}`, payload);
       } else {
-        await usersApi.post("/users", form);
+        await usersApi.post("/users", payload);
       }
 
       fetchUsers();
@@ -79,6 +83,7 @@ export default function Utilisateurs() {
       role: user.role,
       partner: user.partner || "",
       status: user.status,
+      password: "",
     });
     setEditing(user.id);
     setOpen(true);
@@ -92,6 +97,21 @@ export default function Utilisateurs() {
       fetchUsers();
     } catch (err) {
       console.error("Erreur suppression utilisateur", err);
+    }
+  };
+
+  const handleResetPassword = async (id) => {
+    const newPassword = prompt("Nouveau mot de passe (laisser vide pour le mot de passe par defaut) :");
+    if (newPassword === null) return;
+
+    try {
+      await usersApi.post(`/users/${id}/reset-password`, {
+        password: newPassword || undefined,
+      });
+      alert("Mot de passe reinitialise.");
+    } catch (err) {
+      console.error("Erreur reinitialisation mot de passe", err);
+      alert("Erreur lors de la reinitialisation.");
     }
   };
 
@@ -194,6 +214,20 @@ export default function Utilisateurs() {
                 </select>
               </div>
 
+              <div>
+                <label className="text-sm font-medium">
+                  Mot de passe (optionnel)
+                </label>
+                <input
+                  type="password"
+                  className="input mt-1"
+                  value={form.password}
+                  onChange={(e) =>
+                    setForm({ ...form, password: e.target.value })
+                  }
+                />
+              </div>
+
               <div className="flex justify-end gap-3 pt-4">
                 <button
                   type="button"
@@ -274,6 +308,13 @@ export default function Utilisateurs() {
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
+                    onClick={() => handleResetPassword(u.id)}
+                    className="text-slate-500 hover:text-blue-500 mr-2"
+                    title="Reinitialiser le mot de passe"
+                  >
+                    <Shield className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleDelete(u.id)}
                     className="text-slate-500 hover:text-red-500"
                   >
@@ -288,3 +329,4 @@ export default function Utilisateurs() {
     </div>
   );
 }
+
