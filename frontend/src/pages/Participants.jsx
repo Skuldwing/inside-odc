@@ -37,6 +37,7 @@ export default function Participants() {
       "Nom",
       "Prenom",
       "Genre",
+      "Tranche d'age",
       "Email",
       "Telephone",
       "Statut",
@@ -50,6 +51,7 @@ export default function Participants() {
       p.nom,
       p.prenom,
       p.genre,
+      p.age_range,
       p.email,
       p.telephone,
       p.statut,
@@ -111,6 +113,7 @@ export default function Participants() {
               <th className="p-3">Nom</th>
               <th className="p-3">Prénom</th>
               <th className="p-3">Genre</th>
+              <th className="p-3">Tranche d'âge</th>
               <th className="p-3">Email</th>
               <th className="p-3">Téléphone</th>
               <th className="p-3">Statut</th>
@@ -125,7 +128,7 @@ export default function Participants() {
             {filtered.length === 0 ? (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="text-center p-8 text-slate-500"
                 >
                   <Users className="mx-auto mb-2 text-slate-300" />
@@ -148,6 +151,7 @@ export default function Participants() {
                       {p.genre}
                     </span>
                   </td>
+                  <td className="p-3">{p.age_range}</td>
                   <td className="p-3">{p.email}</td>
                   <td className="p-3">{p.telephone}</td>
                   <td className="p-3">{p.statut}</td>
@@ -164,3 +168,6 @@ export default function Participants() {
     </div>
   );
 }
+
+
+
