@@ -156,4 +156,36 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== DELETE ACTIVITY ===== */
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await pool.query(
+      "SELECT id, partner_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Activite introuvable" });
+    }
+
+    if (
+      req.user.role === "partner" &&
+      existing.rows[0].partner_id !== req.user.partner_id
+    ) {
+      return res.status(403).json({ error: "Acces refuse" });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM activities WHERE id = $1 RETURNING id",
+      [id]
+    );
+
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;

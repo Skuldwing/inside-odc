@@ -21,6 +21,7 @@ export default function Activities() {
   const [editOpen, setEditOpen] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [editForm, setEditForm] = useState({
     id: null,
     title: "",
@@ -222,6 +223,19 @@ export default function Activities() {
     }
   };
 
+  const handleDelete = async (activityId) => {
+    if (!confirm("Supprimer cette activite definitivement ?")) return;
+    setDeleteError("");
+    try {
+      await api.delete(`/activities/${activityId}`);
+      fetchActivities();
+    } catch (err) {
+      setDeleteError(
+        err.response?.data?.error || "Erreur suppression activite"
+      );
+    }
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
     setUploadError("");
@@ -345,6 +359,11 @@ export default function Activities() {
             {error}
           </div>
         )}
+        {deleteError && (
+          <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3">
+            {deleteError}
+          </div>
+        )}
         {loading && (
           <div className="card p-6 text-center text-slate-500">
             Chargement...
@@ -361,6 +380,7 @@ export default function Activities() {
             activity={activity}
             canEdit={!isViewer}
             onEdit={() => openEdit(activity)}
+            onDelete={() => handleDelete(activity.id)}
           />
         ))}
       </div>
@@ -670,7 +690,7 @@ export default function Activities() {
   );
 }
 
-function ActivityCard({ activity, canEdit, onEdit }) {
+function ActivityCard({ activity, canEdit, onEdit, onDelete }) {
   const statusColors = {
     planned: "bg-blue-100 text-blue-700",
     ongoing: "bg-orange-100 text-orange-700",
@@ -713,12 +733,20 @@ function ActivityCard({ activity, canEdit, onEdit }) {
         </span>
 
         {canEdit && (
-          <button
-            className="text-orange-600 hover:underline text-sm font-medium"
-            onClick={onEdit}
-          >
-            Modifier
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              className="text-orange-600 hover:underline text-sm font-medium"
+              onClick={onEdit}
+            >
+              Modifier
+            </button>
+            <button
+              className="text-red-600 hover:underline text-sm font-medium"
+              onClick={onDelete}
+            >
+              Supprimer
+            </button>
+          </div>
         )}
       </div>
     </div>
