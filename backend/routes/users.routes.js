@@ -323,4 +323,33 @@ router.post("/:id/reset-password", authMiddleware, requireAdmin, async (req, res
   }
 });
 
+/* ===== GENERATE RESET LINK ===== */
+router.post("/:id/reset-link", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userRes = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE id = $1
+      `,
+      [id]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: "Utilisateur introuvable" });
+    }
+
+    const appUrl =
+      process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
+    const token = await createPasswordToken(id);
+    const link = `${appUrl}/set-password?token=${token}`;
+
+    res.json({ link });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;

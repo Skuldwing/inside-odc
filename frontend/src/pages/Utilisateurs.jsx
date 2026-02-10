@@ -5,6 +5,7 @@ import {
   Mail,
   Shield,
   Building2,
+  Link2,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -109,6 +110,22 @@ export default function Utilisateurs() {
     } catch (err) {
       console.error("Erreur reinitialisation mot de passe", err);
       alert("Erreur lors de l'envoi.");
+    }
+  };
+
+  const handleCopyResetLink = async (id) => {
+    try {
+      const res = await usersApi.post(`/users/${id}/reset-link`);
+      const link = res?.data?.link;
+      if (!link) {
+        alert("Lien indisponible.");
+        return;
+      }
+      await navigator.clipboard.writeText(link);
+      alert("Lien copie dans le presse-papiers.");
+    } catch (err) {
+      console.error("Erreur generation lien", err);
+      alert("Erreur lors de la generation du lien.");
     }
   };
 
@@ -310,6 +327,13 @@ export default function Utilisateurs() {
                     title="Envoyer un lien de reinitialisation"
                   >
                     <Shield className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleCopyResetLink(u.id)}
+                    className="text-slate-500 hover:text-indigo-500 mr-2"
+                    title="Copier le lien de reinitialisation"
+                  >
+                    <Link2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleDelete(u.id)}
