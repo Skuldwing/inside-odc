@@ -10,6 +10,10 @@ api.interceptors.request.use(config => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  const adminPin = sessionStorage.getItem("admin_pin");
+  if (adminPin) {
+    config.headers["X-Admin-Pin"] = adminPin;
+  }
   return config;
 });
 

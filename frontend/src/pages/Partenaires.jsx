@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Building2,
@@ -11,6 +12,7 @@ import {
 import api from "../api";
 
 export default function Partenaires() {
+  const navigate = useNavigate();
   const partnersApi = api;
 
   const [open, setOpen] = useState(false);
@@ -36,7 +38,35 @@ export default function Partenaires() {
   };
 
   useEffect(() => {
-    fetchPartners();
+    const requirePin = async () => {
+      let pin = sessionStorage.getItem("admin_pin");
+      if (pin) {
+        try {
+          await partnersApi.post("/auth/verify-pin");
+          return;
+        } catch {
+          sessionStorage.removeItem("admin_pin");
+        }
+      }
+
+      while (true) {
+        pin = prompt("Entrez le code PIN admin");
+        if (!pin) {
+          navigate("/");
+          return;
+        }
+        sessionStorage.setItem("admin_pin", pin);
+        try {
+          await partnersApi.post("/auth/verify-pin");
+          return;
+        } catch {
+          alert("PIN incorrect.");
+          sessionStorage.removeItem("admin_pin");
+        }
+      }
+    };
+
+    requirePin().then(fetchPartners);
   }, []);
 
   const resetForm = () => {

@@ -5,9 +5,12 @@ const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { createPasswordToken } = require("../services/passwordReset");
+const requireAdminPin = require("../middleware/pin.middleware");
 
 const router = express.Router();
 const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || "ChangeMe123!";
+
+router.use(authMiddleware, requireAdmin, requireAdminPin);
 
 async function hasUsersIsActiveColumn() {
   const result = await pool.query(
@@ -23,7 +26,7 @@ async function hasUsersIsActiveColumn() {
 }
 
 /* ===== GET USERS ===== */
-router.get("/", authMiddleware, requireAdmin, async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const hasIsActive = await hasUsersIsActiveColumn();
     const statusExpr = hasIsActive
@@ -48,7 +51,7 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== CREATE USER ===== */
-router.post("/", authMiddleware, requireAdmin, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const {
       full_name,
@@ -140,7 +143,7 @@ router.post("/", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== UPDATE USER ===== */
-router.put("/:id", authMiddleware, requireAdmin, async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -207,7 +210,7 @@ router.put("/:id", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== DELETE (DEACTIVATE) USER ===== */
-router.delete("/:id", authMiddleware, requireAdmin, async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const hasIsActive = await hasUsersIsActiveColumn();
@@ -242,7 +245,7 @@ router.delete("/:id", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== HARD DELETE USER ===== */
-router.delete("/:id/hard-delete", authMiddleware, requireAdmin, async (req, res) => {
+router.delete("/:id/hard-delete", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
@@ -266,7 +269,7 @@ router.delete("/:id/hard-delete", authMiddleware, requireAdmin, async (req, res)
 });
 
 /* ===== RESET PASSWORD ===== */
-router.post("/:id/reset-password", authMiddleware, requireAdmin, async (req, res) => {
+router.post("/:id/reset-password", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -324,7 +327,7 @@ router.post("/:id/reset-password", authMiddleware, requireAdmin, async (req, res
 });
 
 /* ===== GENERATE RESET LINK ===== */
-router.post("/:id/reset-link", authMiddleware, requireAdmin, async (req, res) => {
+router.post("/:id/reset-link", async (req, res) => {
   try {
     const { id } = req.params;
     const userRes = await pool.query(

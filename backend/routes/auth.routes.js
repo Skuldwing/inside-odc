@@ -3,6 +3,9 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { consumePasswordToken } = require("../services/passwordReset");
+const authMiddleware = require("../middleware/auth.middleware");
+const requireAdmin = require("../middleware/role.middleware");
+const requireAdminPin = require("../middleware/pin.middleware");
 
 const router = express.Router();
 
@@ -113,7 +116,18 @@ router.post("/set-password", async (req, res) => {
   }
 });
 
-module.exports = router;
+
+/* ================= VERIFY ADMIN PIN ================= */
+router.post(
+  "/verify-pin",
+  authMiddleware,
+  requireAdmin,
+  requireAdminPin,
+  async (req, res) => {
+    res.json({ success: true });
+  }
+);\nmodule.exports = router;
+
 
 
 

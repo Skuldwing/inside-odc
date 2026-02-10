@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Plus,
   User,
@@ -18,6 +19,7 @@ const roles = [
 ];
 
 export default function Utilisateurs() {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [users, setUsers] = useState([]);
@@ -42,7 +44,35 @@ export default function Utilisateurs() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    const requirePin = async () => {
+      let pin = sessionStorage.getItem("admin_pin");
+      if (pin) {
+        try {
+          await usersApi.post("/auth/verify-pin");
+          return;
+        } catch {
+          sessionStorage.removeItem("admin_pin");
+        }
+      }
+
+      while (true) {
+        pin = prompt("Entrez le code PIN admin");
+        if (!pin) {
+          navigate("/");
+          return;
+        }
+        sessionStorage.setItem("admin_pin", pin);
+        try {
+          await usersApi.post("/auth/verify-pin");
+          return;
+        } catch {
+          alert("PIN incorrect.");
+          sessionStorage.removeItem("admin_pin");
+        }
+      }
+    };
+
+    requirePin().then(fetchUsers);
   }, []);
 
   const resetForm = () => {
@@ -98,18 +128,6 @@ export default function Utilisateurs() {
       fetchUsers();
     } catch (err) {
       console.error("Erreur suppression utilisateur", err);
-    }
-  };
-
-  const handleResetPassword = async (id) => {
-    if (!confirm("Envoyer un lien de reinitialisation par email ?")) return;
-
-    try {
-      await usersApi.post(`/users/${id}/reset-password`);
-      alert("Email de reinitialisation envoye.");
-    } catch (err) {
-      console.error("Erreur reinitialisation mot de passe", err);
-      alert("Erreur lors de l'envoi.");
     }
   };
 
@@ -320,13 +338,6 @@ export default function Utilisateurs() {
                     className="text-slate-500 hover:text-orange-500 mr-2"
                   >
                     <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleResetPassword(u.id)}
-                    className="text-slate-500 hover:text-blue-500 mr-2"
-                    title="Envoyer un lien de reinitialisation"
-                  >
-                    <Shield className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => handleCopyResetLink(u.id)}

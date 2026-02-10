@@ -2,11 +2,12 @@ const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
+const requireAdminPin = require("../middleware/pin.middleware");
 
 const router = express.Router();
 
 /* ===== GET ALL PARTNERS ===== */
-router.get("/", authMiddleware, requireAdmin, async (req, res) => {
+router.get("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT * FROM partners ORDER BY name"
@@ -19,7 +20,7 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== CREATE PARTNER ===== */
-router.post("/", authMiddleware, requireAdmin, async (req, res) => {
+router.post("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {
     const {
       name,
@@ -59,7 +60,7 @@ router.post("/", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== UPDATE PARTNER ===== */
-router.put("/:id", authMiddleware, requireAdmin, async (req, res) => {
+router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -110,7 +111,7 @@ router.put("/:id", authMiddleware, requireAdmin, async (req, res) => {
 });
 
 /* ===== DELETE PARTNER ===== */
-router.delete("/:id", authMiddleware, requireAdmin, async (req, res) => {
+router.delete("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
