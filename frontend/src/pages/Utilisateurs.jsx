@@ -90,10 +90,10 @@ export default function Utilisateurs() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Désactiver cet utilisateur ?")) return;
+    if (!confirm("Supprimer definitivement cet utilisateur ?")) return;
 
     try {
-      await usersApi.delete(`/users/${id}`);
+      await usersApi.delete(`/users/${id}/hard-delete`);
       fetchUsers();
     } catch (err) {
       console.error("Erreur suppression utilisateur", err);
@@ -326,4 +326,10 @@ export default function Utilisateurs() {
     </div>
   );
 }
+
+
+
+
+
+
 
