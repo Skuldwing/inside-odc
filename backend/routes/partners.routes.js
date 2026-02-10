@@ -7,7 +7,7 @@ const requireAdminPin = require("../middleware/pin.middleware");
 const router = express.Router();
 
 /* ===== GET ALL PARTNERS ===== */
-router.get("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
+router.get("/", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT * FROM partners ORDER BY name"

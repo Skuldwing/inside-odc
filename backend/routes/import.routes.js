@@ -25,11 +25,32 @@ function safeUnlink(path) {
 
 function normalizeGender(value) {
   if (!value) return null;
-  const v = String(value).trim().toLowerCase();
+  const v = String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   if (["m", "h", "homme", "male", "masculin"].includes(v)) return "H";
   if (["f", "femme", "female", "feminin", "féminin"].includes(v)) return "F";
   return null;
 }
+
+function normalizeKey(key) {
+  if (!key) return "";
+  return String(key)
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['"]/g, "")
+    .replace(/\s+/g, "_");
+}
+
+
+function normalizeRow(row) {
+  const out = {};
+  for (const [key, value] of Object.entries(row || {})) {
+    out[normalizeKey(key)] = value;
+  }
+  return out;
+}
+
 
 /* ===== CREATE ACTIVITY + IMPORT PARTICIPANTS ===== */
 router.post(
@@ -101,21 +122,21 @@ router.post(
       let imported = 0;
 
       for (const row of rows) {
-        const {
-          nom,
-          prenom,
-          genre,
-          email,
-          telephone,
-          statut,
-          structure,
-        } = row;
+        const normalized = normalizeRow(row);
+        const nom = normalized.nom || normalized.last_name || null;
+        const prenom = normalized.prenom || normalized.first_name || null;
+        const genre = normalized.genre || normalized.gender || null;
+        const email = normalized.email || null;
+        const telephone = normalized.telephone || normalized.phone || null;
+        const statut = normalized.statut || normalized.status || null;
+        const structure = normalized.structure || null;
         const ageRange =
-          row.tranche_age ||
-          row["tranche d'age"] ||
-          row["tranche d’âge"] ||
-          row["tranche_age"] ||
+          normalized.tranche_age ||
+          normalized.tranche_dage ||
+          normalized.tranche_age_ ||
+          normalized.age_range ||
           null;
+
 
         if (!nom || !prenom) continue;
         const normalizedGender = normalizeGender(genre);
@@ -140,8 +161,8 @@ router.post(
             `
             INSERT INTO participants
             (first_name, last_name, gender, age_range, status, structure, email, phone,
-             nom, prenom, genre, telephone, statut, age_range)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             nom, prenom, genre, telephone, statut)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
             RETURNING id
             `,
             [
@@ -158,7 +179,6 @@ router.post(
               normalizedGender,
               telephone || null,
               statut || null,
-              ageRange || null,
             ]
           );
           participantId = insertResult.rows[0].id;
@@ -186,7 +206,6 @@ router.post(
               prenom,
               nom,
               normalizedGender,
-              ageRange || null,
               statut || null,
               structure || null,
               email || null,
@@ -289,21 +308,21 @@ router.post(
       let imported = 0;
 
       for (const row of rows) {
-        const {
-          nom,
-          prenom,
-          genre,
-          email,
-          telephone,
-          statut,
-          structure,
-        } = row;
+        const normalized = normalizeRow(row);
+        const nom = normalized.nom || normalized.last_name || null;
+        const prenom = normalized.prenom || normalized.first_name || null;
+        const genre = normalized.genre || normalized.gender || null;
+        const email = normalized.email || null;
+        const telephone = normalized.telephone || normalized.phone || null;
+        const statut = normalized.statut || normalized.status || null;
+        const structure = normalized.structure || null;
         const ageRange =
-          row.tranche_age ||
-          row["tranche d'age"] ||
-          row["tranche d’âge"] ||
-          row["tranche_age"] ||
+          normalized.tranche_age ||
+          normalized.tranche_dage ||
+          normalized.tranche_age_ ||
+          normalized.age_range ||
           null;
+
 
         if (!nom || !prenom) continue;
         const normalizedGender = normalizeGender(genre);
@@ -328,8 +347,8 @@ router.post(
             `
             INSERT INTO participants
             (first_name, last_name, gender, age_range, status, structure, email, phone,
-             nom, prenom, genre, telephone, statut, age_range)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+             nom, prenom, genre, telephone, statut)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
             RETURNING id
             `,
             [
@@ -346,7 +365,6 @@ router.post(
               normalizedGender,
               telephone || null,
               statut || null,
-              ageRange || null,
             ]
           );
           participantId = participantResult.rows[0].id;
@@ -374,7 +392,6 @@ router.post(
               prenom,
               nom,
               normalizedGender,
-              ageRange || null,
               statut || null,
               structure || null,
               email || null,
