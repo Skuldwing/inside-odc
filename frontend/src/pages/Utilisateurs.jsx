@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Plus,
   User,
@@ -11,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import api from "../api";
+import AdminPinGate from "../components/AdminPinGate";
 
 const roles = [
   { value: "admin", label: "Administrateur" },
@@ -19,7 +19,6 @@ const roles = [
 ];
 
 export default function Utilisateurs() {
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [users, setUsers] = useState([]);
@@ -44,35 +43,7 @@ export default function Utilisateurs() {
   };
 
   useEffect(() => {
-    const requirePin = async () => {
-      let pin = sessionStorage.getItem("admin_pin");
-      if (pin) {
-        try {
-          await usersApi.post("/auth/verify-pin");
-          return;
-        } catch {
-          sessionStorage.removeItem("admin_pin");
-        }
-      }
-
-      while (true) {
-        pin = prompt("Entrez le code PIN admin");
-        if (!pin) {
-          navigate("/");
-          return;
-        }
-        sessionStorage.setItem("admin_pin", pin);
-        try {
-          await usersApi.post("/auth/verify-pin");
-          return;
-        } catch {
-          alert("PIN incorrect.");
-          sessionStorage.removeItem("admin_pin");
-        }
-      }
-    };
-
-    requirePin().then(fetchUsers);
+    fetchUsers();
   }, []);
 
   const resetForm = () => {
@@ -148,6 +119,7 @@ export default function Utilisateurs() {
   };
 
   return (
+    <AdminPinGate>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -359,6 +331,7 @@ export default function Utilisateurs() {
         </table>
       </div>
     </div>
+    </AdminPinGate>
   );
 }
 

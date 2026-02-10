@@ -40,7 +40,7 @@ router.post("/login", async (req, res) => {
         partner_id: user.partner_id,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "8h" }
+      { expiresIn: "30m" }
     );
 
     res.json({
@@ -129,6 +129,7 @@ router.post(
 );
 
 module.exports = router;
+
 
 
 

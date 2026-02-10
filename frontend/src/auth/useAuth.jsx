@@ -34,6 +34,8 @@ export function AuthProvider({ children }) {
     setUser(null);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    sessionStorage.removeItem("admin_pin");
+    sessionStorage.removeItem("admin_pin_time");
   };
 
   return (

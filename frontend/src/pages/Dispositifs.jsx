@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Plus, Layers, Pencil, Trash2, Palette } from "lucide-react";
 import api from "../api";
+import AdminPinGate from "../components/AdminPinGate";
 
 const categories = [
   "formation",
@@ -12,7 +12,6 @@ const categories = [
 ];
 
 export default function Dispositifs() {
-  const navigate = useNavigate();
   const devicesApi = api;
 
   const [devices, setDevices] = useState([]);
@@ -37,35 +36,7 @@ export default function Dispositifs() {
   };
 
   useEffect(() => {
-    const requirePin = async () => {
-      let pin = sessionStorage.getItem("admin_pin");
-      if (pin) {
-        try {
-          await devicesApi.post("/auth/verify-pin");
-          return;
-        } catch {
-          sessionStorage.removeItem("admin_pin");
-        }
-      }
-
-      while (true) {
-        pin = prompt("Entrez le code PIN admin");
-        if (!pin) {
-          navigate("/");
-          return;
-        }
-        sessionStorage.setItem("admin_pin", pin);
-        try {
-          await devicesApi.post("/auth/verify-pin");
-          return;
-        } catch {
-          alert("PIN incorrect.");
-          sessionStorage.removeItem("admin_pin");
-        }
-      }
-    };
-
-    requirePin().then(fetchDevices);
+    fetchDevices();
   }, []);
 
   const resetForm = () => {
@@ -121,6 +92,7 @@ export default function Dispositifs() {
   };
 
   return (
+    <AdminPinGate>
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -312,5 +284,6 @@ export default function Dispositifs() {
         </table>
       </div>
     </div>
+    </AdminPinGate>
   );
 }
