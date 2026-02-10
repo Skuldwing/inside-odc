@@ -88,4 +88,72 @@ router.post("/", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== UPDATE ACTIVITY ===== */
+router.put("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      title,
+      description,
+      activity_date,
+      duration_hours,
+      location,
+      device_id,
+      partner_id,
+    } = req.body;
+
+    if (!title || !activity_date) {
+      return res.status(400).json({ error: "Titre et date requis" });
+    }
+
+    const existing = await pool.query(
+      "SELECT id, partner_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: "Activite introuvable" });
+    }
+
+    if (
+      req.user.role === "partner" &&
+      existing.rows[0].partner_id !== req.user.partner_id
+    ) {
+      return res.status(403).json({ error: "Acces refuse" });
+    }
+
+    const resolvedPartnerId =
+      req.user.role === "partner" ? req.user.partner_id : partner_id || null;
+
+    const result = await pool.query(
+      `
+      UPDATE activities
+      SET title = $1,
+          description = $2,
+          activity_date = $3,
+          duration_hours = $4,
+          location = $5,
+          device_id = $6,
+          partner_id = $7
+      WHERE id = $8
+      RETURNING *
+      `,
+      [
+        title,
+        description || null,
+        activity_date,
+        duration_hours || null,
+        location || null,
+        device_id || null,
+        resolvedPartnerId,
+        id,
+      ]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;

@@ -18,6 +18,19 @@ export default function Activities() {
   const [openUpload, setOpenUpload] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [editForm, setEditForm] = useState({
+    id: null,
+    title: "",
+    description: "",
+    activity_date: "",
+    duration_hours: "",
+    location: "",
+    device_id: "",
+    partner_id: "",
+  });
 
   const [form, setForm] = useState({
     title: "",
@@ -165,6 +178,50 @@ export default function Activities() {
     setUploadError("");
   };
 
+  const openEdit = (activity) => {
+    setEditError("");
+    setEditForm({
+      id: activity.id,
+      title: activity.title || "",
+      description: activity.description || "",
+      activity_date: activity.date || "",
+      duration_hours: activity.duration_hours || "",
+      location: activity.location === "-" ? "" : activity.location || "",
+      device_id: activity.device_id || "",
+      partner_id: activity.partner_id || "",
+    });
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async (e) => {
+    e.preventDefault();
+    setEditSaving(true);
+    setEditError("");
+    try {
+      const payload = {
+        title: editForm.title,
+        description: editForm.description,
+        activity_date: editForm.activity_date,
+        duration_hours: editForm.duration_hours || null,
+        location: editForm.location || null,
+        device_id: editForm.device_id || null,
+      };
+      if (role === "admin") {
+        payload.partner_id = editForm.partner_id || null;
+      }
+
+      await api.put(`/activities/${editForm.id}`, payload);
+      setEditOpen(false);
+      fetchActivities();
+    } catch (err) {
+      setEditError(
+        err.response?.data?.error || "Erreur mise a jour activite"
+      );
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
     setUploadError("");
@@ -299,7 +356,12 @@ export default function Activities() {
           </div>
         )}
         {filteredActivities.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} />
+          <ActivityCard
+            key={activity.id}
+            activity={activity}
+            canEdit={!isViewer}
+            onEdit={() => openEdit(activity)}
+          />
         ))}
       </div>
 
@@ -461,11 +523,154 @@ export default function Activities() {
           </div>
         </div>
       )}
+
+      {editOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="card-solid w-full max-w-lg p-6">
+            <h2 className="text-xl font-semibold mb-4">
+              Modifier activite
+            </h2>
+
+            {editError && (
+              <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleEditSave} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Intitule *</label>
+                <input
+                  required
+                  className="input mt-1"
+                  value={editForm.title}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, title: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Date *</label>
+                <input
+                  type="date"
+                  required
+                  className="input mt-1"
+                  value={editForm.activity_date}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      activity_date: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Duree (heures)</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="input mt-1"
+                  value={editForm.duration_hours}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      duration_hours: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Lieu</label>
+                <select
+                  className="select mt-1"
+                  value={editForm.location}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, location: e.target.value })
+                  }
+                >
+                  <option value="">Selectionner une region</option>
+                  {senegalRegions.map((region) => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {role === "admin" && (
+                <div>
+                  <label className="text-sm font-medium">Partenaire</label>
+                  <select
+                    className="select mt-1"
+                    value={editForm.partner_id}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        partner_id: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Selectionner</option>
+                    {partners.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {role === "admin" && (
+                <div>
+                  <label className="text-sm font-medium">Dispositif</label>
+                  <select
+                    className="select mt-1"
+                    value={editForm.device_id}
+                    onChange={(e) =>
+                      setEditForm({
+                        ...editForm,
+                        device_id: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Selectionner</option>
+                    {devices.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(false)}
+                  className="btn-ghost border"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="btn-primary disabled:opacity-60"
+                >
+                  {editSaving ? "Sauvegarde..." : "Enregistrer"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ActivityCard({ activity }) {
+function ActivityCard({ activity, canEdit, onEdit }) {
   const statusColors = {
     planned: "bg-blue-100 text-blue-700",
     ongoing: "bg-orange-100 text-orange-700",
@@ -507,9 +712,14 @@ function ActivityCard({ activity }) {
           {activity.statusLabel}
         </span>
 
-        <button className="text-orange-600 hover:underline text-sm font-medium">
-          Voir
-        </button>
+        {canEdit && (
+          <button
+            className="text-orange-600 hover:underline text-sm font-medium"
+            onClick={onEdit}
+          >
+            Modifier
+          </button>
+        )}
       </div>
     </div>
   );
