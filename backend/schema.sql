@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS participants (
   nom TEXT NOT NULL,
   prenom TEXT NOT NULL,
   genre TEXT,
+  age_range TEXT,
   email TEXT,
   telephone TEXT,
   statut TEXT,

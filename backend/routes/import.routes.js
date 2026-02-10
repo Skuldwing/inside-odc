@@ -110,6 +110,12 @@ router.post(
           statut,
           structure,
         } = row;
+        const ageRange =
+          row.tranche_age ||
+          row["tranche d'age"] ||
+          row["tranche d’âge"] ||
+          row["tranche_age"] ||
+          null;
 
         if (!nom || !prenom) continue;
         const normalizedGender = normalizeGender(genre);
@@ -134,15 +140,15 @@ router.post(
             `
             INSERT INTO participants
             (first_name, last_name, gender, age_range, status, structure, email, phone,
-             nom, prenom, genre, telephone, statut)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             nom, prenom, genre, telephone, statut, age_range)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
             RETURNING id
             `,
             [
               prenom,
               nom,
               normalizedGender,
-              null,
+              ageRange || null,
               statut || null,
               structure || null,
               email || null,
@@ -152,6 +158,7 @@ router.post(
               normalizedGender,
               telephone || null,
               statut || null,
+              ageRange || null,
             ]
           );
           participantId = insertResult.rows[0].id;
@@ -163,21 +170,23 @@ router.post(
               first_name = COALESCE(first_name, $1),
               last_name = COALESCE(last_name, $2),
               gender = COALESCE(gender, $3),
-              status = COALESCE(status, $4),
-              structure = COALESCE(structure, $5),
-              email = COALESCE(email, $6),
-              phone = COALESCE(phone, $7),
-              nom = COALESCE(nom, $8),
-              prenom = COALESCE(prenom, $9),
-              genre = COALESCE(genre, $10),
-              telephone = COALESCE(telephone, $11),
-              statut = COALESCE(statut, $12)
-            WHERE id = $13
+              age_range = COALESCE(age_range, $4),
+              status = COALESCE(status, $5),
+              structure = COALESCE(structure, $6),
+              email = COALESCE(email, $7),
+              phone = COALESCE(phone, $8),
+              nom = COALESCE(nom, $9),
+              prenom = COALESCE(prenom, $10),
+              genre = COALESCE(genre, $11),
+              telephone = COALESCE(telephone, $12),
+              statut = COALESCE(statut, $13)
+            WHERE id = $14
             `,
             [
               prenom,
               nom,
               normalizedGender,
+              ageRange || null,
               statut || null,
               structure || null,
               email || null,
@@ -289,6 +298,12 @@ router.post(
           statut,
           structure,
         } = row;
+        const ageRange =
+          row.tranche_age ||
+          row["tranche d'age"] ||
+          row["tranche d’âge"] ||
+          row["tranche_age"] ||
+          null;
 
         if (!nom || !prenom) continue;
         const normalizedGender = normalizeGender(genre);
@@ -313,15 +328,15 @@ router.post(
             `
             INSERT INTO participants
             (first_name, last_name, gender, age_range, status, structure, email, phone,
-             nom, prenom, genre, telephone, statut)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+             nom, prenom, genre, telephone, statut, age_range)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
             RETURNING id
             `,
             [
               prenom,
               nom,
               normalizedGender,
-              null,
+              ageRange || null,
               statut || null,
               structure || null,
               email || null,
@@ -331,6 +346,7 @@ router.post(
               normalizedGender,
               telephone || null,
               statut || null,
+              ageRange || null,
             ]
           );
           participantId = participantResult.rows[0].id;
@@ -342,21 +358,23 @@ router.post(
               first_name = COALESCE(first_name, $1),
               last_name = COALESCE(last_name, $2),
               gender = COALESCE(gender, $3),
-              status = COALESCE(status, $4),
-              structure = COALESCE(structure, $5),
-              email = COALESCE(email, $6),
-              phone = COALESCE(phone, $7),
-              nom = COALESCE(nom, $8),
-              prenom = COALESCE(prenom, $9),
-              genre = COALESCE(genre, $10),
-              telephone = COALESCE(telephone, $11),
-              statut = COALESCE(statut, $12)
-            WHERE id = $13
+              age_range = COALESCE(age_range, $4),
+              status = COALESCE(status, $5),
+              structure = COALESCE(structure, $6),
+              email = COALESCE(email, $7),
+              phone = COALESCE(phone, $8),
+              nom = COALESCE(nom, $9),
+              prenom = COALESCE(prenom, $10),
+              genre = COALESCE(genre, $11),
+              telephone = COALESCE(telephone, $12),
+              statut = COALESCE(statut, $13)
+            WHERE id = $14
             `,
             [
               prenom,
               nom,
               normalizedGender,
+              ageRange || null,
               statut || null,
               structure || null,
               email || null,
