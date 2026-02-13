@@ -204,20 +204,20 @@ router.post(
               genre = COALESCE(genre, $3),
               age_range = COALESCE(age_range, $4),
               email = CASE
-                WHEN $5 IS NULL THEN email
+                WHEN $5::text IS NULL THEN email
                 WHEN email IS NOT NULL THEN email
                 WHEN EXISTS (
-                  SELECT 1 FROM participants p2 WHERE p2.email = $5 AND p2.id <> $9
+                  SELECT 1 FROM participants p2 WHERE p2.email = $5::text AND p2.id <> $9
                 ) THEN email
-                ELSE $5
+                ELSE $5::text
               END,
               telephone = CASE
-                WHEN $6 IS NULL THEN telephone
+                WHEN $6::text IS NULL THEN telephone
                 WHEN telephone IS NOT NULL THEN telephone
                 WHEN EXISTS (
-                  SELECT 1 FROM participants p2 WHERE p2.telephone = $6 AND p2.id <> $9
+                  SELECT 1 FROM participants p2 WHERE p2.telephone = $6::text AND p2.id <> $9
                 ) THEN telephone
-                ELSE $6
+                ELSE $6::text
               END,
               statut = COALESCE(statut, $7),
               structure = COALESCE(structure, $8)
@@ -407,20 +407,20 @@ router.post(
               genre = COALESCE(genre, $3),
               age_range = COALESCE(age_range, $4),
               email = CASE
-                WHEN $5 IS NULL THEN email
+                WHEN $5::text IS NULL THEN email
                 WHEN email IS NOT NULL THEN email
                 WHEN EXISTS (
-                  SELECT 1 FROM participants p2 WHERE p2.email = $5 AND p2.id <> $9
+                  SELECT 1 FROM participants p2 WHERE p2.email = $5::text AND p2.id <> $9
                 ) THEN email
-                ELSE $5
+                ELSE $5::text
               END,
               telephone = CASE
-                WHEN $6 IS NULL THEN telephone
+                WHEN $6::text IS NULL THEN telephone
                 WHEN telephone IS NOT NULL THEN telephone
                 WHEN EXISTS (
-                  SELECT 1 FROM participants p2 WHERE p2.telephone = $6 AND p2.id <> $9
+                  SELECT 1 FROM participants p2 WHERE p2.telephone = $6::text AND p2.id <> $9
                 ) THEN telephone
-                ELSE $6
+                ELSE $6::text
               END,
               statut = COALESCE(statut, $7),
               structure = COALESCE(structure, $8)
@@ -470,3 +470,4 @@ router.post(
 );
 
 module.exports = router;
+
