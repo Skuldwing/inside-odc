@@ -80,10 +80,15 @@ router.get("/summary", authMiddleware, async (req, res) => {
 
     const totalsQuery = `
       ${baseCte}
+      , activity_hours AS (
+        SELECT activity_id, MAX(duration_hours) AS duration_hours
+        FROM base
+        GROUP BY activity_id
+      )
       SELECT
         COUNT(DISTINCT activity_id)::int AS activities,
         COUNT(participant_id)::int AS participants,
-        COALESCE(SUM(duration_hours), 0)::int AS hours
+        COALESCE((SELECT SUM(duration_hours) FROM activity_hours), 0)::int AS hours
       FROM base
     `;
 
