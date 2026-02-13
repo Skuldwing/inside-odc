@@ -142,16 +142,17 @@ router.post(
         const normalizedGender = normalizeGender(genre);
 
         let participantId = null;
-        if (email) {
+        if (email || telephone) {
           const existing = await client.query(
-            "SELECT id FROM participants WHERE email = $1",
-            [email]
-          );
-          participantId = existing.rows[0]?.id || null;
-        } else if (telephone) {
-          const existing = await client.query(
-            "SELECT id FROM participants WHERE telephone = $1",
-            [telephone]
+            `
+            SELECT id
+            FROM participants
+            WHERE ($1::text IS NOT NULL AND email = $1)
+               OR ($2::text IS NOT NULL AND telephone = $2)
+            ORDER BY id
+            LIMIT 1
+            `,
+            [email || null, telephone || null]
           );
           participantId = existing.rows[0]?.id || null;
         }
@@ -162,6 +163,7 @@ router.post(
             INSERT INTO participants
             (nom, prenom, genre, age_range, email, telephone, statut, structure)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT DO NOTHING
             RETURNING id
             `,
             [
@@ -175,7 +177,23 @@ router.post(
               structure || null,
             ]
           );
-          participantId = insertResult.rows[0].id;
+          participantId = insertResult.rows[0]?.id || null;
+          if (!participantId && (email || telephone)) {
+            const existingAfterConflict = await client.query(
+              `
+              SELECT id
+              FROM participants
+              WHERE ($1::text IS NOT NULL AND email = $1)
+                 OR ($2::text IS NOT NULL AND telephone = $2)
+              ORDER BY id
+              LIMIT 1
+              `,
+              [email || null, telephone || null]
+            );
+            participantId = existingAfterConflict.rows[0]?.id || null;
+          }
+
+          if (!participantId) continue;
         } else {
           await client.query(
             `
@@ -185,8 +203,22 @@ router.post(
               prenom = COALESCE(prenom, $2),
               genre = COALESCE(genre, $3),
               age_range = COALESCE(age_range, $4),
-              email = COALESCE(email, $5),
-              telephone = COALESCE(telephone, $6),
+              email = CASE
+                WHEN $5 IS NULL THEN email
+                WHEN email IS NOT NULL THEN email
+                WHEN EXISTS (
+                  SELECT 1 FROM participants p2 WHERE p2.email = $5 AND p2.id <> $9
+                ) THEN email
+                ELSE $5
+              END,
+              telephone = CASE
+                WHEN $6 IS NULL THEN telephone
+                WHEN telephone IS NOT NULL THEN telephone
+                WHEN EXISTS (
+                  SELECT 1 FROM participants p2 WHERE p2.telephone = $6 AND p2.id <> $9
+                ) THEN telephone
+                ELSE $6
+              END,
               statut = COALESCE(statut, $7),
               structure = COALESCE(structure, $8)
             WHERE id = $9
@@ -313,16 +345,17 @@ router.post(
         const normalizedGender = normalizeGender(genre);
 
         let participantId = null;
-        if (email) {
+        if (email || telephone) {
           const existing = await pool.query(
-            "SELECT id FROM participants WHERE email = $1",
-            [email]
-          );
-          participantId = existing.rows[0]?.id || null;
-        } else if (telephone) {
-          const existing = await pool.query(
-            "SELECT id FROM participants WHERE telephone = $1",
-            [telephone]
+            `
+            SELECT id
+            FROM participants
+            WHERE ($1::text IS NOT NULL AND email = $1)
+               OR ($2::text IS NOT NULL AND telephone = $2)
+            ORDER BY id
+            LIMIT 1
+            `,
+            [email || null, telephone || null]
           );
           participantId = existing.rows[0]?.id || null;
         }
@@ -333,6 +366,7 @@ router.post(
             INSERT INTO participants
             (nom, prenom, genre, age_range, email, telephone, statut, structure)
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+            ON CONFLICT DO NOTHING
             RETURNING id
             `,
             [
@@ -346,7 +380,23 @@ router.post(
               structure || null,
             ]
           );
-          participantId = participantResult.rows[0].id;
+          participantId = participantResult.rows[0]?.id || null;
+          if (!participantId && (email || telephone)) {
+            const existingAfterConflict = await pool.query(
+              `
+              SELECT id
+              FROM participants
+              WHERE ($1::text IS NOT NULL AND email = $1)
+                 OR ($2::text IS NOT NULL AND telephone = $2)
+              ORDER BY id
+              LIMIT 1
+              `,
+              [email || null, telephone || null]
+            );
+            participantId = existingAfterConflict.rows[0]?.id || null;
+          }
+
+          if (!participantId) continue;
         } else {
           await pool.query(
             `
@@ -356,8 +406,22 @@ router.post(
               prenom = COALESCE(prenom, $2),
               genre = COALESCE(genre, $3),
               age_range = COALESCE(age_range, $4),
-              email = COALESCE(email, $5),
-              telephone = COALESCE(telephone, $6),
+              email = CASE
+                WHEN $5 IS NULL THEN email
+                WHEN email IS NOT NULL THEN email
+                WHEN EXISTS (
+                  SELECT 1 FROM participants p2 WHERE p2.email = $5 AND p2.id <> $9
+                ) THEN email
+                ELSE $5
+              END,
+              telephone = CASE
+                WHEN $6 IS NULL THEN telephone
+                WHEN telephone IS NOT NULL THEN telephone
+                WHEN EXISTS (
+                  SELECT 1 FROM participants p2 WHERE p2.telephone = $6 AND p2.id <> $9
+                ) THEN telephone
+                ELSE $6
+              END,
               statut = COALESCE(statut, $7),
               structure = COALESCE(structure, $8)
             WHERE id = $9
