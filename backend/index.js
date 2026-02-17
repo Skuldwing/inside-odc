@@ -15,33 +15,62 @@ const campagnesRoutes = require("./routes/campagnes.routes");
 const importRoutes = require("./routes/import.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 
+const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
+const missingEnv = requiredEnv.filter((name) => !process.env[name]);
+
+if (missingEnv.length > 0) {
+  console.error(
+    `Missing required environment variable(s): ${missingEnv.join(", ")}`
+  );
+  process.exit(1);
+}
+
 const app = express();
 
 /* ===== MIDDLEWARE GLOBAL ===== */
 app.set("trust proxy", 1);
 app.use(helmet());
-app.use(
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 300,
-    standardHeaders: true,
-    legacyHeaders: false,
-  })
-);
+
+const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX || 300),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 40),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Trop de tentatives. Reessayez plus tard." },
+});
+
+app.use(globalRateLimiter);
+
 const allowedOrigins = process.env.CORS_ORIGIN
-  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
+
+if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
+  console.error(
+    "CORS_ORIGIN is required in production (comma-separated origins)."
+  );
+  process.exit(1);
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (allowedOrigins.length === 0) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error("CORS not allowed"));
+      return cb(new Error("CORS_NOT_ALLOWED"));
     },
   })
 );
-app.use(express.json());
+
+app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
 
 /* ===== HEALTH CHECK ===== */
 app.get("/", (req, res) => {
@@ -49,7 +78,7 @@ app.get("/", (req, res) => {
 });
 
 /* ===== API ROUTES ===== */
-app.use("/auth", authRoutes);
+app.use("/auth", authRateLimiter, authRoutes);
 app.use("/activities", activitiesRoutes);
 app.use("/partners", partnersRoutes);
 app.use("/devices", devicesRoutes);
@@ -59,8 +88,16 @@ app.use("/campagnes", campagnesRoutes);
 app.use("/import", importRoutes);
 app.use("/dashboard", dashboardRoutes);
 
+app.use((req, res) => {
+  res.status(404).json({ error: "Route introuvable" });
+});
+
 /* ===== ERROR HANDLER ===== */
 app.use((err, req, res, next) => {
+  if (err && err.message === "CORS_NOT_ALLOWED") {
+    return res.status(403).json({ error: "Origine non autorisee" });
+  }
+
   console.error(err);
   res.status(500).json({ error: "Erreur serveur" });
 });
