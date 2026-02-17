@@ -280,7 +280,8 @@ export default function Partenaires() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredPartners.map((p) => {
             const objective = Number(p.objective_beneficiaries || 0);
-            const beneficiaries = 0;
+            const activities = Number(p.activities_count || 0);
+            const beneficiaries = Number(p.beneficiaries_count || 0);
             const pct =
               objective > 0
                 ? Math.min(100, Math.round((beneficiaries / objective) * 100))
@@ -328,11 +329,15 @@ export default function Partenaires() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-xs text-slate-500 mb-1">Activites</p>
-                    <p className="text-xl font-semibold text-slate-900">0</p>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {activities}
+                    </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-xs text-slate-500 mb-1">Beneficiaires</p>
-                    <p className="text-xl font-semibold text-slate-900">0</p>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {beneficiaries}
+                    </p>
                   </div>
                 </div>
 

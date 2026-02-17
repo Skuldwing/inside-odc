@@ -10,7 +10,17 @@ const router = express.Router();
 router.get("/", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM partners ORDER BY name"
+      `
+      SELECT
+        p.*,
+        COUNT(DISTINCT a.id)::int AS activities_count,
+        COUNT(ap.participant_id)::int AS beneficiaries_count
+      FROM partners p
+      LEFT JOIN activities a ON a.partner_id = p.id
+      LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+      GROUP BY p.id
+      ORDER BY p.name
+      `
     );
     res.json(result.rows);
   } catch (err) {

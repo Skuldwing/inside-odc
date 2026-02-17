@@ -255,6 +255,8 @@ export default function Dispositifs() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredDevices.map((d) => {
             const categoryLabel = categoryLabels[d.category] || d.category || "Autre";
+            const activities = Number(d.activities_count || 0);
+            const beneficiaries = Number(d.beneficiaries_count || 0);
             return (
               <div key={d.id} className="card p-5 space-y-4">
                 <div className="flex items-start justify-between">
@@ -306,11 +308,15 @@ export default function Dispositifs() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-xs text-slate-500 mb-1">Activites</p>
-                    <p className="text-xl font-semibold text-slate-900">0</p>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {activities}
+                    </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-xs text-slate-500 mb-1">Beneficiaires</p>
-                    <p className="text-xl font-semibold text-slate-900">0</p>
+                    <p className="text-xl font-semibold text-slate-900">
+                      {beneficiaries}
+                    </p>
                   </div>
                 </div>
               </div>
