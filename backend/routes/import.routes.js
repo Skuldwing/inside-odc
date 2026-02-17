@@ -142,19 +142,30 @@ router.post(
         const normalizedGender = normalizeGender(genre);
 
         let participantId = null;
-        if (email || telephone) {
-          const existing = await client.query(
+        if (email) {
+          const existingByEmail = await client.query(
             `
             SELECT id
             FROM participants
-            WHERE ($1::text IS NOT NULL AND email = $1)
-               OR ($2::text IS NOT NULL AND telephone = $2)
-            ORDER BY id
+            WHERE email = $1
             LIMIT 1
             `,
-            [email || null, telephone || null]
+            [email]
           );
-          participantId = existing.rows[0]?.id || null;
+          participantId = existingByEmail.rows[0]?.id || null;
+        } else if (telephone) {
+          const existingByPhoneAndName = await client.query(
+            `
+            SELECT id
+            FROM participants
+            WHERE telephone = $1
+              AND lower(nom) = lower($2)
+              AND lower(prenom) = lower($3)
+            LIMIT 1
+            `,
+            [telephone, String(nom), String(prenom)]
+          );
+          participantId = existingByPhoneAndName.rows[0]?.id || null;
         }
 
         if (!participantId) {
@@ -178,19 +189,54 @@ router.post(
             ]
           );
           participantId = insertResult.rows[0]?.id || null;
-          if (!participantId && (email || telephone)) {
+          if (!participantId && email) {
             const existingAfterConflict = await client.query(
               `
               SELECT id
               FROM participants
-              WHERE ($1::text IS NOT NULL AND email = $1)
-                 OR ($2::text IS NOT NULL AND telephone = $2)
-              ORDER BY id
+              WHERE email = $1
               LIMIT 1
               `,
-              [email || null, telephone || null]
+              [email]
             );
             participantId = existingAfterConflict.rows[0]?.id || null;
+          }
+
+          if (!participantId && telephone) {
+            const existingAfterConflict = await client.query(
+              `
+              SELECT id
+              FROM participants
+              WHERE telephone = $1
+                AND lower(nom) = lower($2)
+                AND lower(prenom) = lower($3)
+              LIMIT 1
+              `,
+              [telephone, String(nom), String(prenom)]
+            );
+            participantId = existingAfterConflict.rows[0]?.id || null;
+          }
+
+          if (!participantId && telephone) {
+            const insertWithoutPhone = await client.query(
+              `
+              INSERT INTO participants
+              (nom, prenom, genre, age_range, email, telephone, statut, structure)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              RETURNING id
+              `,
+              [
+                nom,
+                prenom,
+                normalizedGender,
+                ageRange || null,
+                email || null,
+                null,
+                statut || null,
+                structure || null,
+              ]
+            );
+            participantId = insertWithoutPhone.rows[0]?.id || null;
           }
 
           if (!participantId) continue;
@@ -237,17 +283,20 @@ router.post(
           );
         }
 
-        await client.query(
+        const linkResult = await client.query(
           `
           INSERT INTO activity_participants
           (activity_id, participant_id)
           VALUES ($1,$2)
           ON CONFLICT DO NOTHING
+          RETURNING participant_id
           `,
           [activity.id, participantId]
         );
 
-        imported++;
+        if (linkResult.rowCount > 0) {
+          imported++;
+        }
       }
 
       await client.query("COMMIT");
@@ -345,19 +394,30 @@ router.post(
         const normalizedGender = normalizeGender(genre);
 
         let participantId = null;
-        if (email || telephone) {
-          const existing = await pool.query(
+        if (email) {
+          const existingByEmail = await pool.query(
             `
             SELECT id
             FROM participants
-            WHERE ($1::text IS NOT NULL AND email = $1)
-               OR ($2::text IS NOT NULL AND telephone = $2)
-            ORDER BY id
+            WHERE email = $1
             LIMIT 1
             `,
-            [email || null, telephone || null]
+            [email]
           );
-          participantId = existing.rows[0]?.id || null;
+          participantId = existingByEmail.rows[0]?.id || null;
+        } else if (telephone) {
+          const existingByPhoneAndName = await pool.query(
+            `
+            SELECT id
+            FROM participants
+            WHERE telephone = $1
+              AND lower(nom) = lower($2)
+              AND lower(prenom) = lower($3)
+            LIMIT 1
+            `,
+            [telephone, String(nom), String(prenom)]
+          );
+          participantId = existingByPhoneAndName.rows[0]?.id || null;
         }
 
         if (!participantId) {
@@ -381,19 +441,54 @@ router.post(
             ]
           );
           participantId = participantResult.rows[0]?.id || null;
-          if (!participantId && (email || telephone)) {
+          if (!participantId && email) {
             const existingAfterConflict = await pool.query(
               `
               SELECT id
               FROM participants
-              WHERE ($1::text IS NOT NULL AND email = $1)
-                 OR ($2::text IS NOT NULL AND telephone = $2)
-              ORDER BY id
+              WHERE email = $1
               LIMIT 1
               `,
-              [email || null, telephone || null]
+              [email]
             );
             participantId = existingAfterConflict.rows[0]?.id || null;
+          }
+
+          if (!participantId && telephone) {
+            const existingAfterConflict = await pool.query(
+              `
+              SELECT id
+              FROM participants
+              WHERE telephone = $1
+                AND lower(nom) = lower($2)
+                AND lower(prenom) = lower($3)
+              LIMIT 1
+              `,
+              [telephone, String(nom), String(prenom)]
+            );
+            participantId = existingAfterConflict.rows[0]?.id || null;
+          }
+
+          if (!participantId && telephone) {
+            const insertWithoutPhone = await pool.query(
+              `
+              INSERT INTO participants
+              (nom, prenom, genre, age_range, email, telephone, statut, structure)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              RETURNING id
+              `,
+              [
+                nom,
+                prenom,
+                normalizedGender,
+                ageRange || null,
+                email || null,
+                null,
+                statut || null,
+                structure || null,
+              ]
+            );
+            participantId = insertWithoutPhone.rows[0]?.id || null;
           }
 
           if (!participantId) continue;
@@ -441,17 +536,20 @@ router.post(
         }
 
         /* ===== LINK TO ACTIVITY ===== */
-        await pool.query(
+        const linkResult = await pool.query(
           `
           INSERT INTO activity_participants
           (activity_id, participant_id)
           VALUES ($1,$2)
           ON CONFLICT DO NOTHING
+          RETURNING participant_id
           `,
           [activityId, participantId]
         );
 
-        imported++;
+        if (linkResult.rowCount > 0) {
+          imported++;
+        }
       }
 
       res.json({
