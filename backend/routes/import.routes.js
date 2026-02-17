@@ -51,6 +51,18 @@ function normalizeRow(row) {
   return out;
 }
 
+function normalizeIdentity(value) {
+  if (value === null || value === undefined) return "";
+  return String(value).trim().toLowerCase();
+}
+
+function samePersonByName(existing, nom, prenom) {
+  return (
+    normalizeIdentity(existing?.nom) === normalizeIdentity(nom) &&
+    normalizeIdentity(existing?.prenom) === normalizeIdentity(prenom)
+  );
+}
+
 
 /* ===== CREATE ACTIVITY + IMPORT PARTICIPANTS ===== */
 router.post(
@@ -120,6 +132,8 @@ router.post(
       }
 
       let imported = 0;
+      let skippedMissingName = 0;
+      let duplicatesInActivity = 0;
 
       for (const row of rows) {
         const normalized = normalizeRow(row);
@@ -138,21 +152,28 @@ router.post(
           null;
 
 
-        if (!nom || !prenom) continue;
+        if (!nom || !prenom) {
+          skippedMissingName++;
+          continue;
+        }
         const normalizedGender = normalizeGender(genre);
 
         let participantId = null;
         if (email) {
           const existingByEmail = await client.query(
             `
-            SELECT id
+            SELECT id, nom, prenom
             FROM participants
             WHERE email = $1
             LIMIT 1
             `,
             [email]
           );
-          participantId = existingByEmail.rows[0]?.id || null;
+          const matched = existingByEmail.rows[0];
+          participantId =
+            matched && samePersonByName(matched, nom, prenom)
+              ? matched.id
+              : null;
         } else if (telephone) {
           const existingByPhoneAndName = await client.query(
             `
@@ -192,14 +213,18 @@ router.post(
           if (!participantId && email) {
             const existingAfterConflict = await client.query(
               `
-              SELECT id
+              SELECT id, nom, prenom
               FROM participants
               WHERE email = $1
               LIMIT 1
               `,
               [email]
             );
-            participantId = existingAfterConflict.rows[0]?.id || null;
+            const matched = existingAfterConflict.rows[0];
+            participantId =
+              matched && samePersonByName(matched, nom, prenom)
+                ? matched.id
+                : null;
           }
 
           if (!participantId && telephone) {
@@ -217,12 +242,36 @@ router.post(
             participantId = existingAfterConflict.rows[0]?.id || null;
           }
 
+          if (!participantId && email) {
+            const insertWithoutEmail = await client.query(
+              `
+              INSERT INTO participants
+              (nom, prenom, genre, age_range, email, telephone, statut, structure)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              ON CONFLICT DO NOTHING
+              RETURNING id
+              `,
+              [
+                nom,
+                prenom,
+                normalizedGender,
+                ageRange || null,
+                null,
+                telephone || null,
+                statut || null,
+                structure || null,
+              ]
+            );
+            participantId = insertWithoutEmail.rows[0]?.id || null;
+          }
+
           if (!participantId && telephone) {
             const insertWithoutPhone = await client.query(
               `
               INSERT INTO participants
               (nom, prenom, genre, age_range, email, telephone, statut, structure)
               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              ON CONFLICT DO NOTHING
               RETURNING id
               `,
               [
@@ -237,6 +286,28 @@ router.post(
               ]
             );
             participantId = insertWithoutPhone.rows[0]?.id || null;
+          }
+
+          if (!participantId && (email || telephone)) {
+            const insertWithoutContacts = await client.query(
+              `
+              INSERT INTO participants
+              (nom, prenom, genre, age_range, email, telephone, statut, structure)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              RETURNING id
+              `,
+              [
+                nom,
+                prenom,
+                normalizedGender,
+                ageRange || null,
+                null,
+                null,
+                statut || null,
+                structure || null,
+              ]
+            );
+            participantId = insertWithoutContacts.rows[0]?.id || null;
           }
 
           if (!participantId) continue;
@@ -294,9 +365,8 @@ router.post(
           [activity.id, participantId]
         );
 
-        if (linkResult.rowCount > 0) {
-          imported++;
-        }
+        if (linkResult.rowCount > 0) imported++;
+        else duplicatesInActivity++;
       }
 
       await client.query("COMMIT");
@@ -305,6 +375,9 @@ router.post(
         message: "Import termine",
         activity,
         participants_importes: imported,
+        total_lignes: rows.length,
+        lignes_ignorees_nom_prenom_manquants: skippedMissingName,
+        doublons_dans_activite: duplicatesInActivity,
       });
     } catch (err) {
       await client.query("ROLLBACK");
@@ -372,6 +445,8 @@ router.post(
       }
 
       let imported = 0;
+      let skippedMissingName = 0;
+      let duplicatesInActivity = 0;
 
       for (const row of rows) {
         const normalized = normalizeRow(row);
@@ -390,21 +465,28 @@ router.post(
           null;
 
 
-        if (!nom || !prenom) continue;
+        if (!nom || !prenom) {
+          skippedMissingName++;
+          continue;
+        }
         const normalizedGender = normalizeGender(genre);
 
         let participantId = null;
         if (email) {
           const existingByEmail = await pool.query(
             `
-            SELECT id
+            SELECT id, nom, prenom
             FROM participants
             WHERE email = $1
             LIMIT 1
             `,
             [email]
           );
-          participantId = existingByEmail.rows[0]?.id || null;
+          const matched = existingByEmail.rows[0];
+          participantId =
+            matched && samePersonByName(matched, nom, prenom)
+              ? matched.id
+              : null;
         } else if (telephone) {
           const existingByPhoneAndName = await pool.query(
             `
@@ -444,14 +526,18 @@ router.post(
           if (!participantId && email) {
             const existingAfterConflict = await pool.query(
               `
-              SELECT id
+              SELECT id, nom, prenom
               FROM participants
               WHERE email = $1
               LIMIT 1
               `,
               [email]
             );
-            participantId = existingAfterConflict.rows[0]?.id || null;
+            const matched = existingAfterConflict.rows[0];
+            participantId =
+              matched && samePersonByName(matched, nom, prenom)
+                ? matched.id
+                : null;
           }
 
           if (!participantId && telephone) {
@@ -469,12 +555,36 @@ router.post(
             participantId = existingAfterConflict.rows[0]?.id || null;
           }
 
+          if (!participantId && email) {
+            const insertWithoutEmail = await pool.query(
+              `
+              INSERT INTO participants
+              (nom, prenom, genre, age_range, email, telephone, statut, structure)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              ON CONFLICT DO NOTHING
+              RETURNING id
+              `,
+              [
+                nom,
+                prenom,
+                normalizedGender,
+                ageRange || null,
+                null,
+                telephone || null,
+                statut || null,
+                structure || null,
+              ]
+            );
+            participantId = insertWithoutEmail.rows[0]?.id || null;
+          }
+
           if (!participantId && telephone) {
             const insertWithoutPhone = await pool.query(
               `
               INSERT INTO participants
               (nom, prenom, genre, age_range, email, telephone, statut, structure)
               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              ON CONFLICT DO NOTHING
               RETURNING id
               `,
               [
@@ -489,6 +599,28 @@ router.post(
               ]
             );
             participantId = insertWithoutPhone.rows[0]?.id || null;
+          }
+
+          if (!participantId && (email || telephone)) {
+            const insertWithoutContacts = await pool.query(
+              `
+              INSERT INTO participants
+              (nom, prenom, genre, age_range, email, telephone, statut, structure)
+              VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+              RETURNING id
+              `,
+              [
+                nom,
+                prenom,
+                normalizedGender,
+                ageRange || null,
+                null,
+                null,
+                statut || null,
+                structure || null,
+              ]
+            );
+            participantId = insertWithoutContacts.rows[0]?.id || null;
           }
 
           if (!participantId) continue;
@@ -547,9 +679,8 @@ router.post(
           [activityId, participantId]
         );
 
-        if (linkResult.rowCount > 0) {
-          imported++;
-        }
+        if (linkResult.rowCount > 0) imported++;
+        else duplicatesInActivity++;
       }
 
       res.json({
@@ -557,6 +688,9 @@ router.post(
         activite: activity.title,
         date: activity.activity_date,
         participants_importes: imported,
+        total_lignes: rows.length,
+        lignes_ignorees_nom_prenom_manquants: skippedMissingName,
+        doublons_dans_activite: duplicatesInActivity,
       });
     } catch (err) {
       console.error(err);
