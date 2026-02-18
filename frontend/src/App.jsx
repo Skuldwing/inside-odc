@@ -10,6 +10,8 @@ import Campagnes from "./pages/Campagnes";
 import Dispositifs from "./pages/Dispositifs";
 import Partenaires from "./pages/Partenaires";
 import Utilisateurs from "./pages/Utilisateurs";
+import SocialKpis from "./pages/SocialKpis";
+import SocialDashboard from "./pages/SocialDashboard";
 
 import PrivateRoute from "./routes/PrivateRoute";
 import AdminRoute from "./routes/AdminRoute";
@@ -35,6 +37,22 @@ export default function App() {
         <Route path="participants" element={<Participants />} />
 
         {/* ===== ADMIN ONLY ===== */}
+        <Route
+          path="social-dashboard"
+          element={
+            <AdminRoute>
+              <SocialDashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="social-kpis"
+          element={
+            <AdminRoute>
+              <SocialKpis />
+            </AdminRoute>
+          }
+        />
         <Route
           path="campagnes"
           element={

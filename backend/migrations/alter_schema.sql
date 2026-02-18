@@ -87,4 +87,22 @@ CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx
 CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_hash_unique
   ON password_reset_tokens(token_hash);
 
+CREATE TABLE IF NOT EXISTS social_media_kpis (
+  id SERIAL PRIMARY KEY,
+  platform TEXT NOT NULL CHECK (platform IN ('facebook','instagram','linkedin','x','tiktok')),
+  month_date DATE NOT NULL,
+  followers INTEGER NOT NULL DEFAULT 0,
+  reach BIGINT NOT NULL DEFAULT 0,
+  engagement BIGINT NOT NULL DEFAULT 0,
+  unique_users BIGINT NOT NULL DEFAULT 0,
+  results BIGINT NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE (platform, month_date)
+);
+
+CREATE INDEX IF NOT EXISTS social_media_kpis_month_idx
+  ON social_media_kpis(month_date);
+
 COMMIT;

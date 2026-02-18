@@ -14,6 +14,8 @@ const participantsRoutes = require("./routes/participants.routes");
 const campagnesRoutes = require("./routes/campagnes.routes");
 const importRoutes = require("./routes/import.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
+const socialKpisRoutes = require("./routes/socialKpis.routes");
+const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -87,6 +89,8 @@ app.use("/participants", participantsRoutes);
 app.use("/campagnes", campagnesRoutes);
 app.use("/import", importRoutes);
 app.use("/dashboard", dashboardRoutes);
+app.use("/social-kpis", socialKpisRoutes);
+app.use("/social-dashboard", socialDashboardRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });

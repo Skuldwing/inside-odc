@@ -7,6 +7,8 @@ import {
   Layers,
   UserCog,
   MessageSquare,
+  BarChart3,
+  Megaphone,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -34,6 +36,18 @@ const navigation = [
 ];
 
 const managementNavigation = [
+  {
+    name: "Dashboard Social",
+    icon: BarChart3,
+    path: "/social-dashboard",
+    roles: ["admin"],
+  },
+  {
+    name: "KPIs Social",
+    icon: Megaphone,
+    path: "/social-kpis",
+    roles: ["admin"],
+  },
   {
     name: "Partenaires",
     icon: Building2,
