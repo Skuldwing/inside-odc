@@ -4,13 +4,12 @@ import Login from "./Login";
 import SetPassword from "./pages/SetPassword";
 
 import Dashboard from "./pages/Dashboard";
-import Activities from "./pages/Activities";
+import OperationsHub from "./pages/OperationsHub";
 import Participants from "./pages/Participants";
 import Campagnes from "./pages/Campagnes";
 import Dispositifs from "./pages/Dispositifs";
 import Partenaires from "./pages/Partenaires";
 import Utilisateurs from "./pages/Utilisateurs";
-import SocialKpis from "./pages/SocialKpis";
 import SocialDashboard from "./pages/SocialDashboard";
 
 import PrivateRoute from "./routes/PrivateRoute";
@@ -33,7 +32,7 @@ export default function App() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="activities" element={<Activities />} />
+        <Route path="activities" element={<OperationsHub />} />
         <Route path="participants" element={<Participants />} />
 
         {/* ===== ADMIN ONLY ===== */}
@@ -42,14 +41,6 @@ export default function App() {
           element={
             <AdminRoute>
               <SocialDashboard />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="social-kpis"
-          element={
-            <AdminRoute>
-              <SocialKpis />
             </AdminRoute>
           }
         />

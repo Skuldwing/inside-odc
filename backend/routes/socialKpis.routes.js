@@ -2,7 +2,6 @@ const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
-const requireAdminPin = require("../middleware/pin.middleware");
 
 const router = express.Router();
 
@@ -64,7 +63,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", requireAdminPin, async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const platform = normalizePlatform(req.body.platform);
     const monthDate = normalizeMonthDate(req.body.month_date);
@@ -112,7 +111,7 @@ router.post("/", requireAdminPin, async (req, res) => {
   }
 });
 
-router.put("/:id", requireAdminPin, async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     const platform = normalizePlatform(req.body.platform);
@@ -173,7 +172,7 @@ router.put("/:id", requireAdminPin, async (req, res) => {
   }
 });
 
-router.delete("/:id", requireAdminPin, async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id) || id <= 0) {

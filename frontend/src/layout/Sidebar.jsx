@@ -8,7 +8,6 @@ import {
   UserCog,
   MessageSquare,
   BarChart3,
-  Megaphone,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -32,12 +31,6 @@ const navigation = [
     icon: Calendar,
     path: "/activities",
     roles: ["admin", "partner", "viewer"],
-  },
-  {
-    name: "KPIs Social",
-    icon: Megaphone,
-    path: "/social-kpis",
-    roles: ["admin"],
   },
   {
     name: "Participants",

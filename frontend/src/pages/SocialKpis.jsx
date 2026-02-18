@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Megaphone } from "lucide-react";
 import api from "../api";
-import AdminPinGate from "../components/AdminPinGate";
 
 const platforms = [
   { value: "facebook", label: "Facebook" },
@@ -131,7 +130,6 @@ export default function SocialKpis() {
   };
 
   return (
-    <AdminPinGate>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -326,7 +324,6 @@ export default function SocialKpis() {
           </div>
         )}
       </div>
-    </AdminPinGate>
   );
 }
 
