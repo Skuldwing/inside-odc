@@ -6,8 +6,8 @@ export default function Header({ currentPageName, onMenuClick }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login", { replace: true });
   };
 

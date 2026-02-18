@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS activity_participants (
   PRIMARY KEY (activity_id, participant_id)
 );
 
+CREATE INDEX IF NOT EXISTS activities_date_partner_device_idx
+  ON activities(activity_date, partner_id, device_id);
+
+CREATE INDEX IF NOT EXISTS activity_participants_participant_idx
+  ON activity_participants(participant_id);
+
 CREATE TABLE IF NOT EXISTS campagnes (
   id SERIAL PRIMARY KEY,
   name TEXT NOT NULL,

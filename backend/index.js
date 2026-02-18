@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const pool = require("./db");
 
 /* ===== ROUTES ===== */
 const authRoutes = require("./routes/auth.routes");
@@ -50,6 +51,24 @@ const authRateLimiter = rateLimit({
 
 app.use(globalRateLimiter);
 
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on("finish", () => {
+    const durationMs = Date.now() - start;
+    console.log(
+      JSON.stringify({
+        level: "info",
+        type: "http",
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        duration_ms: durationMs,
+      })
+    );
+  });
+  next();
+});
+
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
@@ -69,6 +88,7 @@ app.use(
       if (allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error("CORS_NOT_ALLOWED"));
     },
+    credentials: true,
   })
 );
 
@@ -77,6 +97,16 @@ app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
 /* ===== HEALTH CHECK ===== */
 app.get("/", (req, res) => {
   res.send("Inside ODC API OK");
+});
+
+app.get("/healthz", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+    res.json({ status: "ok", db: "up" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: "error", db: "down" });
+  }
 });
 
 /* ===== API ROUTES ===== */

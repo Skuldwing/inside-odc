@@ -7,8 +7,21 @@ async function run() {
     process.exit(1);
   }
 
+  const dbUrl = process.env.DATABASE_URL || "";
+  const sslEnabled =
+    String(process.env.DB_SSL || "").toLowerCase() === "true" ||
+    /neon\.tech/i.test(dbUrl) ||
+    process.env.NODE_ENV === "production";
+
   const client = new Client({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: dbUrl,
+    ssl: sslEnabled
+      ? {
+          rejectUnauthorized:
+            String(process.env.DB_SSL_REJECT_UNAUTHORIZED || "false") ===
+            "true",
+        }
+      : false,
   });
 
   try {

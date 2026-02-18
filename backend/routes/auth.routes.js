@@ -9,6 +9,19 @@ const requireAdminPin = require("../middleware/pin.middleware");
 
 const router = express.Router();
 
+function cookieOptions() {
+  const isProd = process.env.NODE_ENV === "production";
+  const sameSite =
+    process.env.JWT_COOKIE_SAMESITE || (isProd ? "none" : "lax");
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite,
+    path: "/",
+    maxAge: 30 * 60 * 1000,
+  };
+}
+
 /* ================= LOGIN ================= */
 router.post("/login", async (req, res) => {
   try {
@@ -25,12 +38,12 @@ router.post("/login", async (req, res) => {
 
     const user = result.rows[0];
     if (!user) {
-      return res.status(401).json({ error: "Utilisateur introuvable" });
+      return res.status(401).json({ error: "Identifiants invalides" });
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(401).json({ error: "Mot de passe incorrect" });
+      return res.status(401).json({ error: "Identifiants invalides" });
     }
 
     const token = jwt.sign(
@@ -43,8 +56,10 @@ router.post("/login", async (req, res) => {
       { expiresIn: "30m" }
     );
 
+    res.cookie("token", token, cookieOptions());
+
     res.json({
-      token,
+      success: true,
       user: {
         id: user.id,
         email: user.email,
@@ -53,6 +68,41 @@ router.post("/login", async (req, res) => {
         partner_id: user.partner_id,
       },
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/logout", (req, res) => {
+  res.clearCookie("token", {
+    path: "/",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite:
+      process.env.JWT_COOKIE_SAMESITE ||
+      (process.env.NODE_ENV === "production" ? "none" : "lax"),
+  });
+  res.json({ success: true });
+});
+
+router.get("/me", authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, email, full_name, role, partner_id
+      FROM users
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Session invalide" });
+    }
+
+    res.json({ user: result.rows[0] });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -85,7 +135,7 @@ router.post("/set-password", async (req, res) => {
 
     const userId = await consumePasswordToken(token);
     if (!userId) {
-      return res.status(400).json({ error: "Token invalide ou expiré" });
+      return res.status(400).json({ error: "Token invalide ou expire" });
     }
 
     const hash = await bcrypt.hash(password, 10);
@@ -116,7 +166,6 @@ router.post("/set-password", async (req, res) => {
   }
 });
 
-
 /* ================= VERIFY ADMIN PIN ================= */
 router.post(
   "/verify-pin",
@@ -129,12 +178,3 @@ router.post(
 );
 
 module.exports = router;
-
-
-
-
-
-
-
-
-

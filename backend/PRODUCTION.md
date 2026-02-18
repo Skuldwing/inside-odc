@@ -8,6 +8,8 @@ Set at least:
 - `DATABASE_URL=...`
 - `JWT_SECRET=...`
 - `CORS_ORIGIN=https://your-frontend-domain`
+- `DB_SSL=true`
+- `JWT_COOKIE_SAMESITE=none` (if frontend/backend are on different domains)
 
 ## 2) Secure admin PIN
 
@@ -31,3 +33,8 @@ npm run cleanup-reset-tokens
 ```
 
 Schedule this command in cron (recommended every day).
+
+## 4) Session model
+
+- Auth now uses an `HttpOnly` cookie (`token`) instead of storing JWT in browser `localStorage`.
+- Frontend and backend must be on HTTPS in production for secure cookies.

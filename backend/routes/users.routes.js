@@ -6,9 +6,9 @@ const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { createPasswordToken } = require("../services/passwordReset");
 const requireAdminPin = require("../middleware/pin.middleware");
+const crypto = require("crypto");
 
 const router = express.Router();
-const DEFAULT_PASSWORD = process.env.DEFAULT_USER_PASSWORD || "ChangeMe123!";
 
 router.use(authMiddleware, requireAdmin, requireAdminPin);
 
@@ -56,7 +56,6 @@ router.post("/", async (req, res) => {
     const {
       full_name,
       email,
-      password,
       role = "viewer",
       partner_id = null,
       partner = null,
@@ -76,8 +75,8 @@ router.post("/", async (req, res) => {
       resolvedPartnerId = partnerResult.rows[0]?.id || null;
     }
 
-    const pwd = password || DEFAULT_PASSWORD;
-    const hash = await bcrypt.hash(pwd, 10);
+    const tempPassword = crypto.randomBytes(24).toString("hex");
+    const hash = await bcrypt.hash(tempPassword, 10);
     const isActive = status !== "inactive";
     const hasIsActive = await hasUsersIsActiveColumn();
 

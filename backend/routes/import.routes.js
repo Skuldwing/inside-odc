@@ -396,6 +396,8 @@ router.post(
   authMiddleware,
   upload.single("file"),
   async (req, res) => {
+    const client = await pool.connect();
+    let inTransaction = false;
     try {
       const { activityId } = req.params;
 
@@ -404,7 +406,7 @@ router.post(
       }
 
       /* ===== GET ACTIVITY ===== */
-      const activityResult = await pool.query(
+      const activityResult = await client.query(
         "SELECT title, activity_date, partner_id FROM activities WHERE id = $1",
         [activityId]
       );
@@ -444,6 +446,9 @@ router.post(
         });
       }
 
+      await client.query("BEGIN");
+      inTransaction = true;
+
       let imported = 0;
       let skippedMissingName = 0;
       let duplicatesInActivity = 0;
@@ -473,7 +478,7 @@ router.post(
 
         let participantId = null;
         if (email) {
-          const existingByEmail = await pool.query(
+          const existingByEmail = await client.query(
             `
             SELECT id, nom, prenom
             FROM participants
@@ -488,7 +493,7 @@ router.post(
               ? matched.id
               : null;
         } else if (telephone) {
-          const existingByPhoneAndName = await pool.query(
+          const existingByPhoneAndName = await client.query(
             `
             SELECT id
             FROM participants
@@ -503,7 +508,7 @@ router.post(
         }
 
         if (!participantId) {
-          const participantResult = await pool.query(
+          const participantResult = await client.query(
             `
             INSERT INTO participants
             (nom, prenom, genre, age_range, email, telephone, statut, structure)
@@ -524,7 +529,7 @@ router.post(
           );
           participantId = participantResult.rows[0]?.id || null;
           if (!participantId && email) {
-            const existingAfterConflict = await pool.query(
+            const existingAfterConflict = await client.query(
               `
               SELECT id, nom, prenom
               FROM participants
@@ -541,7 +546,7 @@ router.post(
           }
 
           if (!participantId && telephone) {
-            const existingAfterConflict = await pool.query(
+            const existingAfterConflict = await client.query(
               `
               SELECT id
               FROM participants
@@ -556,7 +561,7 @@ router.post(
           }
 
           if (!participantId && email) {
-            const insertWithoutEmail = await pool.query(
+            const insertWithoutEmail = await client.query(
               `
               INSERT INTO participants
               (nom, prenom, genre, age_range, email, telephone, statut, structure)
@@ -579,7 +584,7 @@ router.post(
           }
 
           if (!participantId && telephone) {
-            const insertWithoutPhone = await pool.query(
+            const insertWithoutPhone = await client.query(
               `
               INSERT INTO participants
               (nom, prenom, genre, age_range, email, telephone, statut, structure)
@@ -602,7 +607,7 @@ router.post(
           }
 
           if (!participantId && (email || telephone)) {
-            const insertWithoutContacts = await pool.query(
+            const insertWithoutContacts = await client.query(
               `
               INSERT INTO participants
               (nom, prenom, genre, age_range, email, telephone, statut, structure)
@@ -625,7 +630,7 @@ router.post(
 
           if (!participantId) continue;
         } else {
-          await pool.query(
+          await client.query(
             `
             UPDATE participants
             SET
@@ -668,7 +673,7 @@ router.post(
         }
 
         /* ===== LINK TO ACTIVITY ===== */
-        const linkResult = await pool.query(
+        const linkResult = await client.query(
           `
           INSERT INTO activity_participants
           (activity_id, participant_id)
@@ -683,6 +688,9 @@ router.post(
         else duplicatesInActivity++;
       }
 
+      await client.query("COMMIT");
+      inTransaction = false;
+
       res.json({
         message: "Import termine avec succes",
         activite: activity.title,
@@ -693,13 +701,18 @@ router.post(
         doublons_dans_activite: duplicatesInActivity,
       });
     } catch (err) {
+      if (inTransaction) {
+        await client.query("ROLLBACK");
+      }
       console.error(err);
       res.status(500).json({ error: "Erreur import Excel" });
     } finally {
+      client.release();
       safeUnlink(req.file?.path);
     }
   }
 );
 
 module.exports = router;
+
 

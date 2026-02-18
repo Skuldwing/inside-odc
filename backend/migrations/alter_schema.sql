@@ -19,9 +19,15 @@ ALTER TABLE partners
   ADD COLUMN IF NOT EXISTS status TEXT;
 
 -- backfill status from is_active if present
-UPDATE partners
-SET status = CASE WHEN is_active = true THEN 'active' ELSE 'inactive' END
-WHERE status IS NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'partners' AND column_name = 'is_active'
+  ) THEN
+    EXECUTE 'UPDATE partners SET status = CASE WHEN is_active = true THEN ''active'' ELSE ''inactive'' END WHERE status IS NULL';
+  END IF;
+END$$;
 
 -- ===== participants =====
 -- New columns expected by backend/import
@@ -37,16 +43,44 @@ ALTER TABLE participants
 ALTER TABLE activities
   ADD COLUMN IF NOT EXISTS duration_hours INTEGER;
 
--- Backfill from legacy columns if present
-UPDATE participants
-SET
-  nom = COALESCE(nom, last_name),
-  prenom = COALESCE(prenom, first_name),
-  genre = COALESCE(genre, gender),
-  telephone = COALESCE(telephone, phone),
-  statut = COALESCE(statut, status)
-WHERE
-  (nom IS NULL OR prenom IS NULL OR genre IS NULL OR telephone IS NULL OR statut IS NULL);
+-- Backfill from legacy columns if present (safe for different schema states)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'participants' AND column_name = 'last_name'
+  ) THEN
+    EXECUTE 'UPDATE participants SET nom = COALESCE(nom, last_name) WHERE nom IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'participants' AND column_name = 'first_name'
+  ) THEN
+    EXECUTE 'UPDATE participants SET prenom = COALESCE(prenom, first_name) WHERE prenom IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'participants' AND column_name = 'gender'
+  ) THEN
+    EXECUTE 'UPDATE participants SET genre = COALESCE(genre, gender) WHERE genre IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'participants' AND column_name = 'phone'
+  ) THEN
+    EXECUTE 'UPDATE participants SET telephone = COALESCE(telephone, phone) WHERE telephone IS NULL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'participants' AND column_name = 'status'
+  ) THEN
+    EXECUTE 'UPDATE participants SET statut = COALESCE(statut, status) WHERE statut IS NULL';
+  END IF;
+END$$;
 
 -- ===== activity_participants =====
 -- Add unique constraint on (activity_id, participant_id) for ON CONFLICT DO NOTHING
@@ -61,6 +95,12 @@ BEGIN
       ADD CONSTRAINT activity_participants_unique UNIQUE (activity_id, participant_id);
   END IF;
 END$$;
+
+CREATE INDEX IF NOT EXISTS activities_date_partner_device_idx
+  ON activities(activity_date, partner_id, device_id);
+
+CREATE INDEX IF NOT EXISTS activity_participants_participant_idx
+  ON activity_participants(participant_id);
 
 -- ===== campagnes =====
 CREATE TABLE IF NOT EXISTS campagnes (
