@@ -120,33 +120,56 @@ router.post("/chat", async (req, res) => {
       .filter((m) => m.content);
 
     const context = await getBusinessContext();
-    const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+    const preferredModel = process.env.OPENAI_MODEL || "gpt-4o-mini";
+    const fallbackModels = ["gpt-4o-mini", "gpt-4.1-mini"];
+    const modelsToTry = [
+      preferredModel,
+      ...fallbackModels.filter((m) => m !== preferredModel),
+    ];
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: Number(process.env.AI_TEMPERATURE || 0.2),
-        max_tokens: Number(process.env.AI_MAX_TOKENS || 600),
-        messages: [
-          { role: "system", content: systemPrompt(context) },
-          ...history,
-          { role: "user", content: message },
-        ],
-      }),
-    });
+    let data = null;
+    let model = preferredModel;
+    let lastProviderError = "";
 
-    if (!response.ok) {
+    for (const candidateModel of modelsToTry) {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: candidateModel,
+          temperature: Number(process.env.AI_TEMPERATURE || 0.2),
+          max_tokens: Number(process.env.AI_MAX_TOKENS || 600),
+          messages: [
+            { role: "system", content: systemPrompt(context) },
+            ...history,
+            { role: "user", content: message },
+          ],
+        }),
+      });
+
+      if (response.ok) {
+        data = await response.json();
+        model = candidateModel;
+        break;
+      }
+
       const body = await response.text();
-      console.error("AI provider error:", body);
-      return res.status(502).json({ error: "Erreur fournisseur IA" });
+      lastProviderError = `status=${response.status} model=${candidateModel} body=${body}`;
+      console.error("AI provider error:", lastProviderError);
     }
 
-    const data = await response.json();
+    if (!data) {
+      return res.status(502).json({
+        error:
+          "Erreur fournisseur IA (modele indisponible, quota ou facturation).",
+        details:
+          process.env.NODE_ENV === "production" ? undefined : lastProviderError,
+      });
+    }
+
     const reply =
       data?.choices?.[0]?.message?.content?.trim() ||
       "Je n'ai pas pu generer de reponse pour le moment.";
