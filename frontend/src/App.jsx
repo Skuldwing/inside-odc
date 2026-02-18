@@ -11,6 +11,7 @@ import Dispositifs from "./pages/Dispositifs";
 import Partenaires from "./pages/Partenaires";
 import Utilisateurs from "./pages/Utilisateurs";
 import SocialDashboard from "./pages/SocialDashboard";
+import AiAssistant from "./pages/AiAssistant";
 
 import PrivateRoute from "./routes/PrivateRoute";
 import AdminRoute from "./routes/AdminRoute";
@@ -41,6 +42,14 @@ export default function App() {
           element={
             <AdminRoute>
               <SocialDashboard />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="assistant-ia"
+          element={
+            <AdminRoute>
+              <AiAssistant />
             </AdminRoute>
           }
         />

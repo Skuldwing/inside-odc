@@ -8,6 +8,7 @@ import {
   UserCog,
   MessageSquare,
   BarChart3,
+  Bot,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -24,6 +25,12 @@ const navigation = [
     name: "Dashboard Social",
     icon: BarChart3,
     path: "/social-dashboard",
+    roles: ["admin"],
+  },
+  {
+    name: "Assistant IA",
+    icon: Bot,
+    path: "/assistant-ia",
     roles: ["admin"],
   },
   {

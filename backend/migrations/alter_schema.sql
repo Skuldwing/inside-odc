@@ -145,4 +145,22 @@ CREATE TABLE IF NOT EXISTS social_media_kpis (
 CREATE INDEX IF NOT EXISTS social_media_kpis_month_idx
   ON social_media_kpis(month_date);
 
+CREATE TABLE IF NOT EXISTS ai_chat_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  prompt TEXT NOT NULL,
+  response TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  total_tokens INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ai_chat_logs_user_idx
+  ON ai_chat_logs(user_id);
+
+CREATE INDEX IF NOT EXISTS ai_chat_logs_created_at_idx
+  ON ai_chat_logs(created_at DESC);
+
 COMMIT;

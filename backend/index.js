@@ -17,6 +17,7 @@ const importRoutes = require("./routes/import.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const socialKpisRoutes = require("./routes/socialKpis.routes");
 const socialDashboardRoutes = require("./routes/socialDashboard.routes");
+const aiRoutes = require("./routes/ai.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -121,6 +122,7 @@ app.use("/import", importRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/social-kpis", socialKpisRoutes);
 app.use("/social-dashboard", socialDashboardRoutes);
+app.use("/ai", aiRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });

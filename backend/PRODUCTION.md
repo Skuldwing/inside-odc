@@ -10,6 +10,9 @@ Set at least:
 - `CORS_ORIGIN=https://your-frontend-domain`
 - `DB_SSL=true`
 - `JWT_COOKIE_SAMESITE=none` (if frontend/backend are on different domains)
+- `OPENAI_API_KEY=...`
+- `OPENAI_MODEL=gpt-4.1-mini`
+- `AI_ENABLED=true`
 
 ## 2) Secure admin PIN
 
