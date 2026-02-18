@@ -22,10 +22,22 @@ const navigation = [
     roles: ["admin", "partner", "viewer"],
   },
   {
-    name: "Activités",
+    name: "Dashboard Social",
+    icon: BarChart3,
+    path: "/social-dashboard",
+    roles: ["admin"],
+  },
+  {
+    name: "Activites",
     icon: Calendar,
     path: "/activities",
     roles: ["admin", "partner", "viewer"],
+  },
+  {
+    name: "KPIs Social",
+    icon: Megaphone,
+    path: "/social-kpis",
+    roles: ["admin"],
   },
   {
     name: "Participants",
@@ -36,18 +48,6 @@ const navigation = [
 ];
 
 const managementNavigation = [
-  {
-    name: "Dashboard Social",
-    icon: BarChart3,
-    path: "/social-dashboard",
-    roles: ["admin"],
-  },
-  {
-    name: "KPIs Social",
-    icon: Megaphone,
-    path: "/social-kpis",
-    roles: ["admin"],
-  },
   {
     name: "Partenaires",
     icon: Building2,
@@ -103,9 +103,7 @@ export default function Sidebar({
               <h1 className="text-white font-semibold tracking-tight">
                 Inside ODC
               </h1>
-              <p className="text-xs text-slate-400">
-                Orange Digital Center
-              </p>
+              <p className="text-xs text-slate-400">Orange Digital Center</p>
             </div>
           </div>
 
@@ -123,37 +121,35 @@ export default function Sidebar({
             Pilotage
           </p>
           <div className="mt-2 space-y-1">
-          {navigation
-            .filter((item) => item.roles.includes(safeRole))
-            .map((item) => {
-              const active =
-                (item.path === "/" && location.pathname === "/") ||
-                (item.path !== "/" && location.pathname === item.path);
+            {navigation
+              .filter((item) => item.roles.includes(safeRole))
+              .map((item) => {
+                const active =
+                  (item.path === "/" && location.pathname === "/") ||
+                  (item.path !== "/" && location.pathname === item.path);
 
-              const Icon = item.icon;
+                const Icon = item.icon;
 
-              return (
-                <Link
-                  key={item.name}
-                  to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={clsx(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition",
-                    active
-                      ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white"
-                  )}
-                >
-                  <Icon className="w-5 h-5" />
-                  {item.name}
-                </Link>
-              );
-            })}
+                return (
+                  <Link
+                    key={item.name}
+                    to={item.path}
+                    onClick={() => setSidebarOpen(false)}
+                    className={clsx(
+                      "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition",
+                      active
+                        ? "bg-orange-500 text-white shadow-lg shadow-orange-500/30"
+                        : "text-slate-300 hover:bg-white/10 hover:text-white"
+                    )}
+                  >
+                    <Icon className="w-5 h-5" />
+                    {item.name}
+                  </Link>
+                );
+              })}
           </div>
 
-          {managementNavigation.some((item) =>
-            item.roles.includes(safeRole)
-          ) && (
+          {managementNavigation.some((item) => item.roles.includes(safeRole)) && (
             <div className="pt-5">
               <div className="px-4">
                 <div className="h-px bg-white/10" />
@@ -167,8 +163,7 @@ export default function Sidebar({
                   .map((item) => {
                     const active =
                       (item.path === "/" && location.pathname === "/") ||
-                      (item.path !== "/" &&
-                        location.pathname === item.path);
+                      (item.path !== "/" && location.pathname === item.path);
 
                     const Icon = item.icon;
 
