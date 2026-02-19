@@ -11,6 +11,8 @@ import {
   MapPin,
   Download,
   FileDown,
+  Filter,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   BarChart,
@@ -57,6 +59,7 @@ const markerIcon = new L.Icon({
 export default function Dashboard() {
   const { role, user } = useAuth();
   const currentYear = new Date().getFullYear();
+  const todayLabel = format(new Date(), "dd MMMM yyyy", { locale: fr });
 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -117,12 +120,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, [filters]);
 
-  const yearOptions = [
-    currentYear,
-    currentYear - 1,
-    currentYear - 2,
-  ];
-
+  const yearOptions = [currentYear, currentYear - 1, currentYear - 2];
   const partnerOptions =
     role === "partner" && user?.partner_id
       ? partners.filter((p) => p.id === user.partner_id)
@@ -179,18 +177,26 @@ export default function Dashboard() {
 
     let cancelled = false;
     const cacheKey = "odc_location_cache_v1";
-    const cached =
-      JSON.parse(localStorage.getItem(cacheKey) || "{}") || {};
+    const cached = JSON.parse(localStorage.getItem(cacheKey) || "{}") || {};
 
     const resolve = async () => {
       const points = [];
+
       for (const loc of locations) {
         const name = loc.name;
-        if (!name || name.toLowerCase() === "non renseignÃ©") continue;
+        if (!name) continue;
+
+        const normalized = name
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "");
+        if (normalized === "non renseigne") continue;
+
         if (cached[name]) {
           points.push({ ...cached[name], name, value: loc.value });
           continue;
         }
+
         try {
           const res = await fetch(
             `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
@@ -210,6 +216,7 @@ export default function Dashboard() {
           // ignore geocode failure
         }
       }
+
       localStorage.setItem(cacheKey, JSON.stringify(cached));
       if (!cancelled) setGeoPoints(points);
     };
@@ -222,8 +229,8 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (geoBoundary) return;
-      const url =
-        "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/SEN/ADM1/geoBoundaries-SEN-ADM1_simplified.geojson";
+    const url =
+      "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/SEN/ADM1/geoBoundaries-SEN-ADM1_simplified.geojson";
     fetch(url)
       .then((res) => res.json())
       .then((data) => setGeoBoundary(data))
@@ -231,23 +238,10 @@ export default function Dashboard() {
   }, [geoBoundary]);
 
   if (loading && !summary) {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-32 rounded-2xl bg-white/80 shadow animate-pulse"
-            />
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="h-80 rounded-2xl bg-white/80 shadow animate-pulse" />
-          <div className="h-80 rounded-2xl bg-white/80 shadow animate-pulse" />
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
+
+  const totals = summary?.totals || {};
 
   return (
     <div className="space-y-6">
@@ -257,216 +251,239 @@ export default function Dashboard() {
           <p className="text-sm">{error}</p>
         </div>
       )}
-      <div className="card p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <label className="text-xs text-slate-500">Année</label>
-              <select
-                className="select mt-1"
-                value={filters.year}
-                onChange={(e) =>
-                  setFilters({ ...filters, year: Number(e.target.value) })
-                }
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">Partenaire</label>
-              <select
-                className="select mt-1"
-                value={filters.partner_id}
-                onChange={(e) =>
-                  setFilters({ ...filters, partner_id: e.target.value })
-                }
-                disabled={role === "partner"}
-              >
-                <option value="">Tous</option>
-                {partnerOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">Dispositif</label>
-              <select
-                className="select mt-1"
-                value={filters.device_id}
-                onChange={(e) =>
-                  setFilters({ ...filters, device_id: e.target.value })
-                }
-              >
-                <option value="">Tous</option>
-                {devices.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs text-slate-500">Genre</label>
-              <select
-                className="select mt-1"
-                value={filters.gender}
-                onChange={(e) =>
-                  setFilters({ ...filters, gender: e.target.value })
-                }
-              >
-                <option value="">Tous</option>
-                <option value="H">Hommes</option>
-                <option value="F">Femmes</option>
-              </select>
-            </div>
+
+      <section className="surface-glass p-5 lg:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+              Pilotage strategique
+            </p>
+            <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
+              Dashboard Command Center
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Vue consolidee des activites, objectifs et qualite de donnees.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              className="btn-primary"
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              <Download className="w-4 h-4" />
-              {exporting ? "Export..." : "Exporter objectifs"}
-            </button>
-            <button
-              className="btn-ghost border"
-              onClick={handleExportPdf}
-              disabled={exportingPdf}
-            >
-              <FileDown className="w-4 h-4" />
-              {exportingPdf ? "PDF..." : "Exporter KPIs"}
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="badge border-orange-200 bg-orange-50 text-orange-700">
+              <Calendar className="mr-1 h-3.5 w-3.5" />
+              {todayLabel}
+            </span>
+            <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700">
+              <TrendingUp className="mr-1 h-3.5 w-3.5" />
+              {totals.partners_active || 0} partenaires actifs
+            </span>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div
+      <section className="card p-4 lg:p-5">
+        <div className="flex items-center gap-2 text-slate-700">
+          <Filter className="h-4 w-4 text-orange-500" />
+          <h2 className="text-sm font-semibold uppercase tracking-wide">
+            Filtres analytiques
+          </h2>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <label className="text-xs text-slate-500">Annee</label>
+            <select
+              className="select mt-1"
+              value={filters.year}
+              onChange={(e) =>
+                setFilters({ ...filters, year: Number(e.target.value) })
+              }
+            >
+              {yearOptions.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Partenaire</label>
+            <select
+              className="select mt-1"
+              value={filters.partner_id}
+              onChange={(e) =>
+                setFilters({ ...filters, partner_id: e.target.value })
+              }
+              disabled={role === "partner"}
+            >
+              <option value="">Tous</option>
+              {partnerOptions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Dispositif</label>
+            <select
+              className="select mt-1"
+              value={filters.device_id}
+              onChange={(e) =>
+                setFilters({ ...filters, device_id: e.target.value })
+              }
+            >
+              <option value="">Tous</option>
+              {devices.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Genre</label>
+            <select
+              className="select mt-1"
+              value={filters.gender}
+              onChange={(e) => setFilters({ ...filters, gender: e.target.value })}
+            >
+              <option value="">Tous</option>
+              <option value="H">Hommes</option>
+              <option value="F">Femmes</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button className="btn-primary" onClick={handleExport} disabled={exporting}>
+            <Download className="w-4 h-4" />
+            {exporting ? "Export..." : "Exporter objectifs"}
+          </button>
+          <button
+            className="btn-ghost border border-slate-200 bg-white"
+            onClick={handleExportPdf}
+            disabled={exportingPdf}
+          >
+            <FileDown className="w-4 h-4" />
+            {exportingPdf ? "PDF..." : "Exporter KPIs"}
+          </button>
+          <button className="btn-ghost border border-slate-200 bg-white">
+            <SlidersHorizontal className="w-4 h-4" />
+            Vue personnalisee
+          </button>
+        </div>
+      </section>
+
+      <section
         ref={kpiRef}
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
       >
-        <KpiCard
-          label="Activités"
-          value={summary?.totals?.activities ?? 0}
-          icon={Calendar}
-          accent="bg-orange-100 text-orange-600"
-        />
-        <KpiCard
+        <HeroKpiCard
           label="Participants"
-          value={summary?.totals?.participants ?? 0}
+          value={totals.participants ?? 0}
           icon={Users}
-          accent="bg-green-100 text-green-600"
+          accent="from-emerald-500 to-emerald-600"
+          hint="Beneficiaires consolides"
+          prominent
         />
-        <KpiCard
+        <HeroKpiCard
+          label="Activites"
+          value={totals.activities ?? 0}
+          icon={Calendar}
+          accent="from-orange-500 to-orange-600"
+          hint="Execution annuelle"
+        />
+        <HeroKpiCard
           label="Partenaires actifs"
-          value={summary?.totals?.partners_active ?? 0}
+          value={totals.partners_active ?? 0}
           icon={Building2}
-          accent="bg-blue-100 text-blue-600"
+          accent="from-blue-500 to-blue-600"
+          hint="Partenaires engages"
         />
-        <KpiCard
+        <HeroKpiCard
           label="Heures de formation"
-          value={`${summary?.totals?.hours ?? 0}h`}
+          value={`${totals.hours ?? 0}h`}
           icon={Clock}
-          accent="bg-purple-100 text-purple-600"
+          accent="from-indigo-500 to-indigo-600"
+          hint="Volume pedagogique"
         />
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <TrendsLineChart data={summary?.trends || []} />
-        <TopListCard
-          title="Top dispositifs"
-          items={summary?.top?.devices || []}
-        />
-        <TopListCard
-          title="Top partenaires"
-          items={summary?.top?.partners || []}
-        />
-      </div>
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <TrendsLineChart data={summary?.trends || []} />
+        </div>
+        <div className="space-y-6">
+          <TopListCard title="Top dispositifs" items={summary?.top?.devices || []} />
+          <TopListCard title="Top partenaires" items={summary?.top?.partners || []} />
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ActivityBarChart
           data={summary?.beneficiariesByDevice || []}
-          title="Bénéficiaires par dispositif"
+          title="Beneficiaires par dispositif"
         />
         <BeneficiaryPieChart
           data={summary?.gender || []}
-          title="Répartition par genre"
+          title="Repartition par genre"
         />
-      </div>
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <BeneficiariesByPartnerTable
-          data={summary?.beneficiariesByPartner || []}
-        />
-
-        <div className="lg:col-span-2 card p-3">
-          <h3 className="flex items-center gap-2 font-semibold text-slate-900">
-            <TrendingUp className="w-5 h-5 text-orange-500" />
-            Activités récentes
-          </h3>
-          <div className="mt-3 space-y-2">
-            {(summary?.recentActivities || []).map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-center justify-between p-2 bg-slate-50 rounded-xl"
-              >
-                <div>
-                  <p className="font-medium text-slate-900">
-                    {activity.title}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    {activity.partner_name || activity.partner || "-"}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="badge bg-orange-100 text-orange-700">
-                    {activity.activity_date
-                      ? format(
-                          new Date(activity.activity_date),
-                          "dd MMM",
-                          { locale: fr }
-                        )
-                      : "-"}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {(summary?.recentActivities || []).length === 0 && (
-              <p className="text-center text-slate-500 py-4">
-                Aucune activité récente
-              </p>
-            )}
-          </div>
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <BeneficiariesByPartnerTable data={summary?.beneficiariesByPartner || []} />
         </div>
-      </div>
+        <RecentActivitiesCard data={summary?.recentActivities || []} />
+      </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <AlertsCard alerts={summary?.alerts} />
         <DataQualityCard data={summary?.dataQuality} />
-        <LocationsMap data={summary?.locations || []} points={geoPoints} geoBoundary={geoBoundary} />
+        <LocationsMap
+          data={summary?.locations || []}
+          points={geoPoints}
+          geoBoundary={geoBoundary}
+        />
+      </section>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="h-28 rounded-2xl bg-white/80 shadow-sm animate-pulse" />
+      <div className="h-40 rounded-2xl bg-white/80 shadow-sm animate-pulse" />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-32 rounded-2xl bg-white/80 shadow-sm animate-pulse" />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="h-80 rounded-2xl bg-white/80 shadow-sm animate-pulse" />
+        <div className="h-80 rounded-2xl bg-white/80 shadow-sm animate-pulse" />
       </div>
     </div>
   );
 }
 
-function KpiCard({ label, value, icon: Icon, accent }) {
+function HeroKpiCard({ label, value, icon: Icon, accent, hint, prominent = false }) {
   return (
-    <div className="card p-6">
-      <div className="flex items-center justify-between">
+    <div
+      className={
+        prominent
+          ? "relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-md shadow-slate-300/40"
+          : "relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/95 p-6 shadow-sm shadow-slate-300/40"
+      }
+    >
+      <div className="absolute -top-10 -right-10 h-28 w-28 rounded-full bg-slate-100/70" />
+      <div className="relative flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="text-3xl font-bold text-slate-900">{value}</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
+          <p className="mt-1 text-xs text-slate-400">{hint}</p>
         </div>
         <div
-          className={`w-12 h-12 rounded-xl flex items-center justify-center ${accent}`}
+          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-white ${accent}`}
         >
-          <Icon className="w-6 h-6" />
+          <Icon className="h-5 w-5" />
         </div>
       </div>
     </div>
@@ -483,15 +500,15 @@ function TrendsLineChart({ data }) {
 
   return (
     <div className="card p-6">
-      <h3 className="font-semibold mb-4 text-slate-900">Tendances</h3>
+      <h3 className="font-semibold mb-4 text-slate-900">Tendances mensuelles</h3>
       {formatted.length === 0 ? (
-        <div className="h-[260px] flex items-center justify-center text-slate-400">
-          Aucune donnée
+        <div className="h-[280px] flex items-center justify-center text-slate-400">
+          Aucune donnee
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={280}>
           <LineChart data={formatted}>
-            <CartesianGrid strokeDasharray="3 3" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="monthLabel" />
             <YAxis />
             <Tooltip />
@@ -499,16 +516,18 @@ function TrendsLineChart({ data }) {
             <Line
               type="monotone"
               dataKey="activities"
-              stroke="#F97316"
-              strokeWidth={2}
-              name="Activités"
+              stroke="#f97316"
+              strokeWidth={2.5}
+              name="Activites"
+              dot={false}
             />
             <Line
               type="monotone"
               dataKey="beneficiaries"
-              stroke="#10B981"
-              strokeWidth={2}
-              name="Bénéficiaires"
+              stroke="#10b981"
+              strokeWidth={2.5}
+              name="Beneficiaires"
+              dot={false}
             />
           </LineChart>
         </ResponsiveContainer>
@@ -519,21 +538,19 @@ function TrendsLineChart({ data }) {
 
 function TopListCard({ title, items }) {
   return (
-    <div className="card p-6">
-      <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
+    <div className="card p-5">
+      <h3 className="font-semibold text-slate-900">{title}</h3>
       {items.length === 0 ? (
-        <p className="text-slate-500">Aucune donnée</p>
+        <p className="mt-3 text-sm text-slate-500">Aucune donnee</p>
       ) : (
-        <div className="space-y-3">
+        <div className="mt-4 space-y-2.5">
           {items.map((item, idx) => (
             <div
               key={`${item.name}-${idx}`}
-              className="flex items-center justify-between"
+              className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
             >
               <span className="text-slate-700">{item.name}</span>
-              <span className="font-semibold text-slate-900">
-                {item.value}
-              </span>
+              <span className="font-semibold text-slate-900">{item.value}</span>
             </div>
           ))}
         </div>
@@ -545,15 +562,13 @@ function TopListCard({ title, items }) {
 function BeneficiariesByPartnerTable({ data }) {
   return (
     <div className="card p-6">
-      <h3 className="font-semibold mb-4 text-slate-900">
-        Objectifs par partenaire
-      </h3>
+      <h3 className="font-semibold mb-4 text-slate-900">Objectifs par partenaire</h3>
       <div className="overflow-x-auto">
         <table className="table border-separate border-spacing-y-2 w-full">
           <thead className="table-head">
             <tr>
               <th className="text-left p-4">Partenaire</th>
-              <th className="text-right p-4">Réalisé</th>
+              <th className="text-right p-4">Realise</th>
               <th className="text-right p-4">Objectif</th>
             </tr>
           </thead>
@@ -561,16 +576,11 @@ function BeneficiariesByPartnerTable({ data }) {
             {data.map((row) => {
               const percent =
                 row.objective > 0
-                  ? Math.min(
-                      100,
-                      Math.round((row.value / row.objective) * 100)
-                    )
+                  ? Math.min(100, Math.round((row.value / row.objective) * 100))
                   : 0;
               return (
                 <tr key={row.name} className="table-row">
-                  <td className="p-4 font-medium break-words">
-                    {row.name}
-                  </td>
+                  <td className="p-4 font-medium break-words">{row.name}</td>
                   <td className="p-4 text-right">
                     <div className="flex items-center justify-end gap-3">
                       <span>{row.value}</span>
@@ -612,11 +622,8 @@ function BeneficiariesByPartnerTable({ data }) {
             })}
             {data.length === 0 && (
               <tr>
-                <td
-                  colSpan={3}
-                  className="text-center p-6 text-slate-500"
-                >
-                  Aucun partenaire enregistré
+                <td colSpan={3} className="text-center p-6 text-slate-500">
+                  Aucun partenaire enregistre
                 </td>
               </tr>
             )}
@@ -632,26 +639,17 @@ function ActivityBarChart({ data, title }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
-        <div className="h-[260px] flex items-center justify-center text-slate-400">
-          Aucune donnée
+        <div className="h-[280px] flex items-center justify-center text-slate-400">
+          Aucune donnee
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart
-            data={data}
-            margin={{ top: 10, right: 10, left: 0, bottom: 40 }}
-          >
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="name"
-              interval={0}
-              angle={-25}
-              textAnchor="end"
-              height={60}
-            />
+            <XAxis dataKey="name" interval={0} angle={-25} textAnchor="end" height={60} />
             <YAxis />
             <Tooltip />
-            <Bar dataKey="value">
+            <Bar dataKey="value" radius={[8, 8, 0, 0]}>
               {data.map((d, i) => (
                 <Cell key={i} fill={d.color} />
               ))}
@@ -668,19 +666,13 @@ function BeneficiaryPieChart({ data, title }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
-        <div className="h-[260px] flex items-center justify-center text-slate-400">
-          Aucune donnée
+        <div className="h-[280px] flex items-center justify-center text-slate-400">
+          Aucune donnee
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
+        <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="name"
-              innerRadius={60}
-              outerRadius={90}
-            >
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius={64} outerRadius={96}>
               {data.map((d, i) => (
                 <Cell key={i} fill={d.color} />
               ))}
@@ -689,6 +681,40 @@ function BeneficiaryPieChart({ data, title }) {
           </PieChart>
         </ResponsiveContainer>
       )}
+    </div>
+  );
+}
+
+function RecentActivitiesCard({ data }) {
+  return (
+    <div className="card p-6">
+      <h3 className="flex items-center gap-2 font-semibold text-slate-900">
+        <TrendingUp className="w-5 h-5 text-orange-500" />
+        Activites recentes
+      </h3>
+      <div className="mt-3 space-y-2">
+        {data.map((activity) => (
+          <div
+            key={activity.id}
+            className="flex items-center justify-between p-3 bg-slate-50 rounded-xl"
+          >
+            <div>
+              <p className="font-medium text-slate-900">{activity.title}</p>
+              <p className="text-sm text-slate-500">
+                {activity.partner_name || activity.partner || "-"}
+              </p>
+            </div>
+            <span className="badge bg-orange-100 border-orange-200 text-orange-700">
+              {activity.activity_date
+                ? format(new Date(activity.activity_date), "dd MMM", { locale: fr })
+                : "-"}
+            </span>
+          </div>
+        ))}
+        {data.length === 0 && (
+          <p className="text-center text-slate-500 py-8">Aucune activite recente</p>
+        )}
+      </div>
     </div>
   );
 }
@@ -705,42 +731,34 @@ function AlertsCard({ alerts }) {
       </h3>
       <div className="space-y-4">
         <div>
-          <p className="text-xs text-slate-500 mb-2">
-            Partenaires sous 50% d'objectif
-          </p>
+          <p className="text-xs text-slate-500 mb-2">Partenaires sous 50% d objectif</p>
           {partners.length === 0 ? (
             <p className="text-slate-500 text-sm">Aucune alerte</p>
           ) : (
             partners.map((p, idx) => (
               <div
                 key={`${p.name}-${idx}`}
-                className="flex items-center justify-between text-sm"
+                className="flex items-center justify-between text-sm py-1"
               >
                 <span>{p.name}</span>
-                <span className="text-orange-600 font-semibold">
-                  {p.percent}%
-                </span>
+                <span className="text-orange-600 font-semibold">{p.percent}%</span>
               </div>
             ))
           )}
         </div>
         <div>
-          <p className="text-xs text-slate-500 mb-2">
-            Dispositifs sans activité récente (60j)
-          </p>
+          <p className="text-xs text-slate-500 mb-2">Dispositifs sans activite recente (60j)</p>
           {devices.length === 0 ? (
             <p className="text-slate-500 text-sm">Aucune alerte</p>
           ) : (
             devices.map((d, idx) => (
               <div
                 key={`${d.name}-${idx}`}
-                className="flex items-center justify-between text-sm"
+                className="flex items-center justify-between text-sm py-1"
               >
                 <span>{d.name}</span>
                 <span className="text-slate-500">
-                  {d.last_activity
-                    ? format(new Date(d.last_activity), "dd/MM/yyyy")
-                    : "-"}
+                  {d.last_activity ? format(new Date(d.last_activity), "dd/MM/yyyy") : "-"}
                 </span>
               </div>
             ))
@@ -753,34 +771,37 @@ function AlertsCard({ alerts }) {
 
 function DataQualityCard({ data }) {
   const dq = data || {};
+  const rows = [
+    { label: "Contacts manquants", value: dq.missing_contact_pct || 0 },
+    { label: "Genre manquant", value: dq.missing_gender_pct || 0 },
+    {
+      label: "Activites sans dispositif",
+      value: dq.activities_missing_device_pct || 0,
+    },
+    {
+      label: "Activites sans partenaire",
+      value: dq.activities_missing_partner_pct || 0,
+    },
+  ];
+
   return (
     <div className="card p-6">
-      <h3 className="font-semibold mb-4 text-slate-900">Qualité</h3>
+      <h3 className="font-semibold mb-4 text-slate-900">Qualite des donnees</h3>
       <div className="space-y-3 text-sm">
-        <div className="flex items-center justify-between">
-          <span>Contacts manquants</span>
-          <span className="font-semibold text-slate-900">
-            {dq.missing_contact_pct || 0}%
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span>Genre manquant</span>
-          <span className="font-semibold text-slate-900">
-            {dq.missing_gender_pct || 0}%
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span>Activités sans dispositif</span>
-          <span className="font-semibold text-slate-900">
-            {dq.activities_missing_device_pct || 0}%
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span>Activités sans partenaire</span>
-          <span className="font-semibold text-slate-900">
-            {dq.activities_missing_partner_pct || 0}%
-          </span>
-        </div>
+        {rows.map((row) => (
+          <div key={row.label}>
+            <div className="mb-1 flex items-center justify-between">
+              <span>{row.label}</span>
+              <span className="font-semibold text-slate-900">{row.value}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-slate-100">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-orange-400 to-orange-500"
+                style={{ width: `${Math.max(4, Math.min(100, row.value))}%` }}
+              />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -792,9 +813,7 @@ function LocationsMap({ data, points, geoBoundary }) {
     [12.3, -17.6],
     [16.9, -11.3],
   ];
-  const center = points[0]
-    ? [points[0].lat, points[0].lng]
-    : SENEGAL_CENTER;
+  const center = points[0] ? [points[0].lat, points[0].lng] : SENEGAL_CENTER;
 
   return (
     <div className="card p-6">
@@ -802,7 +821,7 @@ function LocationsMap({ data, points, geoBoundary }) {
         <MapPin className="w-5 h-5 text-orange-500" />
         Carte des lieux
       </h3>
-      <div className="h-72 w-full overflow-hidden rounded-xl">
+      <div className="h-72 w-full overflow-hidden rounded-xl border border-slate-200">
         <MapContainer
           center={center}
           zoom={points.length ? 6 : 6}
@@ -840,15 +859,11 @@ function LocationsMap({ data, points, geoBoundary }) {
             />
           )}
           {points.map((p, idx) => (
-            <Marker
-              key={`${p.name}-${idx}`}
-              position={[p.lat, p.lng]}
-              icon={markerIcon}
-            >
+            <Marker key={`${p.name}-${idx}`} position={[p.lat, p.lng]} icon={markerIcon}>
               <Popup>
                 <div className="text-sm">
                   <p className="font-semibold">{p.name}</p>
-                  <p>{p.value} bénéficiaires</p>
+                  <p>{p.value} beneficiaires</p>
                 </div>
               </Popup>
             </Marker>
@@ -858,15 +873,10 @@ function LocationsMap({ data, points, geoBoundary }) {
       <p className="text-xs text-slate-400 mt-2">
         Limites administratives: geoBoundaries (gbOpen).
       </p>
-      {data.length === 0 && (
-        <p className="text-slate-500 mt-3">Aucune donnée</p>
-      )}
+      {data.length === 0 && <p className="text-slate-500 mt-3">Aucune donnee</p>}
       {data.length > 0 && points.length === 0 && (
-        <p className="text-slate-500 mt-3">
-          Coordonnées en cours de récupération...
-        </p>
+        <p className="text-slate-500 mt-3">Coordonnees en cours de recuperation...</p>
       )}
     </div>
   );
 }
-
