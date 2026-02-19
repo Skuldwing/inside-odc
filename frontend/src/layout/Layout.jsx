@@ -25,7 +25,7 @@ export default function Layout() {
         currentPageName={currentPageName}
       />
 
-      <div className="lg:pl-64">
+      <div className="lg:pl-72">
         <Header
           currentPageName={currentPageName}
           onMenuClick={() => setSidebarOpen(true)}
