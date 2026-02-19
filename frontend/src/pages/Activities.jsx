@@ -23,7 +23,10 @@ const importSteps = [
   { key: "resultat", label: "Resultat", icon: CheckCircle2 },
 ];
 
-export default function Activities({ forceUploadOpen = false }) {
+export default function Activities({
+  forceUploadOpen = false,
+  initialSearchQuery = "",
+}) {
   const { role, user, isViewer } = useAuth();
 
   const [search, setSearch] = useState("");
@@ -151,6 +154,10 @@ export default function Activities({ forceUploadOpen = false }) {
     fetchDevices();
     if (role === "admin") fetchPartners();
   }, [role]);
+
+  useEffect(() => {
+    setSearch(initialSearchQuery || "");
+  }, [initialSearchQuery]);
 
   useEffect(() => {
     if (forceUploadOpen && !isViewer && !hasAutoOpened) {

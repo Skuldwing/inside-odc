@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Calendar,
   Megaphone,
@@ -42,11 +43,26 @@ const importSteps = [
 export default function OperationsHub() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
-  const [mode, setMode] = useState("import");
+  const [searchParams] = useSearchParams();
+  const [mode, setMode] = useState("activities");
   const [openImportWizard, setOpenImportWizard] = useState(false);
+  const queryAction = searchParams.get("action");
+  const querySearch = searchParams.get("q") || "";
+
+  useEffect(() => {
+    if (queryAction === "import") {
+      setMode("import");
+      setOpenImportWizard(true);
+    }
+  }, [queryAction]);
 
   if (!isAdmin) {
-    return <Activities />;
+    return (
+      <Activities
+        forceUploadOpen={queryAction === "import"}
+        initialSearchQuery={querySearch}
+      />
+    );
   }
 
   return (
@@ -117,13 +133,13 @@ export default function OperationsHub() {
           </div>
           {openImportWizard && (
             <div className="rounded-2xl border border-orange-200 bg-orange-50/60 p-3">
-              <Activities forceUploadOpen />
+              <Activities forceUploadOpen initialSearchQuery={querySearch} />
             </div>
           )}
         </section>
       )}
 
-      {mode === "activities" && <Activities />}
+      {mode === "activities" && <Activities initialSearchQuery={querySearch} />}
       {mode === "social" && <SocialKpis />}
     </div>
   );

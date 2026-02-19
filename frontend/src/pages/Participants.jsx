@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Users, Search, Download, Filter, UserRound } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
 
@@ -15,6 +16,8 @@ function escapeCsvCell(value) {
 
 export default function Participants() {
   const { isViewer } = useAuth();
+  const [searchParams] = useSearchParams();
+  const querySearch = searchParams.get("q") || "";
 
   const [participants, setParticipants] = useState([]);
   const [search, setSearch] = useState("");
@@ -39,6 +42,10 @@ export default function Participants() {
   useEffect(() => {
     fetchParticipants();
   }, []);
+
+  useEffect(() => {
+    setSearch(querySearch);
+  }, [querySearch]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

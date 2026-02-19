@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Plus,
   User,
@@ -21,6 +22,8 @@ const roles = [
 ];
 
 export default function Utilisateurs() {
+  const [searchParams] = useSearchParams();
+  const querySearch = searchParams.get("q") || "";
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [users, setUsers] = useState([]);
@@ -51,6 +54,10 @@ export default function Utilisateurs() {
   useEffect(() => {
     fetchUsers();
   }, []);
+
+  useEffect(() => {
+    setSearch(querySearch);
+  }, [querySearch]);
 
   const filteredUsers = useMemo(() => {
     const q = search.trim().toLowerCase();
