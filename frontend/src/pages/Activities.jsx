@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Calendar,
   MapPin,
-  Upload,
   Search,
   Filter,
   Pencil,
@@ -344,12 +343,6 @@ export default function Activities({
             </p>
           </div>
 
-          {!isViewer && (
-            <button className="btn-primary" onClick={openUploadModal}>
-              <Upload size={18} />
-              Nouvelle activite
-            </button>
-          )}
         </div>
       </section>
 
