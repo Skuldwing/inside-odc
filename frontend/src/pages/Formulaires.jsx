@@ -9,6 +9,10 @@ import {
   Eye,
   EyeOff,
   Download,
+  Sparkles,
+  Palette,
+  Layers,
+  Workflow,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -434,297 +438,364 @@ export default function Formulaires() {
           <AdminModal
             title={editor.id ? "Modifier formulaire" : "Nouveau formulaire"}
             onClose={() => setEditorOpen(false)}
-            maxWidth="max-w-5xl"
+            maxWidth="max-w-6xl"
           >
             <form onSubmit={handleSave} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Titre *</label>
-                  <input
-                    className="input mt-1"
-                    required
-                    value={editor.title}
-                    onChange={(e) =>
-                      setEditor((prev) => ({ ...prev, title: e.target.value }))
-                    }
-                  />
+              <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4">
+                <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                    <Sparkles className="w-3 h-3" />
+                    Builder V2
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                    <Layers className="w-3 h-3" />
+                    {editor.fields.length} champs
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
+                    <Workflow className="w-3 h-3" />
+                    {new Set(editor.fields.map((f) => Number(f.page || 1))).size} pages
+                  </span>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Statut</label>
-                  <select
-                    className="select mt-1"
-                    value={editor.status}
-                    onChange={(e) =>
-                      setEditor((prev) => ({ ...prev, status: e.target.value }))
-                    }
-                  >
-                    <option value="draft">Brouillon</option>
-                    <option value="active">Actif (public)</option>
-                  </select>
-                </div>
-              </div>
+              </section>
 
-              <div>
-                <label className="text-sm font-medium">Description</label>
-                <textarea
-                  className="input mt-1 min-h-20"
-                  value={editor.description}
-                  onChange={(e) =>
-                    setEditor((prev) => ({ ...prev, description: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4 space-y-3">
-                <p className="font-medium text-slate-900">Branding / Theme</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs text-slate-500">Couleur principale</label>
-                    <input
-                      type="color"
-                      className="input mt-1 h-10 p-1"
-                      value={editor.settings?.primary_color || "#0f766e"}
-                      onChange={(e) =>
-                        setEditor((prev) => ({
-                          ...prev,
-                          settings: { ...prev.settings, primary_color: e.target.value },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500">Logo URL</label>
-                    <input
-                      className="input mt-1"
-                      value={editor.settings?.logo_url || ""}
-                      onChange={(e) =>
-                        setEditor((prev) => ({
-                          ...prev,
-                          settings: { ...prev.settings, logo_url: e.target.value },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500">Texte bouton envoi</label>
-                    <input
-                      className="input mt-1"
-                      value={editor.settings?.submit_label || ""}
-                      onChange={(e) =>
-                        setEditor((prev) => ({
-                          ...prev,
-                          settings: { ...prev.settings, submit_label: e.target.value },
-                        }))
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-slate-500">Message succes</label>
-                    <input
-                      className="input mt-1"
-                      value={editor.settings?.success_message || ""}
-                      onChange={(e) =>
-                        setEditor((prev) => ({
-                          ...prev,
-                          settings: {
-                            ...prev.settings,
-                            success_message: e.target.value,
-                          },
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="font-medium text-slate-900">Champs du formulaire</p>
-                  <button type="button" className="btn-primary" onClick={addField}>
-                    <Plus className="w-4 h-4" />
-                    Ajouter champ
-                  </button>
-                </div>
-
-                {editor.fields.map((field, idx) => {
-                  const otherFields = editor.fields.filter((_, i) => i !== idx);
-                  const showIf = field.show_if;
-
-                  return (
-                    <div
-                      key={`${field.key}-${idx}`}
-                      className="rounded-xl border border-slate-200 p-3 space-y-3"
-                    >
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div>
-                          <label className="text-xs text-slate-500">Libelle *</label>
-                          <input
-                            className="input mt-1"
-                            value={field.label}
-                            onChange={(e) => updateField(idx, { label: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-500">Cle</label>
-                          <input
-                            className="input mt-1"
-                            value={field.key}
-                            onChange={(e) => updateField(idx, { key: e.target.value })}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-500">Type</label>
-                          <select
-                            className="select mt-1"
-                            value={field.type}
-                            onChange={(e) => updateField(idx, { type: e.target.value })}
-                          >
-                            {FIELD_TYPES.map((t) => (
-                              <option key={t.value} value={t.value}>
-                                {t.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-500">Page</label>
-                          <input
-                            type="number"
-                            min={1}
-                            className="input mt-1"
-                            value={field.page || 1}
-                            onChange={(e) =>
-                              updateField(idx, {
-                                page: Math.max(1, Number(e.target.value) || 1),
-                              })
-                            }
-                          />
-                        </div>
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                <div className="xl:col-span-2 space-y-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+                    <p className="font-medium text-slate-900">Informations</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">Titre *</label>
+                        <input
+                          className="input mt-1"
+                          required
+                          value={editor.title}
+                          onChange={(e) =>
+                            setEditor((prev) => ({ ...prev, title: e.target.value }))
+                          }
+                        />
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-slate-500">Placeholder</label>
-                          <input
-                            className="input mt-1"
-                            value={field.placeholder || ""}
-                            onChange={(e) =>
-                              updateField(idx, { placeholder: e.target.value })
-                            }
-                          />
-                        </div>
-                        <label className="inline-flex items-center gap-2 text-sm text-slate-700 mt-6">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(field.required)}
-                            onChange={(e) =>
-                              updateField(idx, { required: e.target.checked })
-                            }
-                          />
-                          Champ obligatoire
-                        </label>
+                      <div>
+                        <label className="text-sm font-medium">Statut</label>
+                        <select
+                          className="select mt-1"
+                          value={editor.status}
+                          onChange={(e) =>
+                            setEditor((prev) => ({ ...prev, status: e.target.value }))
+                          }
+                        >
+                          <option value="draft">Brouillon</option>
+                          <option value="active">Actif (public)</option>
+                        </select>
                       </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Description</label>
+                      <textarea
+                        className="input mt-1 min-h-20"
+                        value={editor.description}
+                        onChange={(e) =>
+                          setEditor((prev) => ({ ...prev, description: e.target.value }))
+                        }
+                      />
+                    </div>
+                  </div>
 
-                      {(field.type === "select" || field.type === "checkbox") && (
-                        <div>
-                          <label className="text-xs text-slate-500">
-                            Options (une par ligne)
-                          </label>
-                          <textarea
-                            className="input mt-1 min-h-20"
-                            value={(field.options || []).join("\n")}
-                            onChange={(e) =>
-                              updateField(idx, {
-                                options: e.target.value
-                                  .split("\n")
-                                  .map((o) => o.trim())
-                                  .filter(Boolean),
-                              })
-                            }
-                          />
-                        </div>
-                      )}
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-slate-900">Champs du formulaire</p>
+                      <button type="button" className="btn-primary" onClick={addField}>
+                        <Plus className="w-4 h-4" />
+                        Ajouter champ
+                      </button>
+                    </div>
 
-                      <div className="rounded-lg border border-slate-200 p-3 space-y-2">
-                        <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(showIf)}
-                            onChange={(e) => toggleFieldCondition(idx, e.target.checked)}
-                            disabled={otherFields.length === 0}
-                          />
-                          Affichage conditionnel
-                        </label>
+                    {editor.fields.map((field, idx) => {
+                      const otherFields = editor.fields.filter((_, i) => i !== idx);
+                      const showIf = field.show_if;
 
-                        {showIf && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <div>
-                              <label className="text-xs text-slate-500">Si champ</label>
-                              <select
-                                className="select mt-1"
-                                value={showIf.key}
-                                onChange={(e) =>
-                                  updateField(idx, {
-                                    show_if: { ...showIf, key: e.target.value },
-                                  })
-                                }
-                              >
-                                <option value="">Selectionner</option>
-                                {otherFields.map((f, fIdx) => (
-                                  <option key={`${f.key}-${fIdx}`} value={f.key}>
-                                    {f.label} ({f.key})
-                                  </option>
-                                ))}
-                              </select>
+                      return (
+                        <div
+                          key={`${field.key}-${idx}`}
+                          className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 space-y-3"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-semibold text-slate-800">
+                              Champ {idx + 1}
+                            </p>
+                            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+                              <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5">
+                                {field.type}
+                              </span>
+                              <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5">
+                                page {field.page || 1}
+                              </span>
+                              {showIf ? (
+                                <span className="rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-orange-700">
+                                  conditionnel
+                                </span>
+                              ) : null}
                             </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div>
-                              <label className="text-xs text-slate-500">Operateur</label>
-                              <select
-                                className="select mt-1"
-                                value={showIf.operator}
-                                onChange={(e) =>
-                                  updateField(idx, {
-                                    show_if: { ...showIf, operator: e.target.value },
-                                  })
-                                }
-                              >
-                                {CONDITION_OPERATORS.map((op) => (
-                                  <option key={op.value} value={op.value}>
-                                    {op.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-xs text-slate-500">Valeur</label>
+                              <label className="text-xs text-slate-500">Libelle *</label>
                               <input
                                 className="input mt-1"
-                                value={showIf.value ?? ""}
+                                value={field.label}
+                                onChange={(e) => updateField(idx, { label: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500">Cle</label>
+                              <input
+                                className="input mt-1"
+                                value={field.key}
+                                onChange={(e) => updateField(idx, { key: e.target.value })}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500">Type</label>
+                              <select
+                                className="select mt-1"
+                                value={field.type}
+                                onChange={(e) => updateField(idx, { type: e.target.value })}
+                              >
+                                {FIELD_TYPES.map((t) => (
+                                  <option key={t.value} value={t.value}>
+                                    {t.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500">Page</label>
+                              <input
+                                type="number"
+                                min={1}
+                                className="input mt-1"
+                                value={field.page || 1}
                                 onChange={(e) =>
                                   updateField(idx, {
-                                    show_if: { ...showIf, value: e.target.value },
+                                    page: Math.max(1, Number(e.target.value) || 1),
                                   })
                                 }
                               />
                             </div>
                           </div>
-                        )}
-                      </div>
 
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          className="btn-ghost border text-red-600"
-                          onClick={() => removeField(idx)}
-                          disabled={editor.fields.length <= 1}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          Supprimer champ
-                        </button>
-                      </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-slate-500">Placeholder</label>
+                              <input
+                                className="input mt-1"
+                                value={field.placeholder || ""}
+                                onChange={(e) =>
+                                  updateField(idx, { placeholder: e.target.value })
+                                }
+                              />
+                            </div>
+                            <label className="inline-flex items-center gap-2 text-sm text-slate-700 mt-6">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(field.required)}
+                                onChange={(e) =>
+                                  updateField(idx, { required: e.target.checked })
+                                }
+                              />
+                              Champ obligatoire
+                            </label>
+                          </div>
+
+                          {(field.type === "select" || field.type === "checkbox") && (
+                            <div>
+                              <label className="text-xs text-slate-500">
+                                Options (une par ligne)
+                              </label>
+                              <textarea
+                                className="input mt-1 min-h-20"
+                                value={(field.options || []).join("\n")}
+                                onChange={(e) =>
+                                  updateField(idx, {
+                                    options: e.target.value
+                                      .split("\n")
+                                      .map((o) => o.trim())
+                                      .filter(Boolean),
+                                  })
+                                }
+                              />
+                            </div>
+                          )}
+
+                          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                            <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(showIf)}
+                                onChange={(e) => toggleFieldCondition(idx, e.target.checked)}
+                                disabled={otherFields.length === 0}
+                              />
+                              Affichage conditionnel
+                            </label>
+
+                            {showIf && (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-xs text-slate-500">Si champ</label>
+                                  <select
+                                    className="select mt-1"
+                                    value={showIf.key}
+                                    onChange={(e) =>
+                                      updateField(idx, {
+                                        show_if: { ...showIf, key: e.target.value },
+                                      })
+                                    }
+                                  >
+                                    <option value="">Selectionner</option>
+                                    {otherFields.map((f, fIdx) => (
+                                      <option key={`${f.key}-${fIdx}`} value={f.key}>
+                                        {f.label} ({f.key})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-slate-500">Operateur</label>
+                                  <select
+                                    className="select mt-1"
+                                    value={showIf.operator}
+                                    onChange={(e) =>
+                                      updateField(idx, {
+                                        show_if: { ...showIf, operator: e.target.value },
+                                      })
+                                    }
+                                  >
+                                    {CONDITION_OPERATORS.map((op) => (
+                                      <option key={op.value} value={op.value}>
+                                        {op.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-xs text-slate-500">Valeur</label>
+                                  <input
+                                    className="input mt-1"
+                                    value={showIf.value ?? ""}
+                                    onChange={(e) =>
+                                      updateField(idx, {
+                                        show_if: { ...showIf, value: e.target.value },
+                                      })
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              className="btn-ghost border text-red-600"
+                              onClick={() => removeField(idx)}
+                              disabled={editor.fields.length <= 1}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Supprimer champ
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                    <p className="font-medium text-slate-900 inline-flex items-center gap-2">
+                      <Palette className="w-4 h-4 text-orange-500" />
+                      Branding / Theme
+                    </p>
+                    <div>
+                      <label className="text-xs text-slate-500">Couleur principale</label>
+                      <input
+                        type="color"
+                        className="input mt-1 h-10 p-1"
+                        value={editor.settings?.primary_color || "#0f766e"}
+                        onChange={(e) =>
+                          setEditor((prev) => ({
+                            ...prev,
+                            settings: { ...prev.settings, primary_color: e.target.value },
+                          }))
+                        }
+                      />
                     </div>
-                  );
-                })}
+                    <div>
+                      <label className="text-xs text-slate-500">Logo URL</label>
+                      <input
+                        className="input mt-1"
+                        value={editor.settings?.logo_url || ""}
+                        onChange={(e) =>
+                          setEditor((prev) => ({
+                            ...prev,
+                            settings: { ...prev.settings, logo_url: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500">Texte bouton envoi</label>
+                      <input
+                        className="input mt-1"
+                        value={editor.settings?.submit_label || ""}
+                        onChange={(e) =>
+                          setEditor((prev) => ({
+                            ...prev,
+                            settings: { ...prev.settings, submit_label: e.target.value },
+                          }))
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-500">Message succes</label>
+                      <textarea
+                        className="input mt-1 min-h-20"
+                        value={editor.settings?.success_message || ""}
+                        onChange={(e) =>
+                          setEditor((prev) => ({
+                            ...prev,
+                            settings: {
+                              ...prev.settings,
+                              success_message: e.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="font-medium text-slate-900 mb-3">Apercu rapide</p>
+                    <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {editor.title || "Titre du formulaire"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {editor.description || "Description du formulaire"}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-primary w-full"
+                        style={{
+                          backgroundColor: editor.settings?.primary_color || "#0f766e",
+                          borderColor: editor.settings?.primary_color || "#0f766e",
+                        }}
+                      >
+                        {editor.settings?.submit_label || "Envoyer"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {editor.slug && (
