@@ -10,6 +10,7 @@ import {
   Users,
   Calendar,
   UserCog,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "../auth/useAuth";
 
@@ -44,6 +45,12 @@ export default function Header({ currentPageName, onMenuClick }) {
     ];
 
     if (role === "admin") {
+      actions.push({
+        id: "new-form",
+        label: "Nouveau formulaire",
+        icon: FileText,
+        to: "/formulaires?action=new",
+      });
       actions.push({
         id: "users",
         label: "Voir utilisateurs",
@@ -87,6 +94,10 @@ export default function Header({ currentPageName, onMenuClick }) {
     }
     if (normalized.includes("util")) {
       navigate(`/utilisateurs?q=${encodeURIComponent(q)}`);
+      return;
+    }
+    if (normalized.includes("form")) {
+      navigate(`/formulaires?q=${encodeURIComponent(q)}`);
       return;
     }
     if (normalized.includes("activ")) {
@@ -138,6 +149,15 @@ export default function Header({ currentPageName, onMenuClick }) {
           </form>
 
           <div className="relative hidden sm:block" ref={actionsRef}>
+            {role === "admin" && (
+              <button
+                className="inline-flex btn-primary mr-2"
+                onClick={() => navigate("/formulaires?action=new")}
+              >
+                <FileText className="w-4 h-4" />
+                Formulaire
+              </button>
+            )}
             <button
               className="inline-flex btn-ghost border border-slate-200 bg-white text-slate-600"
               onClick={() => setActionsOpen((prev) => !prev)}

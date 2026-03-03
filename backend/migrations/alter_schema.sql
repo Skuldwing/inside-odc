@@ -163,4 +163,36 @@ CREATE INDEX IF NOT EXISTS ai_chat_logs_user_idx
 CREATE INDEX IF NOT EXISTS ai_chat_logs_created_at_idx
   ON ai_chat_logs(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS forms (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  slug TEXT NOT NULL UNIQUE,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active')),
+  fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+ALTER TABLE forms
+  ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS forms_updated_idx
+  ON forms(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id SERIAL PRIMARY KEY,
+  form_id INTEGER NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+  values JSONB NOT NULL,
+  source TEXT DEFAULT 'public',
+  ip TEXT,
+  user_agent TEXT,
+  submitted_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS form_submissions_form_idx
+  ON form_submissions(form_id, submitted_at DESC);
+
 COMMIT;

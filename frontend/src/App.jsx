@@ -16,6 +16,8 @@ const Partenaires = lazy(() => import("./pages/Partenaires"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
 const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
+const Formulaires = lazy(() => import("./pages/Formulaires"));
+const PublicForm = lazy(() => import("./pages/PublicForm"));
 
 function PageLoader() {
   return (
@@ -31,6 +33,14 @@ export default function App() {
       {/* ===== PUBLIC ===== */}
       <Route path="/login" element={<Login />} />
       <Route path="/set-password" element={<SetPassword />} />
+      <Route
+        path="/f/:slug"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <PublicForm />
+          </Suspense>
+        }
+      />
 
       {/* ===== PROTECTED APP ===== */}
       <Route
@@ -123,6 +133,16 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <Utilisateurs />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="formulaires"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <Formulaires />
               </Suspense>
             </AdminRoute>
           }

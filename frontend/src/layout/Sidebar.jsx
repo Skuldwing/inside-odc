@@ -7,6 +7,7 @@ import {
   Layers,
   UserCog,
   MessageSquare,
+  FileText,
   BarChart3,
   Bot,
   X,
@@ -70,6 +71,12 @@ const managementNavigation = [
     name: "Utilisateurs",
     icon: UserCog,
     path: "/utilisateurs",
+    roles: ["admin"],
+  },
+  {
+    name: "Formulaires",
+    icon: FileText,
+    path: "/formulaires",
     roles: ["admin"],
   },
 ];
