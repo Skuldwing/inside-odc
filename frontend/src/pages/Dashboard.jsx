@@ -38,8 +38,6 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
 
@@ -152,6 +150,10 @@ export default function Dashboard() {
     if (!kpiRef.current) return;
     try {
       setExportingPdf(true);
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
       const canvas = await html2canvas(kpiRef.current, {
         scale: 2,
         backgroundColor: "#ffffff",

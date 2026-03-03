@@ -63,10 +63,10 @@ router.get("/summary", authMiddleware, async (req, res) => {
                ${durationExpr} AS duration_hours,
                a.location,
                a.device_id,
-               COALESCE(d.name, 'Non renseignÃ©') AS device_name,
+               COALESCE(d.name, 'Non renseigne') AS device_name,
                d.color AS device_color,
                a.partner_id,
-               COALESCE(p.name, 'Non renseignÃ©') AS partner_name,
+               COALESCE(p.name, 'Non renseigne') AS partner_name,
                ap.participant_id,
                part.genre
         FROM activities a
@@ -170,10 +170,10 @@ router.get("/summary", authMiddleware, async (req, res) => {
 
     const locationsQuery = `
       ${baseCte}
-      SELECT COALESCE(location, 'Non renseignÃ©') AS name,
+      SELECT COALESCE(location, 'Non renseigne') AS name,
              COUNT(participant_id)::int AS value
       FROM base
-      GROUP BY COALESCE(location, 'Non renseignÃ©')
+      GROUP BY COALESCE(location, 'Non renseigne')
       ORDER BY value DESC
       LIMIT 8
     `;

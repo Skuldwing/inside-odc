@@ -1,20 +1,29 @@
+import { Suspense, lazy } from "react";
 import { Routes, Route } from "react-router-dom";
 import Layout from "./layout/Layout";
 import Login from "./Login";
 import SetPassword from "./pages/SetPassword";
 
-import Dashboard from "./pages/Dashboard";
-import OperationsHub from "./pages/OperationsHub";
-import Participants from "./pages/Participants";
-import Campagnes from "./pages/Campagnes";
-import Dispositifs from "./pages/Dispositifs";
-import Partenaires from "./pages/Partenaires";
-import Utilisateurs from "./pages/Utilisateurs";
-import SocialDashboard from "./pages/SocialDashboard";
-import AiAssistant from "./pages/AiAssistant";
-
 import PrivateRoute from "./routes/PrivateRoute";
 import AdminRoute from "./routes/AdminRoute";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const OperationsHub = lazy(() => import("./pages/OperationsHub"));
+const Participants = lazy(() => import("./pages/Participants"));
+const Campagnes = lazy(() => import("./pages/Campagnes"));
+const Dispositifs = lazy(() => import("./pages/Dispositifs"));
+const Partenaires = lazy(() => import("./pages/Partenaires"));
+const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
+const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
+const AiAssistant = lazy(() => import("./pages/AiAssistant"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center text-slate-500">
+      Chargement...
+    </div>
+  );
+}
 
 export default function App() {
   return (
@@ -32,16 +41,39 @@ export default function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<Dashboard />} />
-        <Route path="activities" element={<OperationsHub />} />
-        <Route path="participants" element={<Participants />} />
+        <Route
+          index
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Dashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="activities"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <OperationsHub />
+            </Suspense>
+          }
+        />
+        <Route
+          path="participants"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Participants />
+            </Suspense>
+          }
+        />
 
         {/* ===== ADMIN ONLY ===== */}
         <Route
           path="social-dashboard"
           element={
             <AdminRoute>
-              <SocialDashboard />
+              <Suspense fallback={<PageLoader />}>
+                <SocialDashboard />
+              </Suspense>
             </AdminRoute>
           }
         />
@@ -49,7 +81,9 @@ export default function App() {
           path="assistant-ia"
           element={
             <AdminRoute>
-              <AiAssistant />
+              <Suspense fallback={<PageLoader />}>
+                <AiAssistant />
+              </Suspense>
             </AdminRoute>
           }
         />
@@ -57,7 +91,9 @@ export default function App() {
           path="campagnes"
           element={
             <AdminRoute>
-              <Campagnes />
+              <Suspense fallback={<PageLoader />}>
+                <Campagnes />
+              </Suspense>
             </AdminRoute>
           }
         />
@@ -65,7 +101,9 @@ export default function App() {
           path="dispositifs"
           element={
             <AdminRoute>
-              <Dispositifs />
+              <Suspense fallback={<PageLoader />}>
+                <Dispositifs />
+              </Suspense>
             </AdminRoute>
           }
         />
@@ -73,7 +111,9 @@ export default function App() {
           path="partenaires"
           element={
             <AdminRoute>
-              <Partenaires />
+              <Suspense fallback={<PageLoader />}>
+                <Partenaires />
+              </Suspense>
             </AdminRoute>
           }
         />
@@ -81,7 +121,9 @@ export default function App() {
           path="utilisateurs"
           element={
             <AdminRoute>
-              <Utilisateurs />
+              <Suspense fallback={<PageLoader />}>
+                <Utilisateurs />
+              </Suspense>
             </AdminRoute>
           }
         />

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
+import AdminModal from "../components/admin/AdminModal";
 
 const roles = [
   { value: "admin", label: "Administrateur" },
@@ -222,91 +223,92 @@ export default function Utilisateurs() {
         </section>
 
         {open && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-            <div className="card-solid w-full max-w-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">
-                {editing ? "Modifier utilisateur" : "Nouvel utilisateur"}
-              </h2>
+          <AdminModal
+            title={editing ? "Modifier utilisateur" : "Nouvel utilisateur"}
+            onClose={() => setOpen(false)}
+          >
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Nom complet *</label>
+                <input
+                  required
+                  className="input mt-1"
+                  value={form.full_name}
+                  onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                />
+              </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Email *</label>
+                <input
+                  required
+                  type="email"
+                  className="input mt-1"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Role</label>
+                <select
+                  className="select mt-1"
+                  value={form.role}
+                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                >
+                  {roles.map((r) => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Partenaire (optionnel)</label>
+                <input
+                  className="input mt-1"
+                  value={form.partner}
+                  onChange={(e) => setForm({ ...form, partner: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Statut</label>
+                <select
+                  className="select mt-1"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="active">Actif</option>
+                  <option value="inactive">Inactif</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium">Mot de passe (optionnel)</label>
+                <input
+                  type="password"
+                  className="input mt-1"
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
                 <div>
-                  <label className="text-sm font-medium">Nom complet *</label>
-                  <input
-                    required
-                    className="input mt-1"
-                    value={form.full_name}
-                    onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Email *</label>
-                  <input
-                    required
-                    type="email"
-                    className="input mt-1"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Role</label>
-                  <select
-                    className="select mt-1"
-                    value={form.role}
-                    onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  >
-                    {roles.map((r) => (
-                      <option key={r.value} value={r.value}>
-                        {r.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Partenaire (optionnel)</label>
-                  <input
-                    className="input mt-1"
-                    value={form.partner}
-                    onChange={(e) => setForm({ ...form, partner: e.target.value })}
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Statut</label>
-                  <select
-                    className="select mt-1"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  >
-                    <option value="active">Actif</option>
-                    <option value="inactive">Inactif</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Mot de passe (optionnel)</label>
-                  <input
-                    type="password"
-                    className="input mt-1"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
                   <button type="button" onClick={() => setOpen(false)} className="btn-ghost border">
                     Annuler
                   </button>
+                </div>
+                <div>
                   <button type="submit" className="btn-primary">
                     Enregistrer
                   </button>
                 </div>
-              </form>
-            </div>
-          </div>
+              </div>
+            </form>
+          </AdminModal>
         )}
 
         <section className="card overflow-x-auto">

@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
+import AdminModal from "../components/admin/AdminModal";
+import AdminPageHeader from "../components/admin/AdminPageHeader";
+import AdminSearchCard from "../components/admin/AdminSearchCard";
 
 export default function Partenaires() {
   const partnersApi = api;
@@ -113,163 +116,139 @@ export default function Partenaires() {
   return (
     <AdminPinGate>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="page-title">Partenaires</h1>
-            <p className="page-subtitle">
-              Gestion des partenaires Orange Digital Center
-            </p>
-          </div>
-
-          <button
-            onClick={() => {
-              resetForm();
-              setOpen(true);
-            }}
-            className="btn-primary"
-          >
-            <Plus className="w-4 h-4" />
-            Nouveau partenaire
-          </button>
-        </div>
+        <AdminPageHeader
+          title="Partenaires"
+          subtitle="Gestion des partenaires Orange Digital Center"
+          buttonLabel="Nouveau partenaire"
+          buttonIcon={Plus}
+          onAdd={() => {
+            resetForm();
+            setOpen(true);
+          }}
+        />
 
         {open && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-            <div className="card-solid w-full max-w-lg p-6">
-              <h2 className="text-xl font-semibold mb-4">
-                {editing ? "Modifier le partenaire" : "Nouveau partenaire"}
-              </h2>
+          <AdminModal
+            title={editing ? "Modifier le partenaire" : "Nouveau partenaire"}
+            onClose={() => setOpen(false)}
+          >
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Nom *</label>
+                <input
+                  required
+                  className="input mt-1"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      name: e.target.value,
+                    })
+                  }
+                />
+              </div>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Description</label>
+                <textarea
+                  rows="3"
+                  className="input mt-1"
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      description: e.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium">Nom *</label>
+                  <label className="text-sm font-medium">Email</label>
                   <input
-                    required
+                    type="email"
                     className="input mt-1"
-                    value={form.name}
+                    value={form.contact_email}
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        name: e.target.value,
+                        contact_email: e.target.value,
                       })
                     }
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium">Description</label>
-                  <textarea
-                    rows="3"
-                    className="input mt-1"
-                    value={form.description}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        description: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Email</label>
-                    <input
-                      type="email"
-                      className="input mt-1"
-                      value={form.contact_email}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          contact_email: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm font-medium">Telephone</label>
-                    <input
-                      className="input mt-1"
-                      value={form.contact_phone}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          contact_phone: e.target.value,
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">
-                    Objectif beneficiaires
-                  </label>
+                  <label className="text-sm font-medium">Telephone</label>
                   <input
-                    type="number"
                     className="input mt-1"
-                    value={form.objective_beneficiaries}
+                    value={form.contact_phone}
                     onChange={(e) =>
                       setForm({
                         ...form,
-                        objective_beneficiaries: e.target.value,
+                        contact_phone: e.target.value,
                       })
                     }
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="text-sm font-medium">Statut</label>
-                  <select
-                    className="select mt-1"
-                    value={form.status}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        status: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="active">Actif</option>
-                    <option value="inactive">Inactif</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-sm font-medium">
+                  Objectif beneficiaires
+                </label>
+                <input
+                  type="number"
+                  className="input mt-1"
+                  value={form.objective_beneficiaries}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      objective_beneficiaries: e.target.value,
+                    })
+                  }
+                />
+              </div>
 
-                <div className="flex justify-end gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setOpen(false)}
-                    className="btn-ghost border"
-                  >
-                    Annuler
-                  </button>
-                  <button type="submit" className="btn-primary">
-                    Enregistrer
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+              <div>
+                <label className="text-sm font-medium">Statut</label>
+                <select
+                  className="select mt-1"
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      status: e.target.value,
+                    })
+                  }
+                >
+                  <option value="active">Actif</option>
+                  <option value="inactive">Inactif</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="btn-ghost border"
+                >
+                  Annuler
+                </button>
+                <button type="submit" className="btn-primary">
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+          </AdminModal>
         )}
 
-        <div className="card p-4">
-          <div className="relative max-w-xl">
-            <input
-              type="text"
-              className="input pl-10"
-              placeholder="Rechercher un partenaire..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="7"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </span>
-          </div>
-        </div>
+        <AdminSearchCard
+          placeholder="Rechercher un partenaire..."
+          value={search}
+          onChange={setSearch}
+        />
 
         {filteredPartners.length === 0 && (
           <div className="card p-8 text-center text-slate-500">

@@ -8,16 +8,22 @@ const router = express.Router();
 router.get("/", authMiddleware, async (req, res) => {
   try {
     let query = `
-      SELECT p.*,
-             a.title AS activite,
-             a.activity_date AS date_activite,
-             pr.name AS partenaire,
-             d.name AS dispositif
-      FROM participants p
-      LEFT JOIN activity_participants ap ON ap.participant_id = p.id
-      LEFT JOIN activities a ON ap.activity_id = a.id
-      LEFT JOIN partners pr ON a.partner_id = pr.id
-      LEFT JOIN devices d ON a.device_id = d.id
+      WITH ranked AS (
+        SELECT
+          p.*,
+          a.title AS activite,
+          a.activity_date AS date_activite,
+          pr.name AS partenaire,
+          d.name AS dispositif,
+          ROW_NUMBER() OVER (
+            PARTITION BY p.id
+            ORDER BY a.activity_date DESC NULLS LAST, a.id DESC NULLS LAST
+          ) AS rn
+        FROM participants p
+        LEFT JOIN activity_participants ap ON ap.participant_id = p.id
+        LEFT JOIN activities a ON ap.activity_id = a.id
+        LEFT JOIN partners pr ON a.partner_id = pr.id
+        LEFT JOIN devices d ON a.device_id = d.id
     `;
     const params = [];
 
@@ -26,7 +32,13 @@ router.get("/", authMiddleware, async (req, res) => {
       params.push(req.user.partner_id);
     }
 
-    query += " ORDER BY p.created_at DESC";
+    query += `
+      )
+      SELECT *
+      FROM ranked
+      WHERE rn = 1
+      ORDER BY created_at DESC
+    `;
 
     const result = await pool.query(query, params);
     res.json(result.rows);

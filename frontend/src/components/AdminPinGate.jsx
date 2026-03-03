@@ -46,7 +46,7 @@ export default function AdminPinGate({ children }) {
   if (checking) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center text-slate-500">
-        Vérification du PIN…
+        Verification du PIN...
       </div>
     );
   }
@@ -58,7 +58,7 @@ export default function AdminPinGate({ children }) {
       <div className="card-solid w-full max-w-sm p-6">
         <h2 className="text-xl font-semibold mb-2">Code PIN requis</h2>
         <p className="text-sm text-slate-500 mb-4">
-          Entrez le PIN admin pour accéder à cette page.
+          Entrez le PIN admin pour acceder a cette page.
         </p>
 
         {error && (
@@ -97,7 +97,7 @@ export default function AdminPinGate({ children }) {
               className="btn-primary"
               disabled={submitting || !pin}
             >
-              {submitting ? "Vérification…" : "Valider"}
+              {submitting ? "Verification..." : "Valider"}
             </button>
           </div>
         </form>
