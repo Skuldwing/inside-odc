@@ -443,102 +443,91 @@ export default function Activities({
       </div>
 
       {openUpload && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="card-solid w-full max-w-2xl p-6">
-            <h2 className="text-xl font-semibold mb-4">Importer activite (Excel)</h2>
+        <ActivityModal
+          title="Importer activite (Excel)"
+          maxWidthClass="max-w-2xl"
+          error={uploadError}
+          onClose={closeUploadModal}
+        >
+          <ImportStepper currentStep={importStep} />
 
-            <ImportStepper currentStep={importStep} />
-
-            {uploadError && (
-              <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
-                {uploadError}
-              </div>
-            )}
-
-            {uploadResult ? (
-              <ImportResultSummary result={uploadResult} />
-            ) : (
-              <form onSubmit={handleUpload} className="space-y-4 mt-4">
-                <FormActivityFields
-                  role={role}
-                  form={form}
-                  setForm={setForm}
-                  partners={partners}
-                  devices={devices}
-                  regions={senegalRegions}
-                />
-                <div>
-                  <label className="text-sm font-medium">Fichier Excel *</label>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    required
-                    className="mt-1"
-                    onChange={(e) => setForm({ ...form, file: e.target.files?.[0] || null })}
-                  />
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
-                  <button type="button" onClick={closeUploadModal} className="btn-ghost border">
-                    Annuler
-                  </button>
-                  <button type="submit" disabled={uploading} className="btn-primary disabled:opacity-60">
-                    {uploading ? "Import..." : "Valider l import"}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {uploadResult && (
-              <div className="mt-5 flex justify-end gap-3">
-                <button
-                  type="button"
-                  className="btn-ghost border"
-                  onClick={openUploadModal}
-                >
-                  Importer un autre fichier
-                </button>
-                <button type="button" className="btn-primary" onClick={closeUploadModal}>
-                  Terminer
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {editOpen && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="card-solid w-full max-w-lg p-6">
-            <h2 className="text-xl font-semibold mb-4">Modifier activite</h2>
-
-            {editError && (
-              <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
-                {editError}
-              </div>
-            )}
-
-            <form onSubmit={handleEditSave} className="space-y-4">
+          {uploadResult ? (
+            <ImportResultSummary result={uploadResult} />
+          ) : (
+            <form onSubmit={handleUpload} className="space-y-4 mt-4">
               <FormActivityFields
                 role={role}
-                form={editForm}
-                setForm={setEditForm}
+                form={form}
+                setForm={setForm}
                 partners={partners}
                 devices={devices}
                 regions={senegalRegions}
               />
+              <div>
+                <label className="text-sm font-medium">Fichier Excel *</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  required
+                  className="mt-1"
+                  onChange={(e) => setForm({ ...form, file: e.target.files?.[0] || null })}
+                />
+              </div>
 
               <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => setEditOpen(false)} className="btn-ghost border">
+                <button type="button" onClick={closeUploadModal} className="btn-ghost border">
                   Annuler
                 </button>
-                <button type="submit" disabled={editSaving} className="btn-primary disabled:opacity-60">
-                  {editSaving ? "Sauvegarde..." : "Enregistrer"}
+                <button type="submit" disabled={uploading} className="btn-primary disabled:opacity-60">
+                  {uploading ? "Import..." : "Valider l import"}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+          )}
+
+          {uploadResult && (
+            <div className="mt-5 flex justify-end gap-3">
+              <button
+                type="button"
+                className="btn-ghost border"
+                onClick={openUploadModal}
+              >
+                Importer un autre fichier
+              </button>
+              <button type="button" className="btn-primary" onClick={closeUploadModal}>
+                Terminer
+              </button>
+            </div>
+          )}
+        </ActivityModal>
+      )}
+
+      {editOpen && (
+        <ActivityModal
+          title="Modifier activite"
+          error={editError}
+          onClose={() => setEditOpen(false)}
+        >
+          <form onSubmit={handleEditSave} className="space-y-4">
+            <FormActivityFields
+              role={role}
+              form={editForm}
+              setForm={setEditForm}
+              partners={partners}
+              devices={devices}
+              regions={senegalRegions}
+            />
+
+            <div className="flex justify-end gap-3 pt-4">
+              <button type="button" onClick={() => setEditOpen(false)} className="btn-ghost border">
+                Annuler
+              </button>
+              <button type="submit" disabled={editSaving} className="btn-primary disabled:opacity-60">
+                {editSaving ? "Sauvegarde..." : "Enregistrer"}
+              </button>
+            </div>
+          </form>
+        </ActivityModal>
       )}
     </div>
   );
@@ -703,6 +692,35 @@ function CountCard({ label, value }) {
     <div className="card p-4">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+function ActivityModal({
+  title,
+  children,
+  error = "",
+  onClose,
+  maxWidthClass = "max-w-lg",
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+      <div className={`card-solid w-full ${maxWidthClass} p-6`}>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="text-xl font-semibold">{title}</h2>
+          <button type="button" onClick={onClose} className="btn-ghost border">
+            Fermer
+          </button>
+        </div>
+
+        {error && (
+          <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
+            {error}
+          </div>
+        )}
+
+        {children}
+      </div>
     </div>
   );
 }
