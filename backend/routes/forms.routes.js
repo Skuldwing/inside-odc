@@ -164,6 +164,23 @@ function sanitizeSubmissionValues(values) {
   return out;
 }
 
+function normalizeFieldKey(value) {
+  return slugify(String(value || "")).replace(/-/g, "_");
+}
+
+function getSubmissionValueByFieldKey(values, key) {
+  if (!values || typeof values !== "object" || Array.isArray(values)) return undefined;
+  if (Object.prototype.hasOwnProperty.call(values, key)) return values[key];
+
+  const normalizedKey = normalizeFieldKey(key);
+  if (!normalizedKey) return undefined;
+
+  for (const [entryKey, entryValue] of Object.entries(values)) {
+    if (normalizeFieldKey(entryKey) === normalizedKey) return entryValue;
+  }
+  return undefined;
+}
+
 function normalizeComparable(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.trim();
@@ -213,9 +230,33 @@ function isMissingRequiredValue(field, value) {
 }
 
 function buildExportRows(fields, submissions) {
-  const orderedFields = [...fields].sort(
-    (a, b) => Number(a?.page || 1) - Number(b?.page || 1)
-  );
+  const orderedFields = [...fields]
+    .sort((a, b) => Number(a?.page || 1) - Number(b?.page || 1))
+    .map((field, idx) => {
+      const key = String(field?.key || "").trim();
+      const label = String(field?.label || "").trim();
+      if (!key) return null;
+      return {
+        key,
+        label: label || `Champ ${idx + 1}`,
+        column: `${label || `Champ ${idx + 1}`} (${key})`,
+      };
+    })
+    .filter(Boolean);
+
+  const knownKeySet = new Set(orderedFields.map((field) => field.key));
+  const extraKeysSet = new Set();
+  for (const submission of submissions) {
+    const values =
+      submission?.values && typeof submission.values === "object"
+        ? submission.values
+        : {};
+    for (const key of Object.keys(values)) {
+      if (!knownKeySet.has(key)) extraKeysSet.add(key);
+    }
+  }
+  const extraKeys = Array.from(extraKeysSet).sort((a, b) => a.localeCompare(b));
+
   const rows = [];
 
   for (const submission of submissions) {
@@ -232,12 +273,18 @@ function buildExportRows(fields, submissions) {
     };
 
     for (const field of orderedFields) {
-      const key = String(field?.key || "").trim();
-      if (!key) continue;
+      const value = getSubmissionValueByFieldKey(values, field.key);
+      if (Array.isArray(value)) row[field.column] = value.join(" | ");
+      else if (value === undefined || value === null) row[field.column] = "";
+      else row[field.column] = String(value);
+    }
+
+    for (const key of extraKeys) {
       const value = values[key];
-      if (Array.isArray(value)) row[key] = value.join(" | ");
-      else if (value === undefined || value === null) row[key] = "";
-      else row[key] = String(value);
+      const column = `Extra (${key})`;
+      if (Array.isArray(value)) row[column] = value.join(" | ");
+      else if (value === undefined || value === null) row[column] = "";
+      else row[column] = String(value);
     }
     rows.push(row);
   }

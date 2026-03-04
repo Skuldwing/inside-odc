@@ -869,7 +869,7 @@ export default function Formulaires() {
                 </div>
               ) : null}
 
-              <div className="flex justify-end gap-3">
+              <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
                 <button
                   type="button"
                   onClick={() => setEditorOpen(false)}
