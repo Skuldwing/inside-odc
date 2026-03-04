@@ -20,6 +20,9 @@ const ALLOWED_CONDITION_OPERATORS = new Set(["eq", "neq", "contains"]);
 const DEFAULT_SETTINGS = {
   primary_color: "#0f766e",
   logo_url: "",
+  header_image_url: "",
+  open_at: null,
+  close_at: null,
   submit_label: "Envoyer",
   success_message: "Merci, votre reponse a ete enregistree.",
 };
@@ -81,17 +84,46 @@ function sanitizeSettings(input) {
     .trim()
     .toLowerCase();
   const logo_url = String(merged.logo_url || "").trim();
+  const header_image_url = String(merged.header_image_url || "").trim();
   const submit_label = String(merged.submit_label || "").trim();
   const success_message = String(merged.success_message || "").trim();
+  const openDate = merged.open_at ? new Date(merged.open_at) : null;
+  const closeDate = merged.close_at ? new Date(merged.close_at) : null;
+  const open_at =
+    openDate && !Number.isNaN(openDate.getTime()) ? openDate.toISOString() : null;
+  const close_at =
+    closeDate && !Number.isNaN(closeDate.getTime()) ? closeDate.toISOString() : null;
 
   return {
     primary_color: /^#[0-9a-f]{6}$/.test(primary_color)
       ? primary_color
       : DEFAULT_SETTINGS.primary_color,
     logo_url: logo_url || "",
+    header_image_url: header_image_url || "",
+    open_at,
+    close_at,
     submit_label: submit_label || DEFAULT_SETTINGS.submit_label,
     success_message: success_message || DEFAULT_SETTINGS.success_message,
   };
+}
+
+function isFormOpen(settings) {
+  const now = Date.now();
+  const openAt = settings?.open_at ? Date.parse(settings.open_at) : null;
+  const closeAt = settings?.close_at ? Date.parse(settings.close_at) : null;
+  if (Number.isFinite(openAt) && now < openAt) {
+    return {
+      ok: false,
+      error: `Ce formulaire ouvrira le ${new Date(openAt).toLocaleString("fr-FR")}.`,
+    };
+  }
+  if (Number.isFinite(closeAt) && now > closeAt) {
+    return {
+      ok: false,
+      error: `Ce formulaire est ferme depuis le ${new Date(closeAt).toLocaleString("fr-FR")}.`,
+    };
+  }
+  return { ok: true };
 }
 
 function sanitizeFields(inputFields) {
@@ -310,6 +342,11 @@ router.get("/public/:slug", async (req, res) => {
     if (!form || form.status !== "active") {
       return res.status(404).json({ error: "Formulaire introuvable" });
     }
+    const settings = sanitizeSettings(form.settings);
+    const availability = isFormOpen(settings);
+    if (!availability.ok) {
+      return res.status(403).json({ error: availability.error });
+    }
 
     return res.json({
       id: form.id,
@@ -317,7 +354,7 @@ router.get("/public/:slug", async (req, res) => {
       description: form.description,
       slug: form.slug,
       fields: form.fields || [],
-      settings: sanitizeSettings(form.settings),
+      settings,
     });
   } catch (err) {
     console.error(err);
@@ -341,6 +378,11 @@ router.post("/public/:slug/submissions", async (req, res) => {
     const form = formRes.rows[0];
     if (!form || form.status !== "active") {
       return res.status(404).json({ error: "Formulaire introuvable" });
+    }
+    const settings = sanitizeSettings(form.settings);
+    const availability = isFormOpen(settings);
+    if (!availability.ok) {
+      return res.status(403).json({ error: availability.error });
     }
 
     const values = sanitizeSubmissionValues(req.body?.values);

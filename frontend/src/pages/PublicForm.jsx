@@ -9,6 +9,9 @@ function defaultSettings() {
   return {
     primary_color: "#0f766e",
     logo_url: "",
+    header_image_url: "",
+    open_at: null,
+    close_at: null,
     submit_label: "Envoyer",
     success_message: "Merci, votre reponse a ete enregistree.",
   };
@@ -283,6 +286,15 @@ export default function PublicForm() {
             }}
           />
           <div className="p-6 sm:p-8">
+            {settings.header_image_url ? (
+              <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
+                <img
+                  src={settings.header_image_url}
+                  alt="Entete formulaire"
+                  className="h-36 w-full object-cover"
+                />
+              </div>
+            ) : null}
             {settings.logo_url ? (
               <img
                 src={settings.logo_url}

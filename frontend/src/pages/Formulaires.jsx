@@ -13,6 +13,8 @@ import {
   Palette,
   Layers,
   Workflow,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -41,9 +43,29 @@ function defaultSettings() {
   return {
     primary_color: "#0f766e",
     logo_url: "",
+    header_image_url: "",
+    open_at: null,
+    close_at: null,
     submit_label: "Envoyer",
     success_message: "Merci, votre reponse a ete enregistree.",
   };
+}
+
+function isoToLocalDateTime(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+function localDateTimeToIso(localValue) {
+  if (!localValue) return null;
+  const date = new Date(localValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
 }
 
 function createField(type = "text", idx = 1) {
@@ -72,6 +94,8 @@ function createEditor() {
   };
 }
 
+const FORM_EDITOR_DRAFT_KEY = "inside_odc_form_editor_draft_v1";
+
 export default function Formulaires() {
   const [searchParams] = useSearchParams();
   const queryAction = searchParams.get("action");
@@ -86,6 +110,11 @@ export default function Formulaires() {
   const [submissions, setSubmissions] = useState([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [exportingFormat, setExportingFormat] = useState("");
+  const [editorNotice, setEditorNotice] = useState("");
+  const [validationErrors, setValidationErrors] = useState([]);
+  const [collapsedFields, setCollapsedFields] = useState({});
+  const [lastDraftSavedAt, setLastDraftSavedAt] = useState("");
+  const [draggedFieldIndex, setDraggedFieldIndex] = useState(null);
 
   const [editor, setEditor] = useState(createEditor());
 
@@ -130,9 +159,47 @@ export default function Formulaires() {
   }, [forms, search]);
 
   const openCreate = () => {
-    setEditor(createEditor());
+    let nextEditor = createEditor();
+    let restored = false;
+    let restoredSavedAt = "";
+    try {
+      const rawDraft = localStorage.getItem(FORM_EDITOR_DRAFT_KEY);
+      if (rawDraft) {
+        const parsed = JSON.parse(rawDraft);
+        if (parsed?.editor && Array.isArray(parsed.editor.fields)) {
+          nextEditor = {
+            ...createEditor(),
+            ...parsed.editor,
+            id: null,
+            slug: "",
+            submissions_count: 0,
+            settings: {
+              ...defaultSettings(),
+              ...(parsed.editor.settings || {}),
+            },
+            fields: parsed.editor.fields.length
+              ? parsed.editor.fields.map((f, idx) => ({
+                  ...createField("text", idx + 1),
+                  ...f,
+                  page: Number(f?.page) > 0 ? Number(f.page) : 1,
+                }))
+              : [createField("text", 1)],
+          };
+          restored = true;
+          restoredSavedAt = String(parsed?.savedAt || "");
+        }
+      }
+    } catch (err) {
+      console.warn("Draft restore failed", err);
+    }
+
+    setEditor(nextEditor);
     setSubmissions([]);
     setShowSubmissions(false);
+    setValidationErrors([]);
+    setCollapsedFields({});
+    setEditorNotice(restored ? "Brouillon local restaure." : "");
+    setLastDraftSavedAt(restoredSavedAt);
     setEditorOpen(true);
   };
 
@@ -167,11 +234,17 @@ export default function Formulaires() {
         settings: {
           ...defaultSettings(),
           ...(form.settings || {}),
+          open_at: isoToLocalDateTime(form?.settings?.open_at),
+          close_at: isoToLocalDateTime(form?.settings?.close_at),
         },
         submissions_count: Number(form.submissions_count || 0),
       });
       setSubmissions([]);
       setShowSubmissions(false);
+      setValidationErrors([]);
+      setCollapsedFields({});
+      setEditorNotice("");
+      setLastDraftSavedAt("");
       setEditorOpen(true);
     } catch (err) {
       console.error(err);
@@ -232,14 +305,78 @@ export default function Formulaires() {
 
   const handleSave = async (e) => {
     e.preventDefault();
+    const errors = [];
     if (!editor.title.trim()) {
-      alert("Titre requis");
-      return;
+      errors.push({ message: "Le titre du formulaire est requis." });
     }
     if (!editor.fields.length) {
-      alert("Ajoutez au moins un champ");
+      errors.push({ message: "Ajoutez au moins un champ." });
+    }
+
+    const seenKeys = new Set();
+    editor.fields.forEach((field, idx) => {
+      const label = String(field?.label || "").trim();
+      const key = String(field?.key || "").trim();
+      if (!label) {
+        errors.push({
+          message: `Champ ${idx + 1}: libelle requis.`,
+          fieldIndex: idx,
+        });
+      }
+      if (!key) {
+        errors.push({
+          message: `Champ ${idx + 1}: cle requise.`,
+          fieldIndex: idx,
+        });
+      } else if (seenKeys.has(key)) {
+        errors.push({
+          message: `Champ ${idx + 1}: cle '${key}' en doublon.`,
+          fieldIndex: idx,
+        });
+      } else {
+        seenKeys.add(key);
+      }
+
+      const isChoiceField = field?.type === "select" || field?.type === "checkbox";
+      const options = Array.isArray(field?.options) ? field.options.filter(Boolean) : [];
+      if (isChoiceField && options.length === 0) {
+        errors.push({
+          message: `Champ ${idx + 1}: ajoutez au moins une option.`,
+          fieldIndex: idx,
+        });
+      }
+
+      if (field?.show_if && !String(field.show_if.key || "").trim()) {
+        errors.push({
+          message: `Champ ${idx + 1}: selectionnez un champ pour la condition.`,
+          fieldIndex: idx,
+        });
+      }
+    });
+
+    const openAtIso = localDateTimeToIso(editor.settings?.open_at);
+    const closeAtIso = localDateTimeToIso(editor.settings?.close_at);
+    if (openAtIso && closeAtIso && Date.parse(openAtIso) >= Date.parse(closeAtIso)) {
+      errors.push({
+        message: "La date/heure de fermeture doit etre apres l'ouverture.",
+      });
+    }
+
+    if (errors.length > 0) {
+      setValidationErrors(errors);
+      setEditorNotice("Corrigez les erreurs avant de sauvegarder.");
+      setCollapsedFields((prev) => {
+        const next = { ...prev };
+        errors.forEach((err) => {
+          if (Number.isInteger(err.fieldIndex)) next[err.fieldIndex] = false;
+        });
+        return next;
+      });
       return;
     }
+
+    setValidationErrors([]);
+    setEditorNotice("");
 
     setSaving(true);
     try {
@@ -250,6 +387,8 @@ export default function Formulaires() {
         settings: {
           ...defaultSettings(),
           ...(editor.settings || {}),
+          open_at: localDateTimeToIso(editor.settings?.open_at),
+          close_at: localDateTimeToIso(editor.settings?.close_at),
         },
         fields: editor.fields.map((f) => ({
           ...f,
@@ -273,6 +412,9 @@ export default function Formulaires() {
       }
 
       await fetchForms();
+      if (!editor.id) {
+        localStorage.removeItem(FORM_EDITOR_DRAFT_KEY);
+      }
       setEditorOpen(false);
     } catch (err) {
       console.error(err);
@@ -310,6 +452,7 @@ export default function Formulaires() {
       ...prev,
       fields: [...prev.fields, createField("text", prev.fields.length + 1)],
     }));
+    setCollapsedFields((prev) => ({ ...prev, [editor.fields.length]: false }));
   };
 
   const removeField = (index) => {
@@ -349,6 +492,80 @@ export default function Formulaires() {
       };
     });
   };
+
+  const toggleFieldCollapsed = (index) => {
+    setCollapsedFields((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  const collapseAllFields = () => {
+    const next = {};
+    editor.fields.forEach((_, idx) => {
+      next[idx] = true;
+    });
+    setCollapsedFields(next);
+  };
+
+  const expandAllFields = () => {
+    setCollapsedFields({});
+  };
+
+  const moveField = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return;
+    setEditor((prev) => {
+      if (
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= prev.fields.length ||
+        toIndex >= prev.fields.length
+      ) {
+        return prev;
+      }
+      const nextFields = [...prev.fields];
+      const [moved] = nextFields.splice(fromIndex, 1);
+      nextFields.splice(toIndex, 0, moved);
+      return { ...prev, fields: nextFields };
+    });
+    setCollapsedFields((prev) => {
+      const entries = editor.fields.map((_, idx) => Boolean(prev[idx]));
+      const [moved] = entries.splice(fromIndex, 1);
+      entries.splice(toIndex, 0, moved);
+      const next = {};
+      entries.forEach((value, idx) => {
+        if (value) next[idx] = true;
+      });
+      return next;
+    });
+  };
+
+  const onFieldDragStart = (index) => {
+    setDraggedFieldIndex(index);
+  };
+
+  const onFieldDrop = (index) => {
+    if (draggedFieldIndex === null) return;
+    moveField(draggedFieldIndex, index);
+    setDraggedFieldIndex(null);
+  };
+
+  useEffect(() => {
+    if (!editorOpen || editor.id) return;
+    const timer = setTimeout(() => {
+      try {
+        const savedAt = new Date().toISOString();
+        localStorage.setItem(
+          FORM_EDITOR_DRAFT_KEY,
+          JSON.stringify({
+            editor,
+            savedAt,
+          })
+        );
+        setLastDraftSavedAt(savedAt);
+      } catch (err) {
+        console.warn("Draft autosave failed", err);
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [editor, editorOpen]);
 
   return (
     <AdminPinGate>
@@ -441,6 +658,23 @@ export default function Formulaires() {
             maxWidth="max-w-6xl"
           >
             <form onSubmit={handleSave} className="space-y-5">
+              {editorNotice ? (
+                <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                  {editorNotice}
+                </div>
+              ) : null}
+
+              {validationErrors.length > 0 ? (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <p className="font-medium">Veuillez corriger les points suivants :</p>
+                  <ul className="mt-1 list-disc pl-5">
+                    {validationErrors.map((err, idx) => (
+                      <li key={`${err.message}-${idx}`}>{err.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
               <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4">
                 <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
                   <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
@@ -501,43 +735,93 @@ export default function Formulaires() {
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-medium text-slate-900">Champs du formulaire</p>
-                      <button type="button" className="btn-primary" onClick={addField}>
-                        <Plus className="w-4 h-4" />
-                        Ajouter champ
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn-ghost border"
+                          onClick={expandAllFields}
+                        >
+                          Tout ouvrir
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost border"
+                          onClick={collapseAllFields}
+                        >
+                          Tout reduire
+                        </button>
+                        <button type="button" className="btn-primary" onClick={addField}>
+                          <Plus className="w-4 h-4" />
+                          Ajouter champ
+                        </button>
+                      </div>
                     </div>
+                    <p className="text-xs text-slate-500">
+                      Astuce: glissez-deposez un champ pour changer l'ordre.
+                    </p>
 
                     {editor.fields.map((field, idx) => {
                       const otherFields = editor.fields.filter((_, i) => i !== idx);
                       const showIf = field.show_if;
+                      const isCollapsed = Boolean(collapsedFields[idx]);
 
                       return (
                         <div
                           key={`${field.key}-${idx}`}
-                          className="rounded-xl border border-slate-200 bg-slate-50/50 p-3 space-y-3"
+                          className={`rounded-xl border bg-slate-50/50 p-3 space-y-3 ${
+                            draggedFieldIndex === idx
+                              ? "border-orange-300 ring-2 ring-orange-200"
+                              : "border-slate-200"
+                          }`}
+                          draggable
+                          onDragStart={() => onFieldDragStart(idx)}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => onFieldDrop(idx)}
+                          onDragEnd={() => setDraggedFieldIndex(null)}
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-slate-800">
-                              Champ {idx + 1}
-                            </p>
-                            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
-                              <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5">
-                                {field.type}
-                              </span>
-                              <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5">
-                                page {field.page || 1}
-                              </span>
-                              {showIf ? (
-                                <span className="rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-orange-700">
-                                  conditionnel
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-slate-800">
+                                Champ {idx + 1}
+                              </p>
+                              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wide text-slate-500">
+                                <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5">
+                                  {field.type}
                                 </span>
-                              ) : null}
+                                <span className="rounded-full border border-slate-300 bg-white px-2 py-0.5">
+                                  page {field.page || 1}
+                                </span>
+                                {showIf ? (
+                                  <span className="rounded-full border border-orange-300 bg-orange-50 px-2 py-0.5 text-orange-700">
+                                    conditionnel
+                                  </span>
+                                ) : null}
+                              </div>
                             </div>
+                            <button
+                              type="button"
+                              className="btn-ghost border"
+                              onClick={() => toggleFieldCollapsed(idx)}
+                            >
+                              {isCollapsed ? (
+                                <>
+                                  <ChevronDown className="w-4 h-4" />
+                                  Ouvrir
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronUp className="w-4 h-4" />
+                                  Reduire
+                                </>
+                              )}
+                            </button>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          {!isCollapsed && (
+                            <>
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                             <div>
                               <label className="text-xs text-slate-500">Libelle *</label>
                               <input
@@ -582,9 +866,9 @@ export default function Formulaires() {
                                 }
                               />
                             </div>
-                          </div>
+                              </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
                               <label className="text-xs text-slate-500">Placeholder</label>
                               <input
@@ -605,29 +889,29 @@ export default function Formulaires() {
                               />
                               Champ obligatoire
                             </label>
-                          </div>
+                              </div>
 
-                          {(field.type === "select" || field.type === "checkbox") && (
-                            <div>
-                              <label className="text-xs text-slate-500">
-                                Options (une par ligne)
-                              </label>
-                              <textarea
-                                className="input mt-1 min-h-20"
-                                value={(field.options || []).join("\n")}
-                                onChange={(e) =>
-                                  updateField(idx, {
-                                    options: e.target.value
-                                      .split("\n")
-                                      .map((o) => o.trim())
-                                      .filter(Boolean),
-                                  })
-                                }
-                              />
-                            </div>
-                          )}
+                              {(field.type === "select" || field.type === "checkbox") && (
+                                <div>
+                                  <label className="text-xs text-slate-500">
+                                    Options (une par ligne)
+                                  </label>
+                                  <textarea
+                                    className="input mt-1 min-h-20"
+                                    value={(field.options || []).join("\n")}
+                                    onChange={(e) =>
+                                      updateField(idx, {
+                                        options: e.target.value
+                                          .split("\n")
+                                          .map((o) => o.trim())
+                                          .filter(Boolean),
+                                      })
+                                    }
+                                  />
+                                </div>
+                              )}
 
-                          <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
+                              <div className="rounded-lg border border-slate-200 bg-white p-3 space-y-2">
                             <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
                               <input
                                 type="checkbox"
@@ -691,19 +975,21 @@ export default function Formulaires() {
                                 </div>
                               </div>
                             )}
-                          </div>
+                              </div>
 
-                          <div className="flex justify-end">
-                            <button
-                              type="button"
-                              className="btn-ghost border text-red-600"
-                              onClick={() => removeField(idx)}
-                              disabled={editor.fields.length <= 1}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Supprimer champ
-                            </button>
-                          </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  className="btn-ghost border text-red-600"
+                                  onClick={() => removeField(idx)}
+                                  disabled={editor.fields.length <= 1}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Supprimer champ
+                                </button>
+                              </div>
+                            </>
+                          )}
                         </div>
                       );
                     })}
@@ -732,21 +1018,92 @@ export default function Formulaires() {
                     </div>
                     <div>
                       <label className="text-xs text-slate-500">Logo URL</label>
-                      <input
-                        className="input mt-1"
-                        value={editor.settings?.logo_url || ""}
-                        onChange={(e) =>
-                          setEditor((prev) => ({
+                        <input
+                          className="input mt-1"
+                          value={editor.settings?.logo_url || ""}
+                          onChange={(e) =>
+                            setEditor((prev) => ({
                             ...prev,
                             settings: { ...prev.settings, logo_url: e.target.value },
-                          }))
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-slate-500">Texte bouton envoi</label>
-                      <input
-                        className="input mt-1"
+                            }))
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500">Image d'entete (upload)</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="input mt-1"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            if (!file.type.startsWith("image/")) {
+                              alert("Veuillez choisir une image.");
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              setEditor((prev) => ({
+                                ...prev,
+                                settings: {
+                                  ...prev.settings,
+                                  header_image_url: String(reader.result || ""),
+                                },
+                              }));
+                            };
+                            reader.readAsDataURL(file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500">Image d'entete (URL)</label>
+                        <input
+                          className="input mt-1"
+                          value={editor.settings?.header_image_url || ""}
+                          onChange={(e) =>
+                            setEditor((prev) => ({
+                              ...prev,
+                              settings: { ...prev.settings, header_image_url: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-slate-500">Ouverture (date/heure)</label>
+                          <input
+                            type="datetime-local"
+                            className="input mt-1"
+                            value={editor.settings?.open_at || ""}
+                            onChange={(e) =>
+                              setEditor((prev) => ({
+                                ...prev,
+                                settings: { ...prev.settings, open_at: e.target.value || null },
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-500">Fermeture (date/heure)</label>
+                          <input
+                            type="datetime-local"
+                            className="input mt-1"
+                            value={editor.settings?.close_at || ""}
+                            onChange={(e) =>
+                              setEditor((prev) => ({
+                                ...prev,
+                                settings: { ...prev.settings, close_at: e.target.value || null },
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-500">Texte bouton envoi</label>
+                        <input
+                          className="input mt-1"
                         value={editor.settings?.submit_label || ""}
                         onChange={(e) =>
                           setEditor((prev) => ({
@@ -777,6 +1134,15 @@ export default function Formulaires() {
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
                     <p className="font-medium text-slate-900 mb-3">Apercu rapide</p>
                     <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+                      {editor.settings?.header_image_url ? (
+                        <div className="overflow-hidden rounded-lg border border-slate-200">
+                          <img
+                            src={editor.settings.header_image_url}
+                            alt="Entete formulaire"
+                            className="h-24 w-full object-cover"
+                          />
+                        </div>
+                      ) : null}
                       <p className="text-sm font-semibold text-slate-900">
                         {editor.title || "Titre du formulaire"}
                       </p>
@@ -870,6 +1236,15 @@ export default function Formulaires() {
               ) : null}
 
               <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                {!editor.id && lastDraftSavedAt ? (
+                  <p className="mr-auto self-center text-xs text-slate-500">
+                    Brouillon auto-sauvegarde a{" "}
+                    {new Date(lastDraftSavedAt).toLocaleTimeString("fr-FR", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setEditorOpen(false)}

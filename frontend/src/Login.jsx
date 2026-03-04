@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "./auth/useAuth";
 import ODCLogo from "./components/branding/ODCLogo";
 
@@ -7,19 +8,25 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (submitting) return;
     setError("");
+    setSubmitting(true);
 
     try {
-      await login(email, password);
+      await login(email.trim(), password);
       navigate("/");
     } catch (err) {
       setError(err.response?.data?.error || "Erreur de connexion");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -48,23 +55,56 @@ export default function Login() {
               </div>
             )}
 
-            <form onSubmit={handleLogin} className="mt-6 space-y-4">
-              <input
-                className="input"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+            <form onSubmit={handleLogin} className="mt-6 space-y-4" noValidate>
+              <div>
+                <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Email
+                </label>
+                <input
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  className="input"
+                  placeholder="nom@exemple.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
 
-              <input
-                type="password"
-                className="input"
-                placeholder="Mot de passe"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <div>
+                <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Mot de passe
+                </label>
+                <div className="relative">
+                  <input
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    minLength={6}
+                    className="input pr-11"
+                    placeholder="Votre mot de passe"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-slate-500 hover:text-slate-700"
+                    aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
 
-              <button className="btn-primary w-full animate-glow-soft">Se connecter</button>
+              <button
+                className="btn-primary w-full animate-glow-soft disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submitting || !email.trim() || !password}
+              >
+                {submitting ? "Connexion..." : "Se connecter"}
+              </button>
             </form>
           </div>
         </div>
