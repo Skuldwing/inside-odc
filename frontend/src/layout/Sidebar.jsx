@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "../auth/useAuth";
+import ODCLogo from "../components/branding/ODCLogo";
 
 const navigation = [
   {
@@ -104,9 +105,7 @@ export default function Sidebar({
       <div className="flex h-full flex-col">
         <div className="flex items-center justify-between px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold shadow-lg shadow-orange-500/30 ring-1 ring-orange-300/30">
-              IO
-            </div>
+            <ODCLogo variant="mark" className="h-11 w-11 rounded-2xl shadow-lg shadow-orange-500/30 ring-1 ring-orange-300/30" />
             <div>
               <h1 className="text-white font-semibold tracking-tight text-[15px]">
                 Inside ODC

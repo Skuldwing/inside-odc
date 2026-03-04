@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./auth/useAuth";
+import ODCLogo from "./components/branding/ODCLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -23,45 +24,63 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="card p-8">
-          <div className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 rounded-2xl bg-orange-500 text-white flex items-center justify-center text-lg font-bold shadow-lg shadow-orange-500/30">
-              O
-            </div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              Inside ODC
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Connectez-vous pour continuer
+    <div className="relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-8">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="animate-float-slow absolute -left-20 -top-16 h-72 w-72 rounded-full bg-orange-200/40 blur-3xl" />
+        <div className="animate-float-slow-delayed absolute -right-16 top-1/4 h-80 w-80 rounded-full bg-cyan-200/30 blur-3xl" />
+        <div className="animate-float-slow absolute bottom-[-8rem] left-1/3 h-72 w-72 rounded-full bg-orange-300/30 blur-3xl" />
+      </div>
+
+      <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center justify-center">
+        <div className="grid w-full gap-6 lg:grid-cols-[1.3fr_1fr]">
+          <div className="animate-fade-up hidden rounded-3xl border border-white/70 bg-white/70 p-8 shadow-xl shadow-slate-400/20 backdrop-blur lg:block">
+            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
+              Plateforme interne
             </p>
+            <h1 className="mt-3 text-3xl font-semibold leading-tight text-slate-900">
+              Pilotage des activites, participants et formulaires ODC.
+            </h1>
+            <p className="mt-3 text-slate-600">
+              Connecte-toi pour acceder au tableau de bord operationnel.
+            </p>
+            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4">
+              <ODCLogo className="w-full" />
+            </div>
           </div>
 
-          {error && (
-            <div className="mt-6 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
-              {error}
+          <div className="animate-fade-up-delay-1 card p-8">
+            <div className="text-center">
+              <ODCLogo className="mx-auto mb-5 w-full max-w-[340px] animate-fade-up-delay-2" />
+              <p className="text-sm text-slate-500 mt-1">
+              Connectez-vous pour continuer
+              </p>
             </div>
-          )}
 
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
-            <input
-              className="input"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
+            {error && (
+              <div className="mt-6 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
+                {error}
+              </div>
+            )}
 
-            <input
-              type="password"
-              className="input"
-              placeholder="Mot de passe"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <form onSubmit={handleLogin} className="mt-6 space-y-4">
+              <input
+                className="input"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
 
-            <button className="btn-primary w-full">Se connecter</button>
-          </form>
+              <input
+                type="password"
+                className="input"
+                placeholder="Mot de passe"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+
+              <button className="btn-primary w-full animate-glow-soft">Se connecter</button>
+            </form>
+          </div>
         </div>
       </div>
     </div>

@@ -127,3 +127,69 @@ body {
     @apply bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/25;
   }
 }
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes floatSlow {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -14px, 0);
+  }
+}
+
+@keyframes glowSoft {
+  0%,
+  100% {
+    box-shadow: 0 10px 24px rgba(249, 115, 22, 0.28);
+  }
+  50% {
+    box-shadow: 0 12px 30px rgba(249, 115, 22, 0.42);
+  }
+}
+
+.animate-fade-up {
+  animation: fadeUp 0.65s ease both;
+}
+
+.animate-fade-up-delay-1 {
+  animation: fadeUp 0.65s ease 0.12s both;
+}
+
+.animate-fade-up-delay-2 {
+  animation: fadeUp 0.65s ease 0.24s both;
+}
+
+.animate-float-slow {
+  animation: floatSlow 10s ease-in-out infinite;
+}
+
+.animate-float-slow-delayed {
+  animation: floatSlow 12s ease-in-out 1.4s infinite;
+}
+
+.animate-glow-soft {
+  animation: glowSoft 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-up-delay-1,
+  .animate-fade-up-delay-2,
+  .animate-float-slow,
+  .animate-float-slow-delayed,
+  .animate-glow-soft {
+    animation: none !important;
+  }
+}

@@ -13,6 +13,7 @@ import {
   FileText,
 } from "lucide-react";
 import { useAuth } from "../auth/useAuth";
+import ODCLogo from "../components/branding/ODCLogo";
 
 export default function Header({ currentPageName, onMenuClick }) {
   const navigate = useNavigate();
@@ -119,13 +120,16 @@ export default function Header({ currentPageName, onMenuClick }) {
             <Menu />
           </button>
 
-          <div className="min-w-0">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
-              Inside ODC
-            </p>
-            <h2 className="truncate text-lg font-semibold text-slate-900 capitalize">
-              {currentPageName}
-            </h2>
+          <div className="min-w-0 flex items-center gap-3">
+            <ODCLogo variant="mark" className="hidden h-8 w-8 rounded-lg sm:block" />
+            <div className="min-w-0">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
+                Inside ODC
+              </p>
+              <h2 className="truncate text-lg font-semibold text-slate-900 capitalize">
+                {currentPageName}
+              </h2>
+            </div>
           </div>
         </div>
 
