@@ -26,6 +26,7 @@ export default function Login() {
   return (
     <div className="relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-8">
       <div className="pointer-events-none absolute inset-0">
+        <div className="animate-login-bg absolute inset-0 opacity-80" />
         <div className="animate-float-slow absolute -left-20 -top-16 h-72 w-72 rounded-full bg-orange-200/40 blur-3xl" />
         <div className="animate-float-slow-delayed absolute -right-16 top-1/4 h-80 w-80 rounded-full bg-cyan-200/30 blur-3xl" />
         <div className="animate-float-slow absolute bottom-[-8rem] left-1/3 h-72 w-72 rounded-full bg-orange-300/30 blur-3xl" />
@@ -43,9 +44,6 @@ export default function Login() {
             <p className="mt-3 text-slate-600">
               Connecte-toi pour acceder au tableau de bord operationnel.
             </p>
-            <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-4">
-              <ODCLogo className="w-full" />
-            </div>
           </div>
 
           <div className="animate-fade-up-delay-1 card p-8">
