@@ -33,24 +33,12 @@ export default function Login() {
       </div>
 
       <div className="relative mx-auto flex min-h-[calc(100vh-4rem)] w-full max-w-5xl items-center justify-center">
-        <div className="grid w-full gap-6 lg:grid-cols-[1.3fr_1fr]">
-          <div className="animate-fade-up hidden rounded-3xl border border-white/70 bg-white/70 p-8 shadow-xl shadow-slate-400/20 backdrop-blur lg:block">
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-              Plateforme interne
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold leading-tight text-slate-900">
-              Pilotage des activites, participants et formulaires ODC.
-            </h1>
-            <p className="mt-3 text-slate-600">
-              Connecte-toi pour acceder au tableau de bord operationnel.
-            </p>
-          </div>
-
+        <div className="w-full max-w-md">
           <div className="animate-fade-up-delay-1 card p-8">
             <div className="text-center">
               <ODCLogo className="mx-auto mb-5 w-full max-w-[340px] animate-fade-up-delay-2" />
               <p className="text-sm text-slate-500 mt-1">
-              Connectez-vous pour continuer
+                Connectez-vous pour continuer
               </p>
             </div>
 

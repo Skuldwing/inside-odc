@@ -30,9 +30,9 @@ export default function ODCLogo({
       <title>{title}</title>
       <text
         x="10"
-        y="62"
+        y="58"
         fill="#FF7900"
-        fontSize="64"
+        fontSize="56"
         fontWeight="700"
         fontFamily="'Plus Jakarta Sans', 'Segoe UI', sans-serif"
       >
@@ -40,17 +40,17 @@ export default function ODCLogo({
       </text>
       <text
         x="10"
-        y="190"
+        y="202"
         fill="#0AA5A5"
-        fontSize="176"
+        fontSize="150"
         fontWeight="400"
         letterSpacing="1.5"
         fontFamily="Georgia, 'Times New Roman', serif"
       >
         sonatel
       </text>
-      <rect x="760" y="52" width="160" height="160" fill="#FF7900" />
-      <rect x="792" y="120" width="96" height="16" fill="#F2F2F2" />
+      <rect x="760" y="58" width="160" height="144" fill="#FF7900" />
+      <rect x="792" y="122" width="96" height="16" fill="#F2F2F2" />
     </svg>
   );
 }
