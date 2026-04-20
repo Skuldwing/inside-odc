@@ -55,6 +55,7 @@ export default function Participants() {
       return (
         (p.nom || "").toLowerCase().includes(q) ||
         (p.prenom || "").toLowerCase().includes(q) ||
+        (p.structure || "").toLowerCase().includes(q) ||
         (p.activite || "").toLowerCase().includes(q) ||
         (p.partenaire || "").toLowerCase().includes(q) ||
         (p.dispositif || "").toLowerCase().includes(q)
@@ -76,12 +77,12 @@ export default function Participants() {
     const headers = [
       "Nom",
       "Prenom",
+      "Structure/Etablissement",
       "Genre",
       "Tranche d age",
       "Email",
       "Telephone",
       "Statut",
-      "Structure/Etablissement",
       "Activite",
       "Date activite",
       "Partenaire",
@@ -91,12 +92,12 @@ export default function Participants() {
     const rows = filtered.map((p) => [
       p.nom,
       p.prenom,
+      p.structure,
       p.genre,
       p.age_range,
       p.email,
       p.telephone,
       p.statut,
-      p.structure,
       p.activite,
       p.date_activite,
       p.partenaire,
@@ -189,12 +190,12 @@ export default function Participants() {
             <tr>
               <th className="p-3">Nom</th>
               <th className="p-3">Prenom</th>
+              <th className="p-3">Structure/Etablissement</th>
               <th className="p-3">Genre</th>
               <th className="p-3">Tranche d age</th>
               <th className="p-3">Email</th>
               <th className="p-3">Telephone</th>
               <th className="p-3">Statut</th>
-              <th className="p-3">Structure/Etablissement</th>
               <th className="p-3">Activite</th>
               <th className="p-3">Date</th>
               <th className="p-3">Partenaire</th>
@@ -220,6 +221,7 @@ export default function Participants() {
                 <tr key={p.id} className="table-row">
                   <td className="p-3 font-medium">{p.nom || "-"}</td>
                   <td className="p-3">{p.prenom || "-"}</td>
+                  <td className="p-3">{p.structure || "-"}</td>
                   <td className="p-3">
                     <span
                       className={`badge ${
@@ -235,7 +237,6 @@ export default function Participants() {
                   <td className="p-3">{p.email || "-"}</td>
                   <td className="p-3">{p.telephone || "-"}</td>
                   <td className="p-3">{p.statut || "-"}</td>
-                  <td className="p-3">{p.structure || "-"}</td>
                   <td className="p-3">{p.activite || "-"}</td>
                   <td className="p-3">{p.date_activite || "-"}</td>
                   <td className="p-3">{p.partenaire || "-"}</td>
