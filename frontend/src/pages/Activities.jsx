@@ -11,6 +11,7 @@ import {
   ScanSearch,
   Link2,
   CheckCircle2,
+  Download,
 } from "lucide-react";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
@@ -457,7 +458,17 @@ export default function Activities({
                 regions={senegalRegions}
               />
               <div>
-                <label className="text-sm font-medium">Fichier Excel *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium">Fichier Excel *</label>
+                  <a
+                    href={`${import.meta.env.VITE_API_URL}/import/template`}
+                    download="template_liste_presences.xlsx"
+                    className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
+                  >
+                    <Download className="w-3 h-3" />
+                    Telecharger le template
+                  </a>
+                </div>
                 <input
                   type="file"
                   accept=".xlsx,.xls"

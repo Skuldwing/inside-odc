@@ -81,6 +81,7 @@ export default function Participants() {
       "Email",
       "Telephone",
       "Statut",
+      "Structure/Etablissement",
       "Activite",
       "Date activite",
       "Partenaire",
@@ -95,6 +96,7 @@ export default function Participants() {
       p.email,
       p.telephone,
       p.statut,
+      p.structure,
       p.activite,
       p.date_activite,
       p.partenaire,
@@ -192,6 +194,7 @@ export default function Participants() {
               <th className="p-3">Email</th>
               <th className="p-3">Telephone</th>
               <th className="p-3">Statut</th>
+              <th className="p-3">Structure/Etablissement</th>
               <th className="p-3">Activite</th>
               <th className="p-3">Date</th>
               <th className="p-3">Partenaire</th>
@@ -201,13 +204,13 @@ export default function Participants() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={11} className="text-center p-8 text-slate-500">
+                <td colSpan={12} className="text-center p-8 text-slate-500">
                   Chargement...
                 </td>
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center p-8 text-slate-500">
+                <td colSpan={12} className="text-center p-8 text-slate-500">
                   <Users className="mx-auto mb-2 text-slate-300" />
                   Aucun participant trouve
                 </td>
@@ -232,6 +235,7 @@ export default function Participants() {
                   <td className="p-3">{p.email || "-"}</td>
                   <td className="p-3">{p.telephone || "-"}</td>
                   <td className="p-3">{p.statut || "-"}</td>
+                  <td className="p-3">{p.structure || "-"}</td>
                   <td className="p-3">{p.activite || "-"}</td>
                   <td className="p-3">{p.date_activite || "-"}</td>
                   <td className="p-3">{p.partenaire || "-"}</td>
