@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus,
@@ -6,9 +6,16 @@ import {
   Pencil,
   Trash2,
   Link2,
-  Sparkles,
+  ExternalLink,
+  Copy,
+  ToggleLeft,
+  ToggleRight,
+  ChevronDown,
   Layers,
   Workflow,
+  Users,
+  CheckSquare,
+  ListChecks,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -17,10 +24,9 @@ import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
 import FieldEditor from "./formulaires/FieldEditor";
 import FormBrandingPanel from "./formulaires/FormBrandingPanel";
+import FormSettingsPanel from "./formulaires/FormSettingsPanel";
 import FormSubmissionsPanel from "./formulaires/FormSubmissionsPanel";
-import {
-  FORM_EDITOR_DRAFT_KEY,
-} from "./formulaires/constants";
+import { FORM_EDITOR_DRAFT_KEY, FIELD_TYPES, EDITOR_TABS } from "./formulaires/constants";
 import {
   defaultSettings,
   isoToLocalDateTime,
@@ -29,6 +35,173 @@ import {
   createEditor,
 } from "./formulaires/helpers";
 
+/* ── TabBar ── */
+function TabBar({ tabs, active, onChange, submissionsCount }) {
+  return (
+    <div className="flex border-b border-slate-200 bg-slate-50 rounded-t-2xl overflow-hidden">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+          className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            active === tab.id
+              ? "border-orange-500 text-orange-600 bg-white"
+              : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+          }`}
+        >
+          {tab.label}
+          {tab.id === "reponses" && submissionsCount > 0 && (
+            <span className="rounded-full bg-orange-100 text-orange-700 text-[10px] font-semibold px-1.5 py-0.5 leading-none">
+              {submissionsCount}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── FormCard ── */
+function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplicate }) {
+  const isActive = form.status === "active";
+
+  return (
+    <div className="card p-4 space-y-3 hover:shadow-md transition-shadow">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-slate-900 truncate">{form.title}</p>
+          <p className="text-xs text-slate-400 mt-0.5 truncate">/{form.slug}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onToggleStatus(form)}
+          title={isActive ? "Desactiver" : "Activer"}
+          className="flex-shrink-0"
+        >
+          {isActive ? (
+            <ToggleRight className="w-8 h-8 text-orange-500" />
+          ) : (
+            <ToggleLeft className="w-8 h-8 text-slate-300" />
+          )}
+        </button>
+      </div>
+
+      {form.description && (
+        <p className="text-sm text-slate-500 line-clamp-2">{form.description}</p>
+      )}
+
+      <div className="flex items-center gap-3 text-xs text-slate-500">
+        <span className="inline-flex items-center gap-1">
+          <Users className="w-3.5 h-3.5" />
+          {Number(form.submissions_count || 0)} reponse{Number(form.submissions_count || 0) !== 1 ? "s" : ""}
+        </span>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+            isActive
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-slate-100 text-slate-500"
+          }`}
+        >
+          {isActive ? "Actif" : "Brouillon"}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 pt-0.5">
+        <button
+          type="button"
+          className="btn-ghost border flex-1 text-sm"
+          onClick={() => onEdit(form.id)}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+          Modifier
+        </button>
+        <button
+          type="button"
+          className="btn-ghost border p-2"
+          onClick={() => onCopyLink(form.slug)}
+          title="Copier le lien public"
+        >
+          <Link2 className="w-4 h-4" />
+        </button>
+        {isActive && (
+          <a
+            href={`${window.location.origin}/f/${form.slug}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost border p-2"
+            title="Ouvrir le formulaire"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        )}
+        <button
+          type="button"
+          className="btn-ghost border p-2"
+          onClick={() => onDuplicate(form.id)}
+          title="Dupliquer"
+        >
+          <Copy className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          className="btn-ghost border p-2 text-red-500 hover:bg-red-50"
+          onClick={() => onDelete(form.id)}
+          title="Supprimer"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── AddFieldDropdown ── */
+function AddFieldDropdown({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        className="btn-primary flex items-center gap-1.5"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Plus className="w-4 h-4" />
+        Ajouter
+        <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+          <div className="p-1.5 grid grid-cols-2 gap-0.5">
+            {FIELD_TYPES.map((ft) => (
+              <button
+                key={ft.value}
+                type="button"
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-700 transition-colors"
+                onClick={() => { onAdd(ft.value); setOpen(false); }}
+              >
+                <span className="text-base leading-none">{ft.icon}</span>
+                {ft.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   Main Formulaires component
+══════════════════════════════════════════════════ */
 export default function Formulaires() {
   const [searchParams] = useSearchParams();
   const queryAction = searchParams.get("action");
@@ -40,7 +213,7 @@ export default function Formulaires() {
   const [error, setError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showSubmissions, setShowSubmissions] = useState(false);
+  const [activeTab, setActiveTab] = useState("champs");
   const [submissions, setSubmissions] = useState([]);
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [exportingFormat, setExportingFormat] = useState("");
@@ -51,6 +224,7 @@ export default function Formulaires() {
   const [draggedFieldIndex, setDraggedFieldIndex] = useState(null);
   const [editor, setEditor] = useState(createEditor());
 
+  /* ── Fetch ── */
   const fetchForms = async () => {
     setLoading(true);
     setError("");
@@ -81,6 +255,7 @@ export default function Formulaires() {
     });
   }, [forms, search]);
 
+  /* ── Open editor ── */
   const openCreate = () => {
     let nextEditor = createEditor();
     let restored = false;
@@ -114,7 +289,7 @@ export default function Formulaires() {
     }
     setEditor(nextEditor);
     setSubmissions([]);
-    setShowSubmissions(false);
+    setActiveTab("champs");
     setValidationErrors([]);
     setCollapsedFields({});
     setEditorNotice(restored ? "Brouillon local restaure." : "");
@@ -160,7 +335,7 @@ export default function Formulaires() {
         submissions_count: Number(form.submissions_count || 0),
       });
       setSubmissions([]);
-      setShowSubmissions(false);
+      setActiveTab("champs");
       setValidationErrors([]);
       setCollapsedFields({});
       setEditorNotice("");
@@ -172,25 +347,23 @@ export default function Formulaires() {
     }
   };
 
-  const loadSubmissions = async () => {
-    if (!editor.id) return;
-    setSubmissionsLoading(true);
-    try {
-      const res = await api.get(`/forms/${editor.id}/submissions`);
-      setSubmissions(res.data || []);
-    } catch (err) {
-      console.error(err);
-      alert("Erreur chargement reponses");
-    } finally {
-      setSubmissionsLoading(false);
+  /* ── Tab change — auto-load submissions ── */
+  const handleTabChange = async (tab) => {
+    setActiveTab(tab);
+    if (tab === "reponses" && editor.id && submissions.length === 0) {
+      setSubmissionsLoading(true);
+      try {
+        const res = await api.get(`/forms/${editor.id}/submissions`);
+        setSubmissions(res.data || []);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSubmissionsLoading(false);
+      }
     }
   };
 
-  const handleToggleSubmissions = async () => {
-    if (!showSubmissions && submissions.length === 0) await loadSubmissions();
-    setShowSubmissions((prev) => !prev);
-  };
-
+  /* ── Submissions ── */
   const handleExport = async (format) => {
     if (!editor.id) return;
     setExportingFormat(format);
@@ -220,6 +393,18 @@ export default function Formulaires() {
     }
   };
 
+  const handleDeleteSubmission = async (submissionId) => {
+    try {
+      await api.delete(`/forms/${editor.id}/submissions/${submissionId}`);
+      setSubmissions((prev) => prev.filter((s) => s.id !== submissionId));
+      setEditor((prev) => ({ ...prev, submissions_count: Math.max(0, (prev.submissions_count || 0) - 1) }));
+    } catch (err) {
+      console.error(err);
+      alert("Erreur suppression reponse");
+    }
+  };
+
+  /* ── Save ── */
   const handleSave = async (e) => {
     e.preventDefault();
     const errors = [];
@@ -232,6 +417,7 @@ export default function Formulaires() {
       const label = String(field?.label || "").trim();
       const key = String(field?.key || "").trim();
       if (!label) errors.push({ message: `Champ ${idx + 1}: libelle requis.`, fieldIndex: idx });
+      if (field.type === "separator") return;
       if (!key) {
         errors.push({ message: `Champ ${idx + 1}: cle requise.`, fieldIndex: idx });
       } else if (seenKeys.has(key)) {
@@ -245,29 +431,27 @@ export default function Formulaires() {
         errors.push({ message: `Champ ${idx + 1}: ajoutez au moins une option.`, fieldIndex: idx });
       }
       if (field?.show_if && !String(field.show_if.key || "").trim()) {
-        errors.push({
-          message: `Champ ${idx + 1}: selectionnez un champ pour la condition.`,
-          fieldIndex: idx,
-        });
+        errors.push({ message: `Champ ${idx + 1}: selectionnez un champ pour la condition.`, fieldIndex: idx });
       }
     });
 
     const openAtIso = localDateTimeToIso(editor.settings?.open_at);
     const closeAtIso = localDateTimeToIso(editor.settings?.close_at);
     if (openAtIso && closeAtIso && Date.parse(openAtIso) >= Date.parse(closeAtIso)) {
-      errors.push({ message: "La date/heure de fermeture doit etre apres l'ouverture." });
+      errors.push({ message: "La date de fermeture doit etre apres l'ouverture." });
     }
 
     if (errors.length > 0) {
       setValidationErrors(errors);
       setEditorNotice("Corrigez les erreurs avant de sauvegarder.");
-      setCollapsedFields((prev) => {
-        const next = { ...prev };
-        errors.forEach((err) => {
-          if (Number.isInteger(err.fieldIndex)) next[err.fieldIndex] = false;
+      if (errors.some((e) => Number.isInteger(e.fieldIndex))) {
+        setActiveTab("champs");
+        setCollapsedFields((prev) => {
+          const next = { ...prev };
+          errors.forEach((err) => { if (Number.isInteger(err.fieldIndex)) next[err.fieldIndex] = false; });
+          return next;
         });
-        return next;
-      });
+      }
       return;
     }
 
@@ -311,8 +495,9 @@ export default function Formulaires() {
     }
   };
 
+  /* ── Form card actions ── */
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer ce formulaire ?")) return;
+    if (!confirm("Supprimer ce formulaire definititement ?")) return;
     try {
       await api.delete(`/forms/${id}`);
       await fetchForms();
@@ -327,24 +512,57 @@ export default function Formulaires() {
     const link = `${window.location.origin}/f/${slug}`;
     try {
       await navigator.clipboard.writeText(link);
-      alert("Lien copie.");
-    } catch (err) {
-      console.error(err);
+      alert("Lien copie !");
+    } catch {
       alert(link);
     }
   };
 
+  const handleToggleStatus = async (form) => {
+    const newStatus = form.status === "active" ? "draft" : "active";
+    try {
+      await api.patch(`/forms/${form.id}/status`, { status: newStatus });
+      setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, status: newStatus } : f));
+    } catch (err) {
+      console.error(err);
+      alert("Erreur changement statut");
+    }
+  };
+
+  const handleDuplicate = async (id) => {
+    try {
+      await api.post(`/forms/${id}/duplicate`);
+      await fetchForms();
+    } catch (err) {
+      console.error(err);
+      alert("Erreur duplication formulaire");
+    }
+  };
+
   /* ── Field manipulation ── */
-  const addField = () => {
-    setEditor((prev) => ({
-      ...prev,
-      fields: [...prev.fields, createField("text", prev.fields.length + 1)],
-    }));
+  const addField = (type = "text") => {
+    const idx = editor.fields.length + 1;
+    const newField = createField(type, idx);
+    setEditor((prev) => ({ ...prev, fields: [...prev.fields, newField] }));
     setCollapsedFields((prev) => ({ ...prev, [editor.fields.length]: false }));
   };
 
   const removeField = (index) => {
     setEditor((prev) => ({ ...prev, fields: prev.fields.filter((_, idx) => idx !== index) }));
+  };
+
+  const duplicateField = (index) => {
+    setEditor((prev) => {
+      const field = prev.fields[index];
+      const newField = {
+        ...field,
+        key: field.type === "separator" ? `sep_${prev.fields.length + 1}` : `${field.key}_copie`,
+        label: `${field.label} (copie)`,
+      };
+      const next = [...prev.fields];
+      next.splice(index + 1, 0, newField);
+      return { ...prev, fields: next };
+    });
   };
 
   const updateField = (index, patch) => {
@@ -356,8 +574,7 @@ export default function Formulaires() {
 
   const toggleFieldCondition = (index, enabled) => {
     setEditor((prev) => {
-      const fallbackKey =
-        prev.fields.find((_, idx) => idx !== index && prev.fields[idx]?.key)?.key || "";
+      const fallbackKey = prev.fields.find((_, idx) => idx !== index && prev.fields[idx]?.key)?.key || "";
       return {
         ...prev,
         fields: prev.fields.map((field, idx) => {
@@ -415,12 +632,17 @@ export default function Formulaires() {
     return () => clearTimeout(timer);
   }, [editor, editorOpen]);
 
+  /* ── Stats ── */
+  const totalPages = new Set(editor.fields.map((f) => Number(f.page || 1))).size;
+  const realFieldsCount = editor.fields.filter((f) => f.type !== "separator").length;
+
+  /* ══════════════════════════════════════════════════ */
   return (
     <AdminPinGate>
       <div className="space-y-6">
         <AdminPageHeader
           title="Formulaires"
-          subtitle="Editeur de formulaires (inscriptions, activites, etc.)"
+          subtitle="Creez et gerez vos formulaires d'inscription et d'enquete"
           buttonLabel="Nouveau formulaire"
           buttonIcon={Plus}
           onAdd={openCreate}
@@ -433,236 +655,241 @@ export default function Formulaires() {
         />
 
         {error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">
+          <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
             {error}
           </div>
         )}
 
         {loading ? (
-          <div className="card p-6 text-center text-slate-500">Chargement...</div>
+          <div className="card p-6 text-center text-slate-500 text-sm">Chargement...</div>
         ) : filteredForms.length === 0 ? (
-          <div className="card p-8 text-center text-slate-500">Aucun formulaire trouve.</div>
+          <div className="card p-8 text-center text-slate-400">
+            <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+            <p className="text-sm">Aucun formulaire trouve.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filteredForms.map((form) => (
-              <div key={form.id} className="card p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-slate-900">{form.title}</p>
-                    <p className="text-xs text-slate-500">/{form.slug}</p>
-                  </div>
-                  <span
-                    className={`badge ${
-                      form.status === "active"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    {form.status === "active" ? "Actif" : "Brouillon"}
-                  </span>
-                </div>
-                <p className="text-sm text-slate-500">{form.description || "Aucune description"}</p>
-                <div className="text-xs text-slate-500">
-                  Reponses: {Number(form.submissions_count || 0)}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button className="btn-ghost border" onClick={() => openEdit(form.id)}>
-                    <Pencil className="w-4 h-4" />
-                    Modifier
-                  </button>
-                  <button className="btn-ghost border" onClick={() => handleCopyPublicLink(form.slug)}>
-                    <Link2 className="w-4 h-4" />
-                    Lien
-                  </button>
-                  <button
-                    className="btn-ghost border text-red-600"
-                    onClick={() => handleDelete(form.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+              <FormCard
+                key={form.id}
+                form={form}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                onCopyLink={handleCopyPublicLink}
+                onToggleStatus={handleToggleStatus}
+                onDuplicate={handleDuplicate}
+              />
             ))}
           </div>
         )}
 
+        {/* ── Editor modal ── */}
         {editorOpen && (
           <AdminModal
-            title={editor.id ? "Modifier formulaire" : "Nouveau formulaire"}
+            title={editor.id ? "Modifier le formulaire" : "Nouveau formulaire"}
             onClose={() => setEditorOpen(false)}
             maxWidth="max-w-6xl"
           >
-            <form onSubmit={handleSave} className="space-y-5">
-              {editorNotice && (
-                <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
-                  {editorNotice}
+            <form onSubmit={handleSave} className="space-y-0">
+              {/* Notices */}
+              {(editorNotice || validationErrors.length > 0) && (
+                <div className="mb-4 space-y-2">
+                  {editorNotice && (
+                    <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                      {editorNotice}
+                    </div>
+                  )}
+                  {validationErrors.length > 0 && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      <p className="font-medium mb-1">Corrigez les points suivants :</p>
+                      <ul className="list-disc pl-5 space-y-0.5">
+                        {validationErrors.map((err, idx) => (
+                          <li key={`${err.message}-${idx}`}>{err.message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {validationErrors.length > 0 && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  <p className="font-medium">Veuillez corriger les points suivants :</p>
-                  <ul className="mt-1 list-disc pl-5">
-                    {validationErrors.map((err, idx) => (
-                      <li key={`${err.message}-${idx}`}>{err.message}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-4">
-                <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
-                    <Sparkles className="w-3 h-3" />
-                    Builder V2
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
-                    <Layers className="w-3 h-3" />
-                    {editor.fields.length} champs
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1">
-                    <Workflow className="w-3 h-3" />
-                    {new Set(editor.fields.map((f) => Number(f.page || 1))).size} pages
-                  </span>
-                </div>
-              </section>
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-                <div className="xl:col-span-2 space-y-5">
-                  {/* Informations */}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-                    <p className="font-medium text-slate-900">Informations</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium">Titre *</label>
-                        <input
-                          className="input mt-1"
-                          required
-                          value={editor.title}
-                          onChange={(e) =>
-                            setEditor((prev) => ({ ...prev, title: e.target.value }))
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium">Statut</label>
-                        <select
-                          className="select mt-1"
-                          value={editor.status}
-                          onChange={(e) =>
-                            setEditor((prev) => ({ ...prev, status: e.target.value }))
-                          }
-                        >
-                          <option value="draft">Brouillon</option>
-                          <option value="active">Actif (public)</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Description</label>
-                      <textarea
-                        className="input mt-1 min-h-20"
-                        value={editor.description}
-                        onChange={(e) =>
-                          setEditor((prev) => ({ ...prev, description: e.target.value }))
-                        }
-                      />
-                    </div>
+              {/* Title + meta */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4 mb-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="text-xs font-medium text-slate-500">Titre *</label>
+                    <input
+                      className="input mt-1"
+                      required
+                      placeholder="Mon formulaire..."
+                      value={editor.title}
+                      onChange={(e) => setEditor((prev) => ({ ...prev, title: e.target.value }))}
+                    />
                   </div>
-
-                  {/* Champs */}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-slate-900">Champs du formulaire</p>
-                      <div className="flex items-center gap-2">
-                        <button type="button" className="btn-ghost border" onClick={expandAllFields}>
-                          Tout ouvrir
-                        </button>
-                        <button type="button" className="btn-ghost border" onClick={collapseAllFields}>
-                          Tout reduire
-                        </button>
-                        <button type="button" className="btn-primary" onClick={addField}>
-                          <Plus className="w-4 h-4" />
-                          Ajouter champ
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-500">
-                      Astuce: glissez-deposez un champ pour changer l&apos;ordre.
-                    </p>
-
-                    {editor.fields.map((field, idx) => (
-                      <FieldEditor
-                        key={`${field.key}-${idx}`}
-                        field={field}
-                        idx={idx}
-                        otherFields={editor.fields.filter((_, i) => i !== idx)}
-                        isCollapsed={Boolean(collapsedFields[idx])}
-                        isDragging={draggedFieldIndex === idx}
-                        canRemove={editor.fields.length > 1}
-                        onUpdate={(patch) => updateField(idx, patch)}
-                        onRemove={() => removeField(idx)}
-                        onToggleCollapsed={() => toggleFieldCollapsed(idx)}
-                        onToggleCondition={(enabled) => toggleFieldCondition(idx, enabled)}
-                        onDragStart={() => setDraggedFieldIndex(idx)}
-                        onDrop={() => {
-                          if (draggedFieldIndex !== null) moveField(draggedFieldIndex, idx);
-                          setDraggedFieldIndex(null);
-                        }}
-                        onDragEnd={() => setDraggedFieldIndex(null)}
-                      />
-                    ))}
+                  <div>
+                    <label className="text-xs font-medium text-slate-500">Statut</label>
+                    <select
+                      className="select mt-1"
+                      value={editor.status}
+                      onChange={(e) => setEditor((prev) => ({ ...prev, status: e.target.value }))}
+                    >
+                      <option value="draft">Brouillon</option>
+                      <option value="active">Actif (public)</option>
+                    </select>
                   </div>
                 </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500">Description</label>
+                  <textarea
+                    className="input mt-1 min-h-[60px] text-sm"
+                    placeholder="Description du formulaire..."
+                    value={editor.description}
+                    onChange={(e) => setEditor((prev) => ({ ...prev, description: e.target.value }))}
+                  />
+                </div>
 
-                {/* Panneau droit */}
-                <FormBrandingPanel
-                  settings={editor.settings}
-                  title={editor.title}
-                  description={editor.description}
-                  onChange={(settings) => setEditor((prev) => ({ ...prev, settings }))}
-                />
+                {/* Stats bar */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    {realFieldsCount} champ{realFieldsCount !== 1 ? "s" : ""}
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
+                    <Layers className="w-3.5 h-3.5" />
+                    {totalPages} page{totalPages !== 1 ? "s" : ""}
+                  </span>
+                  {editor.id && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
+                      <Users className="w-3.5 h-3.5" />
+                      {editor.submissions_count} reponse{editor.submissions_count !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {editor.slug && (
+                    <span className="ml-auto text-xs text-slate-400 font-mono truncate max-w-[240px]">
+                      /f/{editor.slug}
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {editor.slug && (
-                <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
-                  Lien public:{" "}
-                  <span className="font-medium">{`${window.location.origin}/f/${editor.slug}`}</span>
-                </div>
-              )}
-
-              {editor.id && (
-                <FormSubmissionsPanel
+              {/* Tabs */}
+              <div className="rounded-2xl border border-slate-200 overflow-hidden mb-4">
+                <TabBar
+                  tabs={EDITOR_TABS}
+                  active={activeTab}
+                  onChange={handleTabChange}
                   submissionsCount={editor.submissions_count}
-                  submissions={submissions}
-                  submissionsLoading={submissionsLoading}
-                  showSubmissions={showSubmissions}
-                  exportingFormat={exportingFormat}
-                  onToggleSubmissions={handleToggleSubmissions}
-                  onExport={handleExport}
                 />
-              )}
 
-              <div className="sticky bottom-0 z-10 -mx-6 mt-2 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                <div className="bg-white p-4">
+                  {/* TAB: Champs */}
+                  {activeTab === "champs" && (
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <button type="button" className="btn-ghost border text-xs" onClick={expandAllFields}>
+                            Tout ouvrir
+                          </button>
+                          <button type="button" className="btn-ghost border text-xs" onClick={collapseAllFields}>
+                            Tout reduire
+                          </button>
+                        </div>
+                        <AddFieldDropdown onAdd={addField} />
+                      </div>
+
+                      <p className="text-xs text-slate-400">
+                        Glissez pour reordonner · Utilisez les fleches pour deplacer precisement
+                      </p>
+
+                      {editor.fields.map((field, idx) => (
+                        <FieldEditor
+                          key={`${field.key}-${idx}`}
+                          field={field}
+                          idx={idx}
+                          total={editor.fields.length}
+                          otherFields={editor.fields.filter((_, i) => i !== idx)}
+                          isCollapsed={Boolean(collapsedFields[idx])}
+                          isDragging={draggedFieldIndex === idx}
+                          canRemove={editor.fields.length > 1}
+                          onUpdate={(patch) => updateField(idx, patch)}
+                          onRemove={() => removeField(idx)}
+                          onDuplicate={() => duplicateField(idx)}
+                          onMoveUp={() => moveField(idx, idx - 1)}
+                          onMoveDown={() => moveField(idx, idx + 1)}
+                          onToggleCollapsed={() => toggleFieldCollapsed(idx)}
+                          onToggleCondition={(enabled) => toggleFieldCondition(idx, enabled)}
+                          onDragStart={() => setDraggedFieldIndex(idx)}
+                          onDrop={() => {
+                            if (draggedFieldIndex !== null) moveField(draggedFieldIndex, idx);
+                            setDraggedFieldIndex(null);
+                          }}
+                          onDragEnd={() => setDraggedFieldIndex(null)}
+                        />
+                      ))}
+
+                      <button
+                        type="button"
+                        className="w-full rounded-xl border-2 border-dashed border-slate-200 py-3 text-sm text-slate-400 hover:border-orange-300 hover:text-orange-500 transition-colors"
+                        onClick={() => addField("text")}
+                      >
+                        <Plus className="w-4 h-4 inline mr-1" />
+                        Ajouter un champ texte
+                      </button>
+                    </div>
+                  )}
+
+                  {/* TAB: Apparence */}
+                  {activeTab === "apparence" && (
+                    <FormBrandingPanel
+                      settings={editor.settings}
+                      title={editor.title}
+                      description={editor.description}
+                      onChange={(settings) => setEditor((prev) => ({ ...prev, settings }))}
+                    />
+                  )}
+
+                  {/* TAB: Parametres */}
+                  {activeTab === "settings" && (
+                    <FormSettingsPanel
+                      settings={editor.settings}
+                      onChange={(settings) => setEditor((prev) => ({ ...prev, settings }))}
+                    />
+                  )}
+
+                  {/* TAB: Reponses */}
+                  {activeTab === "reponses" && (
+                    editor.id ? (
+                      <FormSubmissionsPanel
+                        formFields={editor.fields}
+                        submissions={submissions}
+                        submissionsLoading={submissionsLoading}
+                        exportingFormat={exportingFormat}
+                        onExport={handleExport}
+                        onDeleteSubmission={handleDeleteSubmission}
+                      />
+                    ) : (
+                      <div className="text-center py-12 text-slate-400">
+                        <ListChecks className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="text-sm">Sauvegardez d&apos;abord le formulaire pour voir les reponses.</p>
+                      </div>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* Sticky footer */}
+              <div className="sticky bottom-0 z-10 -mx-6 flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
                 {!editor.id && lastDraftSavedAt && (
-                  <p className="mr-auto self-center text-xs text-slate-500">
-                    Brouillon auto-sauvegarde a{" "}
-                    {new Date(lastDraftSavedAt).toLocaleTimeString("fr-FR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <p className="mr-auto text-xs text-slate-400">
+                    Brouillon sauvegarde a{" "}
+                    {new Date(lastDraftSavedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setEditorOpen(false)}
-                  className="btn-ghost border"
-                >
+                <button type="button" onClick={() => setEditorOpen(false)} className="btn-ghost border">
                   Annuler
                 </button>
                 <button type="submit" className="btn-primary" disabled={saving}>
                   <FileText className="w-4 h-4" />
-                  {saving ? "Sauvegarde..." : "Enregistrer"}
+                  {saving ? "Sauvegarde..." : editor.id ? "Enregistrer les modifications" : "Creer le formulaire"}
                 </button>
               </div>
             </form>

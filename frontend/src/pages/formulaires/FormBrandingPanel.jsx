@@ -1,133 +1,107 @@
 import { Palette } from "lucide-react";
 
+const PRESET_COLORS = [
+  "#0f766e", "#0369a1", "#7c3aed", "#db2777",
+  "#ea580c", "#16a34a", "#ca8a04", "#374151",
+];
+
 export default function FormBrandingPanel({ settings, title, description, onChange }) {
   const set = (patch) => onChange({ ...settings, ...patch });
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
         <p className="font-medium text-slate-900 inline-flex items-center gap-2">
           <Palette className="w-4 h-4 text-orange-500" />
           Branding / Theme
         </p>
 
+        {/* Couleur principale */}
         <div>
-          <label className="text-xs text-slate-500">Couleur principale</label>
-          <input
-            type="color"
-            className="input mt-1 h-10 p-1"
-            value={settings?.primary_color || "#0f766e"}
-            onChange={(e) => set({ primary_color: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-slate-500">Logo URL</label>
-          <input
-            className="input mt-1"
-            value={settings?.logo_url || ""}
-            onChange={(e) => set({ logo_url: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-slate-500">Image d&apos;entete (upload)</label>
-          <input
-            type="file"
-            accept="image/*"
-            className="input mt-1"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              if (!file.type.startsWith("image/")) {
-                alert("Veuillez choisir une image.");
-                return;
-              }
-              const reader = new FileReader();
-              reader.onload = () => set({ header_image_url: String(reader.result || "") });
-              reader.readAsDataURL(file);
-              e.target.value = "";
-            }}
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-slate-500">Image d&apos;entete (URL)</label>
-          <input
-            className="input mt-1"
-            value={settings?.header_image_url || ""}
-            onChange={(e) => set({ header_image_url: e.target.value })}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-500">Ouverture (date/heure)</label>
-            <input
-              type="datetime-local"
-              className="input mt-1"
-              value={settings?.open_at || ""}
-              onChange={(e) => set({ open_at: e.target.value || null })}
-            />
+          <label className="text-xs font-medium text-slate-500">Couleur principale</label>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {PRESET_COLORS.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={`w-7 h-7 rounded-full border-2 transition-transform hover:scale-110 ${settings?.primary_color === c ? "border-slate-800 scale-110" : "border-transparent"}`}
+                style={{ backgroundColor: c }}
+                onClick={() => set({ primary_color: c })}
+                title={c}
+              />
+            ))}
+            <div className="relative">
+              <input
+                type="color"
+                className="w-7 h-7 rounded-full cursor-pointer border border-slate-200 p-0.5"
+                value={settings?.primary_color || "#0f766e"}
+                onChange={(e) => set({ primary_color: e.target.value })}
+                title="Couleur personnalisee"
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-slate-500">Fermeture (date/heure)</label>
-            <input
-              type="datetime-local"
-              className="input mt-1"
-              value={settings?.close_at || ""}
-              onChange={(e) => set({ close_at: e.target.value || null })}
-            />
+          <p className="mt-1 text-[11px] text-slate-400">Couleur actuelle : <span className="font-mono">{settings?.primary_color || "#0f766e"}</span></p>
+        </div>
+
+        {/* Logo */}
+        <div>
+          <label className="text-xs font-medium text-slate-500">Logo URL</label>
+          <input className="input mt-1 text-sm" value={settings?.logo_url || ""}
+            placeholder="https://..." onChange={(e) => set({ logo_url: e.target.value })} />
+        </div>
+
+        {/* Image d'entête */}
+        <div>
+          <label className="text-xs font-medium text-slate-500">Image d&apos;entete</label>
+          <div className="mt-1 flex gap-2">
+            <input className="input flex-1 text-sm" value={settings?.header_image_url || ""}
+              placeholder="URL de l'image..." onChange={(e) => set({ header_image_url: e.target.value })} />
+          </div>
+          <div className="mt-2">
+            <label className="text-xs text-slate-400 cursor-pointer hover:text-orange-600">
+              ou uploader une image locale :
+              <input type="file" accept="image/*" className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !file.type.startsWith("image/")) return;
+                  const reader = new FileReader();
+                  reader.onload = () => set({ header_image_url: String(reader.result || "") });
+                  reader.readAsDataURL(file);
+                  e.target.value = "";
+                }} />
+            </label>
           </div>
         </div>
 
+        {/* Texte bouton */}
         <div>
-          <label className="text-xs text-slate-500">Texte bouton envoi</label>
-          <input
-            className="input mt-1"
-            value={settings?.submit_label || ""}
-            onChange={(e) => set({ submit_label: e.target.value })}
-          />
-        </div>
-
-        <div>
-          <label className="text-xs text-slate-500">Message succes</label>
-          <textarea
-            className="input mt-1 min-h-20"
-            value={settings?.success_message || ""}
-            onChange={(e) => set({ success_message: e.target.value })}
-          />
+          <label className="text-xs font-medium text-slate-500">Texte du bouton d&apos;envoi</label>
+          <input className="input mt-1 text-sm" value={settings?.submit_label || ""}
+            placeholder="Envoyer" onChange={(e) => set({ submit_label: e.target.value })} />
         </div>
       </div>
 
+      {/* Aperçu */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="font-medium text-slate-900 mb-3">Apercu rapide</p>
-        <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+        <p className="font-medium text-slate-900 mb-3 text-sm">Apercu rapide</p>
+        <div className="rounded-xl border border-slate-100 overflow-hidden">
           {settings?.header_image_url ? (
-            <div className="overflow-hidden rounded-lg border border-slate-200">
-              <img
-                src={settings.header_image_url}
-                alt="Entete formulaire"
-                className="h-24 w-full object-cover"
-              />
-            </div>
-          ) : null}
-          <p className="text-sm font-semibold text-slate-900">
-            {title || "Titre du formulaire"}
-          </p>
-          <p className="text-xs text-slate-500">
-            {description || "Description du formulaire"}
-          </p>
-          <button
-            type="button"
-            className="btn-primary w-full"
-            style={{
-              backgroundColor: settings?.primary_color || "#0f766e",
-              borderColor: settings?.primary_color || "#0f766e",
-            }}
-          >
-            {settings?.submit_label || "Envoyer"}
-          </button>
+            <img src={settings.header_image_url} alt="Entete" className="h-24 w-full object-cover" />
+          ) : (
+            <div className="h-12 w-full" style={{ backgroundColor: settings?.primary_color || "#0f766e", opacity: 0.15 }} />
+          )}
+          <div className="p-4 space-y-2">
+            {settings?.logo_url && (
+              <img src={settings.logo_url} alt="Logo" className="h-8 object-contain" />
+            )}
+            <p className="font-semibold text-slate-900 text-sm">{title || "Titre du formulaire"}</p>
+            <p className="text-xs text-slate-500">{description || "Description du formulaire"}</p>
+            <div className="h-px bg-slate-100 my-2" />
+            <button type="button" className="w-full rounded-lg py-2 text-white text-sm font-medium"
+              style={{ backgroundColor: settings?.primary_color || "#0f766e" }}>
+              {settings?.submit_label || "Envoyer"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
