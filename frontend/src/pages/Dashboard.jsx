@@ -11,6 +11,7 @@ import {
   MapPin,
   Download,
   FileDown,
+  FileText,
   Filter,
   SlidersHorizontal,
 } from "lucide-react";
@@ -40,6 +41,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
+import RapportMensuelModal from "./RapportMensuel";
 
 const markerIcon = new L.Icon({
   iconUrl:
@@ -62,6 +64,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [showRapport, setShowRapport] = useState(false);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
   const [partners, setPartners] = useState([]);
@@ -71,6 +74,7 @@ export default function Dashboard() {
   const kpiRef = useRef(null);
   const [filters, setFilters] = useState({
     year: currentYear,
+    month: "",
     partner_id: "",
     device_id: "",
     gender: "",
@@ -97,6 +101,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const params = { year: filters.year };
+    if (filters.month) params.month = filters.month;
     if (filters.partner_id) params.partner_id = filters.partner_id;
     if (filters.device_id) params.device_id = filters.device_id;
     if (filters.gender) params.gender = filters.gender;
@@ -128,6 +133,7 @@ export default function Dashboard() {
     try {
       setExporting(true);
       const params = { year: filters.year };
+      if (filters.month) params.month = filters.month;
       if (filters.partner_id) params.partner_id = filters.partner_id;
       if (filters.device_id) params.device_id = filters.device_id;
       if (filters.gender) params.gender = filters.gender;
@@ -287,7 +293,7 @@ export default function Dashboard() {
             Filtres analytiques
           </h2>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div>
             <label className="text-xs text-slate-500">Annee</label>
             <select
@@ -300,6 +306,23 @@ export default function Dashboard() {
               {yearOptions.map((y) => (
                 <option key={y} value={y}>
                   {y}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Mois</label>
+            <select
+              className="select mt-1"
+              value={filters.month}
+              onChange={(e) =>
+                setFilters({ ...filters, month: e.target.value })
+              }
+            >
+              <option value="">Tous les mois</option>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {format(new Date(2000, m - 1, 1), "MMMM", { locale: fr })}
                 </option>
               ))}
             </select>
@@ -365,9 +388,13 @@ export default function Dashboard() {
             <FileDown className="w-4 h-4" />
             {exportingPdf ? "PDF..." : "Exporter KPIs"}
           </button>
-          <button className="btn-ghost border border-slate-200 bg-white">
-            <SlidersHorizontal className="w-4 h-4" />
-            Vue personnalisee
+          <button
+            className="btn-primary"
+            onClick={() => setShowRapport(true)}
+            disabled={!summary}
+          >
+            <FileText className="w-4 h-4" />
+            Rapport mensuel
           </button>
         </div>
       </section>
@@ -444,6 +471,16 @@ export default function Dashboard() {
           geoBoundary={geoBoundary}
         />
       </section>
+
+      {showRapport && (
+        <RapportMensuelModal
+          summary={summary}
+          filters={filters}
+          partners={partners}
+          devices={devices}
+          onClose={() => setShowRapport(false)}
+        />
+      )}
     </div>
   );
 }
