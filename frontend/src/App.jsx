@@ -18,6 +18,7 @@ const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
+const CheckinPage = lazy(() => import("./pages/CheckinPage"));
 
 function PageLoader() {
   return (
@@ -38,6 +39,14 @@ export default function App() {
         element={
           <Suspense fallback={<PageLoader />}>
             <PublicForm />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/checkin/:activityId"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <CheckinPage />
           </Suspense>
         }
       />

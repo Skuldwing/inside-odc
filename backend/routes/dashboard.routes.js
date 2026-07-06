@@ -6,8 +6,17 @@ const router = express.Router();
 
 function buildFilters(req) {
   const year = Number(req.query.year) || new Date().getFullYear();
-  const from = req.query.from || `${year}-01-01`;
-  const to = req.query.to || `${year}-12-31`;
+  const month = req.query.month ? Number(req.query.month) : null;
+  
+  let from, to;
+  if (month) {
+    const lastDay = new Date(year, month, 0).getDate();
+    from = req.query.from || `${year}-${String(month).padStart(2, '0')}-01`;
+    to = req.query.to || `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  } else {
+    from = req.query.from || `${year}-01-01`;
+    to = req.query.to || `${year}-12-31`;
+  }
 
   let partnerId = req.query.partner_id || null;
   if (req.user.role === "partner") {
@@ -41,19 +50,21 @@ router.get("/summary", authMiddleware, async (req, res) => {
   try {
     const { where, params, year, from, to, partnerId } = buildFilters(req);
 
-    const durationColCheck = await pool.query(
-      `
-      SELECT 1
-      FROM information_schema.columns
-      WHERE table_name = 'activities'
-        AND column_name = 'duration_hours'
-      LIMIT 1
-      `
-    );
+    const [durationColCheck, participantsManualColCheck] = await Promise.all([
+      pool.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'activities' AND column_name = 'duration_hours' LIMIT 1
+      `),
+      pool.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'activities' AND column_name = 'participants_manual' LIMIT 1
+      `),
+    ]);
+
     const durationExpr =
-      durationColCheck.rowCount > 0
-        ? "a.duration_hours"
-        : "NULL::int";
+      durationColCheck.rowCount > 0 ? "a.duration_hours" : "NULL::int";
+    const participantsManualExpr =
+      participantsManualColCheck.rowCount > 0 ? "a.participants_manual" : "NULL::int";
 
     const baseCte = `
       WITH base AS (
@@ -61,6 +72,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
                a.title,
                a.activity_date,
                ${durationExpr} AS duration_hours,
+               ${participantsManualExpr} AS participants_manual,
                a.location,
                a.device_id,
                COALESCE(d.name, 'Non renseigne') AS device_name,
@@ -76,20 +88,33 @@ router.get("/summary", authMiddleware, async (req, res) => {
         LEFT JOIN participants part ON part.id = ap.participant_id
         WHERE ${where}
       )
+      /* Effectifs par activite : vrais participants si disponibles, sinon participants_manual */
+      , eff AS (
+        SELECT
+          activity_id,
+          MAX(device_name)    AS device_name,
+          MAX(device_color)   AS device_color,
+          MAX(partner_id)     AS partner_id,
+          MAX(partner_name)   AS partner_name,
+          MAX(activity_date)  AS activity_date,
+          MAX(duration_hours) AS duration_hours,
+          MAX(location)       AS location,
+          CASE WHEN COUNT(participant_id) > 0
+               THEN COUNT(participant_id)::int
+               ELSE COALESCE(MAX(participants_manual), 0)::int
+          END AS effective_count
+        FROM base
+        GROUP BY activity_id
+      )
     `;
 
     const totalsQuery = `
       ${baseCte}
-      , activity_hours AS (
-        SELECT activity_id, MAX(duration_hours) AS duration_hours
-        FROM base
-        GROUP BY activity_id
-      )
       SELECT
-        COUNT(DISTINCT activity_id)::int AS activities,
-        COUNT(participant_id)::int AS participants,
-        COALESCE((SELECT SUM(duration_hours) FROM activity_hours), 0)::int AS hours
-      FROM base
+        COUNT(*)::int                              AS activities,
+        COALESCE(SUM(effective_count), 0)::int    AS participants,
+        COALESCE(SUM(duration_hours), 0)::int     AS hours
+      FROM eff
     `;
 
     const genderQuery = `
@@ -103,10 +128,10 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const beneficiariesByDeviceQuery = `
       ${baseCte}
       SELECT device_name AS name,
-             COALESCE(device_color, '#FF7900') AS color,
-             COUNT(participant_id)::int AS value
-      FROM base
-      GROUP BY device_name, device_color
+             COALESCE(MAX(device_color), '#FF7900') AS color,
+             COALESCE(SUM(effective_count), 0)::int AS value
+      FROM eff
+      GROUP BY device_name
       ORDER BY value DESC
     `;
 
@@ -117,8 +142,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
              COALESCE(b.value, 0)::int AS value
       FROM partners pr
       LEFT JOIN (
-        SELECT partner_id, COUNT(participant_id)::int AS value
-        FROM base
+        SELECT partner_id, SUM(effective_count)::int AS value
+        FROM eff
         GROUP BY partner_id
       ) b ON b.partner_id = pr.id
       ${partnerId ? "WHERE pr.id = $3" : ""}
@@ -140,19 +165,33 @@ router.get("/summary", authMiddleware, async (req, res) => {
 
     const trendsQuery = `
       ${baseCte}
-      SELECT to_char(date_trunc('month', activity_date), 'YYYY-MM') AS month,
-             COUNT(DISTINCT activity_id)::int AS activities,
-             COUNT(participant_id)::int AS beneficiaries
-      FROM base
-      GROUP BY date_trunc('month', activity_date)
-      ORDER BY month ASC
+      , all_months AS (
+        SELECT generate_series(
+          date_trunc('month', $1::date),
+          date_trunc('month', $2::date),
+          '1 month'::interval
+        ) AS month_start
+      )
+      , agg AS (
+        SELECT date_trunc('month', activity_date) AS month_start,
+               COUNT(*)::int                           AS activities,
+               COALESCE(SUM(effective_count), 0)::int AS beneficiaries
+        FROM eff
+        GROUP BY date_trunc('month', activity_date)
+      )
+      SELECT to_char(m.month_start, 'YYYY-MM')    AS month,
+             COALESCE(a.activities, 0)::int        AS activities,
+             COALESCE(a.beneficiaries, 0)::int     AS beneficiaries
+      FROM all_months m
+      LEFT JOIN agg a ON a.month_start = m.month_start
+      ORDER BY m.month_start ASC
     `;
 
     const topDevicesQuery = `
       ${baseCte}
       SELECT device_name AS name,
-             COUNT(participant_id)::int AS value
-      FROM base
+             COALESCE(SUM(effective_count), 0)::int AS value
+      FROM eff
       GROUP BY device_name
       ORDER BY value DESC
       LIMIT 5
@@ -161,8 +200,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const topPartnersQuery = `
       ${baseCte}
       SELECT partner_name AS name,
-             COUNT(participant_id)::int AS value
-      FROM base
+             COALESCE(SUM(effective_count), 0)::int AS value
+      FROM eff
       GROUP BY partner_name
       ORDER BY value DESC
       LIMIT 5
@@ -171,8 +210,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const locationsQuery = `
       ${baseCte}
       SELECT COALESCE(location, 'Non renseigne') AS name,
-             COUNT(participant_id)::int AS value
-      FROM base
+             COALESCE(SUM(effective_count), 0)::int AS value
+      FROM eff
       GROUP BY COALESCE(location, 'Non renseigne')
       ORDER BY value DESC
       LIMIT 8
@@ -216,8 +255,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
              COALESCE(b.value, 0)::int AS value
       FROM partners pr
       LEFT JOIN (
-        SELECT partner_id, COUNT(participant_id)::int AS value
-        FROM base
+        SELECT partner_id, SUM(effective_count)::int AS value
+        FROM eff
         GROUP BY partner_id
       ) b ON b.partner_id = pr.id
       WHERE pr.objective_beneficiaries > 0
@@ -397,26 +436,39 @@ router.get("/export", authMiddleware, async (req, res) => {
   try {
     const { where, params, year } = buildFilters(req);
 
+    const pmColCheck = await pool.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'activities' AND column_name = 'participants_manual' LIMIT 1
+    `);
+    const pmExpr = pmColCheck.rowCount > 0 ? "a.participants_manual" : "NULL::int";
+
     const exportQuery = `
       WITH base AS (
         SELECT a.id AS activity_id,
                a.activity_date,
                a.partner_id,
+               ${pmExpr} AS participants_manual,
                ap.participant_id
         FROM activities a
         LEFT JOIN activity_participants ap ON ap.activity_id = a.id
         LEFT JOIN participants part ON part.id = ap.participant_id
         WHERE ${where}
       )
+      , eff AS (
+        SELECT partner_id,
+               CASE WHEN COUNT(participant_id) > 0
+                    THEN COUNT(participant_id)::int
+                    ELSE COALESCE(MAX(participants_manual), 0)::int
+               END AS effective_count
+        FROM base
+        GROUP BY activity_id, partner_id
+      )
       SELECT pr.name,
              pr.objective_beneficiaries,
-             COALESCE(b.value, 0)::int AS realized
+             COALESCE(SUM(b.effective_count), 0)::int AS realized
       FROM partners pr
-      LEFT JOIN (
-        SELECT partner_id, COUNT(participant_id)::int AS value
-        FROM base
-        GROUP BY partner_id
-      ) b ON b.partner_id = pr.id
+      LEFT JOIN eff b ON b.partner_id = pr.id
+      GROUP BY pr.name, pr.objective_beneficiaries
       ORDER BY pr.name ASC
     `;
 

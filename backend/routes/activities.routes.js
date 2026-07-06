@@ -51,6 +51,7 @@ router.post("/", authMiddleware, async (req, res) => {
       location,
       device_id,
       partner_id,
+      participants_manual,
     } = req.body;
 
     if (!title || !activity_date) {
@@ -65,8 +66,8 @@ router.post("/", authMiddleware, async (req, res) => {
     const result = await pool.query(
       `
       INSERT INTO activities
-      (title, description, activity_date, duration_hours, location, device_id, partner_id, created_by)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      (title, description, activity_date, duration_hours, location, device_id, partner_id, created_by, participants_manual)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
       RETURNING *
       `,
       [
@@ -78,6 +79,7 @@ router.post("/", authMiddleware, async (req, res) => {
         device_id,
         resolvedPartnerId,
         req.user.id,
+        participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
       ]
     );
 
@@ -100,6 +102,7 @@ router.put("/:id", authMiddleware, async (req, res) => {
       location,
       device_id,
       partner_id,
+      participants_manual,
     } = req.body;
 
     if (!title || !activity_date) {
@@ -133,8 +136,9 @@ router.put("/:id", authMiddleware, async (req, res) => {
           duration_hours = $4,
           location = $5,
           device_id = $6,
-          partner_id = $7
-      WHERE id = $8
+          partner_id = $7,
+          participants_manual = $8
+      WHERE id = $9
       RETURNING *
       `,
       [
@@ -145,6 +149,7 @@ router.put("/:id", authMiddleware, async (req, res) => {
         location || null,
         device_id || null,
         resolvedPartnerId,
+        participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
         id,
       ]
     );

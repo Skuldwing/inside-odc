@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   MapPin,
@@ -17,7 +17,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
+  QrCode,
+  X,
 } from "lucide-react";
+import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
@@ -57,6 +60,7 @@ export default function Activities({
   const [deleteError, setDeleteError] = useState("");
   const [viewMode, setViewMode] = useState("liste");
   const [calendarDate, setCalendarDate] = useState(new Date());
+  const [qrActivity, setQrActivity] = useState(null);
 
   const [editForm, setEditForm] = useState({
     id: null,
@@ -67,6 +71,7 @@ export default function Activities({
     location: "",
     device_id: "",
     partner_id: "",
+    participants_manual: "",
   });
 
   const [form, setForm] = useState({
@@ -77,6 +82,7 @@ export default function Activities({
     location: "",
     device_id: "",
     partner_id: "",
+    participants_manual: "",
     file: null,
   });
 
@@ -124,6 +130,7 @@ export default function Activities({
           date,
           duration_hours: a.duration_hours || "",
           participants: a.participants_count ?? 0,
+          participants_manual: a.participants_manual ?? null,
           status: statusValue,
           statusLabel:
             statusValue === "completed"
@@ -225,6 +232,7 @@ export default function Activities({
       location: "",
       device_id: "",
       partner_id: "",
+      participants_manual: "",
       file: null,
     });
     setUploadError("");
@@ -255,6 +263,7 @@ export default function Activities({
       location: activity.location === "-" ? "" : activity.location || "",
       device_id: activity.device_id || "",
       partner_id: activity.partner_id || "",
+      participants_manual: activity.participants_manual ?? "",
     });
     setEditOpen(true);
   };
@@ -271,6 +280,7 @@ export default function Activities({
         duration_hours: editForm.duration_hours || null,
         location: editForm.location || null,
         device_id: editForm.device_id || null,
+        participants_manual: editForm.participants_manual !== "" ? Number(editForm.participants_manual) : null,
       };
       if (role === "admin") payload.partner_id = editForm.partner_id || null;
 
@@ -299,39 +309,62 @@ export default function Activities({
     e.preventDefault();
     setUploadError("");
     setUploadResult(null);
-    setImportStep(2);
     setUploading(true);
+
     try {
-      if (!form.file) {
-        setUploadError("Fichier Excel requis");
-        setImportStep(1);
-        return;
+      if (form.file) {
+        // Avec liste Excel → import complet
+        setImportStep(2);
+        setImportStep(3);
+        const fd = new FormData();
+        fd.append("title", form.title);
+        fd.append("description", form.description);
+        fd.append("activity_date", form.activity_date);
+        if (form.duration_hours) fd.append("duration_hours", form.duration_hours);
+        fd.append("location", form.location);
+        if (form.device_id) fd.append("device_id", form.device_id);
+        if (role === "admin" && form.partner_id) {
+          fd.append("partner_id", form.partner_id);
+        } else if (role === "partner" && user?.partner_id) {
+          fd.append("partner_id", user.partner_id);
+        }
+        if (form.participants_manual !== "") fd.append("participants_manual", form.participants_manual);
+        fd.append("file", form.file);
+        const res = await api.post("/import/activity", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        setUploadResult(res.data || {});
+      } else {
+        // Sans fichier → création simple
+        const payload = {
+          title: form.title,
+          description: form.description,
+          activity_date: form.activity_date,
+          duration_hours: form.duration_hours || null,
+          location: form.location || null,
+          device_id: form.device_id || null,
+          participants_manual: form.participants_manual !== "" ? Number(form.participants_manual) : null,
+          partner_id:
+            role === "admin"
+              ? form.partner_id || null
+              : role === "partner"
+              ? user?.partner_id || null
+              : null,
+        };
+        const res = await api.post("/activities", payload);
+        setUploadResult({
+          sans_fichier: true,
+          activity: res.data,
+          participants_importes: 0,
+          total_lignes: 0,
+          lignes_ignorees_nom_prenom_manquants: 0,
+          doublons_dans_activite: 0,
+        });
       }
-
-      setImportStep(3);
-      const fd = new FormData();
-      fd.append("title", form.title);
-      fd.append("description", form.description);
-      fd.append("activity_date", form.activity_date);
-      if (form.duration_hours) fd.append("duration_hours", form.duration_hours);
-      fd.append("location", form.location);
-      if (form.device_id) fd.append("device_id", form.device_id);
-      if (role === "admin" && form.partner_id) {
-        fd.append("partner_id", form.partner_id);
-      } else if (role === "partner" && user?.partner_id) {
-        fd.append("partner_id", user.partner_id);
-      }
-      fd.append("file", form.file);
-
-      const res = await api.post("/import/activity", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      setUploadResult(res.data || {});
       setImportStep(4);
       fetchActivities();
     } catch (err) {
-      setUploadError(err.response?.data?.error || "Erreur import Excel");
+      setUploadError(err.response?.data?.error || "Erreur creation activite");
       setImportStep(1);
     } finally {
       setUploading(false);
@@ -375,7 +408,7 @@ export default function Activities({
             {!isViewer && (
               <button className="btn-primary" onClick={openUploadModal}>
                 <Plus className="w-4 h-4" />
-                Importer
+                Nouvelle activite
               </button>
             )}
           </div>
@@ -464,6 +497,7 @@ export default function Activities({
           canEdit={!isViewer}
           onEdit={openEdit}
           onDelete={handleDelete}
+          onQrCode={setQrActivity}
         />
       ) : (
         <div className="space-y-4">
@@ -478,6 +512,7 @@ export default function Activities({
               canEdit={!isViewer}
               onEdit={() => openEdit(activity)}
               onDelete={() => handleDelete(activity.id)}
+              onQrCode={() => setQrActivity(activity)}
             />
           ))}
         </div>
@@ -485,7 +520,7 @@ export default function Activities({
 
       {openUpload && (
         <ActivityModal
-          title="Importer activite (Excel)"
+          title="Nouvelle activite"
           maxWidthClass="max-w-2xl"
           error={uploadError}
           onClose={closeUploadModal}
@@ -506,7 +541,10 @@ export default function Activities({
               />
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-sm font-medium">Fichier Excel *</label>
+                  <div>
+                    <label className="text-sm font-medium">Liste de presences Excel</label>
+                    <span className="ml-2 text-xs text-slate-400">(optionnel — peut etre ajoute plus tard)</span>
+                  </div>
                   <a
                     href={`${import.meta.env.VITE_API_URL}/import/template`}
                     download="template_liste_presences.xlsx"
@@ -519,7 +557,6 @@ export default function Activities({
                 <input
                   type="file"
                   accept=".xlsx,.xls"
-                  required
                   className="mt-1"
                   onChange={(e) => setForm({ ...form, file: e.target.files?.[0] || null })}
                 />
@@ -530,7 +567,11 @@ export default function Activities({
                   Annuler
                 </button>
                 <button type="submit" disabled={uploading} className="btn-primary disabled:opacity-60">
-                  {uploading ? "Import..." : "Valider l import"}
+                  {uploading
+                    ? "Enregistrement..."
+                    : form.file
+                    ? "Creer et importer la liste"
+                    : "Creer l activite"}
                 </button>
               </div>
             </form>
@@ -543,7 +584,7 @@ export default function Activities({
                 className="btn-ghost border"
                 onClick={openUploadModal}
               >
-                Importer un autre fichier
+                Nouvelle activite
               </button>
               <button type="button" className="btn-primary" onClick={closeUploadModal}>
                 Terminer
@@ -551,6 +592,10 @@ export default function Activities({
             </div>
           )}
         </ActivityModal>
+      )}
+
+      {qrActivity && (
+        <QrModal activity={qrActivity} onClose={() => setQrActivity(null)} />
       )}
 
       {editOpen && (
@@ -617,10 +662,23 @@ function ImportResultSummary({ result }) {
   const ignored = result.lignes_ignorees_nom_prenom_manquants ?? 0;
   const duplicates = result.doublons_dans_activite ?? 0;
 
+  if (result.sans_fichier) {
+    return (
+      <div className="mt-4 space-y-3">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
+          Activite creee avec succes.
+        </div>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-700 text-sm">
+          Aucune liste de presences importee. Vous pourrez l&apos;ajouter ulterieurement via le bouton &laquo;&nbsp;Modifier&nbsp;&raquo;.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-4 space-y-4">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
-        Import termine avec succes.
+        Activite creee et liste importee avec succes.
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryCard label="Lignes Excel" value={total} />
@@ -686,6 +744,19 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
+        <label className="text-sm font-medium">Nombre de presences (estime)</label>
+        <p className="text-xs text-slate-400 mb-1">Remplacement temporaire avant import Excel. Remplace automatiquement par le vrai compte une fois la liste importee.</p>
+        <input
+          type="number"
+          min="0"
+          className="input mt-1"
+          placeholder="Ex: 45"
+          value={form.participants_manual ?? ""}
+          onChange={(e) => setForm({ ...form, participants_manual: e.target.value })}
+        />
+      </div>
+
+      <div>
         <label className="text-sm font-medium">Lieu</label>
         <select
           className="select mt-1"
@@ -745,7 +816,7 @@ const STATUS_COLORS = {
   completed: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
 };
 
-function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete }) {
+function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode }) {
   const [selectedDay, setSelectedDay] = useState(null);
 
   const monthStart = startOfMonth(calendarDate);
@@ -882,6 +953,7 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
                   canEdit={canEdit}
                   onEdit={() => onEdit(activity)}
                   onDelete={() => onDelete(activity.id)}
+                  onQrCode={() => onQrCode && onQrCode(activity)}
                 />
               ))}
             </div>
@@ -909,28 +981,95 @@ function ActivityModal({
   maxWidthClass = "max-w-lg",
 }) {
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className={`card-solid w-full ${maxWidthClass} p-6`}>
-        <div className="flex items-center justify-between gap-3 mb-4">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4 py-4">
+      <div className={`card-solid w-full ${maxWidthClass} flex flex-col max-h-[90vh]`}>
+        {/* Header fixe */}
+        <div className="flex items-center justify-between gap-3 px-6 pt-6 pb-4 flex-shrink-0">
           <h2 className="text-xl font-semibold">{title}</h2>
           <button type="button" onClick={onClose} className="btn-ghost border">
             Fermer
           </button>
         </div>
 
-        {error && (
-          <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
-            {error}
-          </div>
-        )}
-
-        {children}
+        {/* Contenu scrollable */}
+        <div className="overflow-y-auto flex-1 px-6 pb-6">
+          {error && (
+            <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
+              {error}
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );
 }
 
-function ActivityCard({ activity, canEdit, onEdit, onDelete }) {
+function QrModal({ activity, onClose }) {
+  const [dataUrl, setDataUrl] = useState("");
+  const checkinUrl = `${window.location.origin}/checkin/${activity.id}`;
+
+  useEffect(() => {
+    QRCode.toDataURL(checkinUrl, { width: 280, margin: 2, color: { dark: "#1e293b", light: "#ffffff" } })
+      .then(setDataUrl)
+      .catch(() => setDataUrl(""));
+  }, [checkinUrl]);
+
+  const handleDownload = () => {
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `checkin-qr-${activity.id}.png`;
+    a.click();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
+      <div className="card-solid w-full max-w-sm p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-orange-500 font-semibold">QR Code Check-in</p>
+            <h3 className="font-semibold text-slate-900 mt-0.5 leading-tight">{activity.title}</h3>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50">
+            <X className="w-4 h-4 text-slate-500" />
+          </button>
+        </div>
+
+        <div className="flex justify-center mb-4">
+          {dataUrl ? (
+            <img src={dataUrl} alt="QR Code" className="rounded-xl border border-slate-200 shadow-sm" style={{ width: 220, height: 220 }} />
+          ) : (
+            <div className="w-[220px] h-[220px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
+              <QrCode className="w-12 h-12 text-slate-300" />
+            </div>
+          )}
+        </div>
+
+        <p className="text-center text-xs text-slate-400 break-all mb-4">{checkinUrl}</p>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleDownload}
+            disabled={!dataUrl}
+            className="flex-1 btn-primary text-sm disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            Telecharger
+          </button>
+          <button onClick={onClose} className="flex-1 btn-ghost border text-sm">
+            Fermer
+          </button>
+        </div>
+
+        <p className="mt-3 text-center text-[11px] text-slate-400">
+          Les participants scannent ce QR code pour s&apos;inscrire directement.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode }) {
   const statusColors = {
     planned: "bg-blue-100 border-blue-200 text-blue-700",
     ongoing: "bg-orange-100 border-orange-200 text-orange-700",
@@ -962,11 +1101,31 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete }) {
 
         <div className="flex items-center gap-4 lg:gap-6">
           <div className="text-center">
-            <p className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
-              <Users className="h-5 w-5 text-orange-500" />
-              {activity.participants}
-            </p>
-            <p className="text-xs text-slate-500">Participants</p>
+            {activity.participants > 0 ? (
+              <>
+                <p className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
+                  <Users className="h-5 w-5 text-orange-500" />
+                  {activity.participants}
+                </p>
+                <p className="text-xs text-slate-500">Participants</p>
+              </>
+            ) : activity.participants_manual != null ? (
+              <>
+                <p className="text-2xl font-bold text-amber-600 inline-flex items-center gap-1" title="Nombre estime — liste non encore importee">
+                  <Users className="h-5 w-5 text-amber-400" />
+                  ~{activity.participants_manual}
+                </p>
+                <p className="text-xs text-amber-500">Estime</p>
+              </>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-slate-300 inline-flex items-center gap-1">
+                  <Users className="h-5 w-5 text-slate-300" />
+                  —
+                </p>
+                <p className="text-xs text-slate-400">Participants</p>
+              </>
+            )}
           </div>
 
           <span
@@ -977,24 +1136,39 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete }) {
             {activity.statusLabel}
           </span>
 
-          {canEdit && (
-            <div className="flex items-center gap-2">
-              <button
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
-                onClick={onEdit}
-                title="Modifier"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                onClick={onDelete}
-                title="Supprimer"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </div>
+          {activity.participants === 0 && (
+            <span className="badge bg-amber-50 border-amber-200 text-amber-700" title="Aucune liste de presences importee">
+              Sans liste
+            </span>
           )}
+
+          <div className="flex items-center gap-2">
+            <button
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
+              onClick={onQrCode}
+              title="QR Code check-in"
+            >
+              <QrCode className="w-4 h-4" />
+            </button>
+            {canEdit && (
+              <>
+                <button
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
+                  onClick={onEdit}
+                  title="Modifier"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                  onClick={onDelete}
+                  title="Supprimer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

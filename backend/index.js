@@ -19,6 +19,7 @@ const socialKpisRoutes = require("./routes/socialKpis.routes");
 const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const aiRoutes = require("./routes/ai.routes");
 const formsRoutes = require("./routes/forms.routes");
+const checkinRoutes = require("./routes/checkin.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -125,6 +126,7 @@ app.use("/social-kpis", socialKpisRoutes);
 app.use("/social-dashboard", socialDashboardRoutes);
 app.use("/ai", aiRoutes);
 app.use("/forms", formsRoutes);
+app.use("/checkin", checkinRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -139,6 +141,11 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: "Erreur serveur" });
 });
+
+/* ===== MIGRATIONS AU DEMARRAGE ===== */
+pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS participants_manual INTEGER`)
+  .then(() => console.log("Migration OK: participants_manual"))
+  .catch((err) => console.warn("Migration participants_manual:", err.message));
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
