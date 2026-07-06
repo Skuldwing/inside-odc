@@ -12,7 +12,14 @@ import {
   Link2,
   CheckCircle2,
   Download,
+  List,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
 } from "lucide-react";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
+import { fr } from "date-fns/locale";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
 
@@ -48,6 +55,9 @@ export default function Activities({
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [viewMode, setViewMode] = useState("liste");
+  const [calendarDate, setCalendarDate] = useState(new Date());
+
   const [editForm, setEditForm] = useState({
     id: null,
     title: "",
@@ -343,7 +353,32 @@ export default function Activities({
               Gestion, import Excel et suivi des activites terrain.
             </p>
           </div>
-
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setViewMode("liste")}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${viewMode === "liste" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+              >
+                <List className="w-4 h-4" />
+                Liste
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("calendrier")}
+                className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${viewMode === "calendrier" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+              >
+                <CalendarDays className="w-4 h-4" />
+                Calendrier
+              </button>
+            </div>
+            {!isViewer && (
+              <button className="btn-primary" onClick={openUploadModal}>
+                <Plus className="w-4 h-4" />
+                Importer
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -410,31 +445,43 @@ export default function Activities({
         </div>
       </section>
 
-      <div className="space-y-4">
-        {error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">
-            {error}
-          </div>
-        )}
-        {deleteError && (
-          <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">
-            {deleteError}
-          </div>
-        )}
-        {loading && <div className="card p-6 text-center text-slate-500">Chargement...</div>}
-        {!loading && filteredActivities.length === 0 && (
-          <div className="card p-6 text-center text-slate-500">Aucune activite trouvee</div>
-        )}
-        {filteredActivities.map((activity) => (
-          <ActivityCard
-            key={activity.id}
-            activity={activity}
-            canEdit={!isViewer}
-            onEdit={() => openEdit(activity)}
-            onDelete={() => handleDelete(activity.id)}
-          />
-        ))}
-      </div>
+      {error && (
+        <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">
+          {error}
+        </div>
+      )}
+      {deleteError && (
+        <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">
+          {deleteError}
+        </div>
+      )}
+
+      {viewMode === "calendrier" ? (
+        <CalendarView
+          activities={filteredActivities}
+          calendarDate={calendarDate}
+          onDateChange={setCalendarDate}
+          canEdit={!isViewer}
+          onEdit={openEdit}
+          onDelete={handleDelete}
+        />
+      ) : (
+        <div className="space-y-4">
+          {loading && <div className="card p-6 text-center text-slate-500">Chargement...</div>}
+          {!loading && filteredActivities.length === 0 && (
+            <div className="card p-6 text-center text-slate-500">Aucune activite trouvee</div>
+          )}
+          {filteredActivities.map((activity) => (
+            <ActivityCard
+              key={activity.id}
+              activity={activity}
+              canEdit={!isViewer}
+              onEdit={() => openEdit(activity)}
+              onDelete={() => handleDelete(activity.id)}
+            />
+          ))}
+        </div>
+      )}
 
       {openUpload && (
         <ActivityModal
@@ -688,6 +735,160 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
         </select>
       </div>
     </>
+  );
+}
+
+/* ── Calendrier ── */
+const STATUS_COLORS = {
+  planned: { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
+  ongoing: { bg: "bg-orange-100", text: "text-orange-700", dot: "bg-orange-500" },
+  completed: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
+};
+
+function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete }) {
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const monthStart = startOfMonth(calendarDate);
+  const monthEnd = endOfMonth(calendarDate);
+  const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  // Lundi = 0, ..., Dimanche = 6
+  const startPad = (getDay(monthStart) + 6) % 7;
+
+  const activitiesByDate = useMemo(() => {
+    const map = {};
+    activities.forEach((a) => {
+      if (!a.date) return;
+      if (!map[a.date]) map[a.date] = [];
+      map[a.date].push(a);
+    });
+    return map;
+  }, [activities]);
+
+  const dayNames = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+  const prevMonth = () => onDateChange(new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1));
+  const nextMonth = () => onDateChange(new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1));
+  const goToday = () => { onDateChange(new Date()); setSelectedDay(null); };
+
+  const selectedActivities = selectedDay ? (activitiesByDate[selectedDay] || []) : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="card p-4 lg:p-5">
+        {/* Header navigation */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={prevMonth} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50">
+              <ChevronLeft className="w-4 h-4 text-slate-600" />
+            </button>
+            <h2 className="text-base font-semibold text-slate-900 capitalize min-w-[160px] text-center">
+              {format(calendarDate, "MMMM yyyy", { locale: fr })}
+            </h2>
+            <button type="button" onClick={nextMonth} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50">
+              <ChevronRight className="w-4 h-4 text-slate-600" />
+            </button>
+          </div>
+          <button type="button" onClick={goToday} className="btn-ghost border text-sm">
+            Aujourd hui
+          </button>
+        </div>
+
+        {/* Grid */}
+        <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-xl overflow-hidden border border-slate-200">
+          {/* Headers */}
+          {dayNames.map((d) => (
+            <div key={d} className="bg-slate-50 py-2 text-center text-xs font-semibold text-slate-500">
+              {d}
+            </div>
+          ))}
+
+          {/* Padding cells */}
+          {Array.from({ length: startPad }).map((_, i) => (
+            <div key={`pad-${i}`} className="bg-white min-h-[80px] p-1 lg:min-h-[100px]" />
+          ))}
+
+          {/* Day cells */}
+          {days.map((day) => {
+            const key = format(day, "yyyy-MM-dd");
+            const dayActivities = activitiesByDate[key] || [];
+            const isSelected = selectedDay === key;
+            const todayDay = isToday(day);
+
+            return (
+              <div
+                key={key}
+                onClick={() => setSelectedDay(isSelected ? null : key)}
+                className={`bg-white min-h-[80px] lg:min-h-[100px] p-1.5 cursor-pointer transition-colors ${
+                  isSelected ? "bg-orange-50" : "hover:bg-slate-50"
+                }`}
+              >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium mb-1 ${
+                  todayDay
+                    ? "bg-orange-500 text-white"
+                    : isSelected
+                    ? "bg-orange-100 text-orange-700"
+                    : "text-slate-700"
+                }`}>
+                  {format(day, "d")}
+                </div>
+
+                <div className="space-y-0.5">
+                  {dayActivities.slice(0, 2).map((a) => {
+                    const c = STATUS_COLORS[a.status] || STATUS_COLORS.planned;
+                    return (
+                      <div key={a.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight truncate font-medium ${c.bg} ${c.text}`}>
+                        {a.title}
+                      </div>
+                    );
+                  })}
+                  {dayActivities.length > 2 && (
+                    <div className="text-[10px] text-slate-400 px-1">+{dayActivities.length - 2}</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Légende */}
+        <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+          {Object.entries(STATUS_COLORS).map(([status, c]) => (
+            <span key={status} className="flex items-center gap-1.5">
+              <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
+              {status === "planned" ? "Planifiee" : status === "ongoing" ? "En cours" : "Terminee"}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Détail du jour sélectionné */}
+      {selectedDay && (
+        <div className="card p-4">
+          <p className="font-semibold text-slate-900 mb-3 capitalize">
+            {format(parseISO(selectedDay), "EEEE d MMMM yyyy", { locale: fr })}
+            <span className="ml-2 text-sm font-normal text-slate-500">
+              {selectedActivities.length} activite{selectedActivities.length > 1 ? "s" : ""}
+            </span>
+          </p>
+          {selectedActivities.length === 0 ? (
+            <p className="text-sm text-slate-400">Aucune activite ce jour.</p>
+          ) : (
+            <div className="space-y-3">
+              {selectedActivities.map((activity) => (
+                <ActivityCard
+                  key={activity.id}
+                  activity={activity}
+                  canEdit={canEdit}
+                  onEdit={() => onEdit(activity)}
+                  onDelete={() => onDelete(activity.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

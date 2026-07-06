@@ -15,6 +15,7 @@ const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
 const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
+const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
 
@@ -82,6 +83,16 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <SocialDashboard />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="assistant-ia"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <AiAssistant />
               </Suspense>
             </AdminRoute>
           }
