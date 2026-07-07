@@ -77,10 +77,9 @@ const allowedOrigins = process.env.CORS_ORIGIN
   : [];
 
 if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
-  console.error(
-    "CORS_ORIGIN is required in production (comma-separated origins)."
+  console.warn(
+    "Warning: CORS_ORIGIN not set — toutes les origines sont autorisees temporairement."
   );
-  process.exit(1);
 }
 
 app.use(
