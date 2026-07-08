@@ -1052,13 +1052,17 @@ function QrModal({ activity, onClose }) {
           </button>
         </div>
 
-        <div className="flex justify-center mb-4">
+        <div className="flex flex-col items-center mb-4">
           {dataUrl ? (
             <img src={dataUrl} alt="QR Code" className="rounded-xl border border-slate-200 shadow-sm" style={{ width: 220, height: 220 }} />
           ) : (
             <div className="w-[220px] h-[220px] rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-center">
               <QrCode className="w-12 h-12 text-slate-300" />
             </div>
+          )}
+          <p className="mt-3 text-sm font-semibold text-slate-800 text-center leading-tight">{activity.title}</p>
+          {activity.date && (
+            <p className="mt-0.5 text-xs text-slate-500 text-center">{activity.date}</p>
           )}
         </div>
 
