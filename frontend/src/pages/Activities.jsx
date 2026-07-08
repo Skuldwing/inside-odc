@@ -1027,16 +1027,49 @@ function QrModal({ activity, onClose }) {
   const checkinUrl = `${window.location.origin}/checkin/${activity.id}`;
 
   useEffect(() => {
-    QRCode.toDataURL(checkinUrl, { width: 280, margin: 2, color: { dark: "#1e293b", light: "#ffffff" } })
+    QRCode.toDataURL(checkinUrl, { width: 400, margin: 2, color: { dark: "#1e293b", light: "#ffffff" } })
       .then(setDataUrl)
       .catch(() => setDataUrl(""));
   }, [checkinUrl]);
 
   const handleDownload = () => {
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `checkin-qr-${activity.id}.png`;
-    a.click();
+    const qrSize = 400;
+    const padding = 24;
+    const textAreaHeight = 72;
+    const canvas = document.createElement("canvas");
+    canvas.width = qrSize + padding * 2;
+    canvas.height = qrSize + padding * 2 + textAreaHeight;
+    const ctx = canvas.getContext("2d");
+
+    // Fond blanc
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // QR code
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, padding, padding, qrSize, qrSize);
+
+      // Titre
+      ctx.fillStyle = "#1e293b";
+      ctx.font = "bold 20px sans-serif";
+      ctx.textAlign = "center";
+      const maxWidth = canvas.width - padding * 2;
+      ctx.fillText(activity.title, canvas.width / 2, qrSize + padding + 32, maxWidth);
+
+      // Date
+      if (activity.date) {
+        ctx.fillStyle = "#64748b";
+        ctx.font = "16px sans-serif";
+        ctx.fillText(activity.date, canvas.width / 2, qrSize + padding + 58, maxWidth);
+      }
+
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `checkin-qr-${activity.id}.png`;
+      a.click();
+    };
+    img.src = dataUrl;
   };
 
   return (
