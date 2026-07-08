@@ -14,6 +14,8 @@ api.interceptors.request.use(config => {
   return config;
 });
 
+const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/"];
+
 api.interceptors.response.use(
   response => response,
   error => {
@@ -21,7 +23,8 @@ api.interceptors.response.use(
       localStorage.removeItem("user");
       sessionStorage.removeItem("admin_pin");
       sessionStorage.removeItem("admin_pin_time");
-      if (window.location.pathname !== "/login") {
+      const isPublic = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
+      if (!isPublic) {
         window.location.href = "/login";
       }
     }

@@ -305,6 +305,20 @@ export default function Activities({
     }
   };
 
+  const handleExportActivity = async (activity) => {
+    try {
+      const res = await api.get(`/activities/${activity.id}/participants/export`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `presences_${activity.id}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Erreur lors du telechargement de la liste.");
+    }
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
     setUploadError("");
@@ -498,6 +512,7 @@ export default function Activities({
           onEdit={openEdit}
           onDelete={handleDelete}
           onQrCode={setQrActivity}
+          onExport={handleExportActivity}
         />
       ) : (
         <div className="space-y-4">
@@ -513,6 +528,7 @@ export default function Activities({
               onEdit={() => openEdit(activity)}
               onDelete={() => handleDelete(activity.id)}
               onQrCode={() => setQrActivity(activity)}
+              onExport={() => handleExportActivity(activity)}
             />
           ))}
         </div>
@@ -816,7 +832,7 @@ const STATUS_COLORS = {
   completed: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
 };
 
-function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode }) {
+function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode, onExport }) {
   const [selectedDay, setSelectedDay] = useState(null);
 
   const monthStart = startOfMonth(calendarDate);
@@ -954,6 +970,7 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
                   onEdit={() => onEdit(activity)}
                   onDelete={() => onDelete(activity.id)}
                   onQrCode={() => onQrCode && onQrCode(activity)}
+                  onExport={() => onExport && onExport(activity)}
                 />
               ))}
             </div>
@@ -1069,7 +1086,7 @@ function QrModal({ activity, onClose }) {
   );
 }
 
-function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode }) {
+function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport }) {
   const statusColors = {
     planned: "bg-blue-100 border-blue-200 text-blue-700",
     ongoing: "bg-orange-100 border-orange-200 text-orange-700",
@@ -1150,6 +1167,15 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode }) {
             >
               <QrCode className="w-4 h-4" />
             </button>
+            {activity.participants > 0 && (
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
+                onClick={onExport}
+                title="Telecharger liste de presences"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
             {canEdit && (
               <>
                 <button

@@ -161,6 +161,62 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== EXPORT LISTE PRESENCES PAR ACTIVITE ===== */
+router.get("/:id/participants/export", authMiddleware, async (req, res) => {
+  try {
+    const XLSX = require("xlsx");
+    const { id } = req.params;
+
+    const actRes = await pool.query(
+      `SELECT a.title, a.activity_date, p.name AS partner_name
+       FROM activities a LEFT JOIN partners p ON p.id = a.partner_id
+       WHERE a.id = $1`,
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activite introuvable" });
+
+    const activity = actRes.rows[0];
+
+    const partRes = await pool.query(
+      `SELECT p.prenom, p.nom, p.telephone, p.email, p.genre, p.age_range, p.structure
+       FROM participants p
+       JOIN activity_participants ap ON ap.participant_id = p.id
+       WHERE ap.activity_id = $1
+       ORDER BY p.nom, p.prenom`,
+      [id]
+    );
+
+    const rows = partRes.rows.map((p) => ({
+      "Prenom": p.prenom || "",
+      "Nom": p.nom || "",
+      "Telephone": p.telephone || "",
+      "Email": p.email || "",
+      "Genre": p.genre === "F" ? "Femme" : p.genre === "H" ? "Homme" : p.genre || "",
+      "Tranche d'age": p.age_range || "",
+      "Structure / Etablissement": p.structure || "",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(
+      rows.length > 0
+        ? rows
+        : [{ "Prenom": "", "Nom": "", "Telephone": "", "Email": "", "Genre": "", "Tranche d'age": "", "Structure / Etablissement": "" }]
+    );
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Presences");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+    const safeName = activity.title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
+    const filename = `presences_${safeName}_${activity.activity_date}.xlsx`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== DELETE ACTIVITY ===== */
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
