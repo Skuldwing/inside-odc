@@ -21,6 +21,11 @@ export default function CheckinPage() {
   const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
+    // Vérifier si déjà soumis sur cet appareil
+    const done = localStorage.getItem(`checkin_done_${activityId}`);
+    if (done) {
+      setResult({ ok: true, message: "Votre presence a deja ete enregistree pour cette activite.", already: true });
+    }
     api.get(`/checkin/${activityId}`)
       .then((r) => setActivity(r.data))
       .catch((err) => setLoadError(err?.response?.data?.error || "Activite introuvable"));
@@ -30,11 +35,12 @@ export default function CheckinPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.nom.trim() || !form.prenom.trim()) return;
+    if (!form.nom.trim() || !form.prenom.trim() || !form.telephone.trim()) return;
     setSubmitting(true);
     setSubmitError("");
     try {
       const res = await api.post(`/checkin/${activityId}`, form);
+      localStorage.setItem(`checkin_done_${activityId}`, "1");
       setResult(res.data);
     } catch (err) {
       const d = err?.response?.data;
@@ -166,9 +172,10 @@ export default function CheckinPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-600">Telephone</label>
+              <label className="text-xs font-medium text-slate-600">Telephone *</label>
               <input
                 type="tel"
+                required
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 placeholder="77 000 00 00"
                 value={form.telephone}

@@ -47,6 +47,9 @@ router.post("/:activityId", async (req, res) => {
     if (!nom || !prenom) {
       return res.status(400).json({ error: "Nom et prenom requis" });
     }
+    if (!telephone) {
+      return res.status(400).json({ error: "Numero de telephone requis" });
+    }
 
     // Vérifie que l'activité existe
     const actRes = await client.query("SELECT id, title, activity_date FROM activities WHERE id = $1", [activityId]);
