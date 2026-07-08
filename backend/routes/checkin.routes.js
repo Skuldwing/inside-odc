@@ -3,8 +3,8 @@ const pool = require("../db");
 
 const router = express.Router();
 
-function isFormOpen(activityDate) {
-  const deadline = new Date(activityDate);
+function isFormOpen(activityDate, dateFin) {
+  const deadline = new Date(dateFin || activityDate);
   deadline.setUTCHours(23, 59, 59, 999);
   return new Date() <= deadline;
 }
@@ -14,7 +14,7 @@ router.get("/:activityId", async (req, res) => {
   try {
     const { activityId } = req.params;
     const result = await pool.query(
-      `SELECT a.id, a.title, a.description, a.activity_date, a.location,
+      `SELECT a.id, a.title, a.description, a.activity_date, a.date_fin, a.location,
               p.name AS partner_name, d.name AS device_name,
               COALESCE(ap.cnt, 0)::int AS participants_count
        FROM activities a
@@ -29,7 +29,7 @@ router.get("/:activityId", async (req, res) => {
       return res.status(404).json({ error: "Activite introuvable" });
     }
     const activity = result.rows[0];
-    activity.is_open = isFormOpen(activity.activity_date);
+    activity.is_open = isFormOpen(activity.activity_date, activity.date_fin);
     res.json(activity);
   } catch (err) {
     console.error(err);
@@ -52,12 +52,12 @@ router.post("/:activityId", async (req, res) => {
     }
 
     // Vérifie que l'activité existe
-    const actRes = await client.query("SELECT id, title, activity_date FROM activities WHERE id = $1", [activityId]);
+    const actRes = await client.query("SELECT id, title, activity_date, date_fin FROM activities WHERE id = $1", [activityId]);
     if (!actRes.rows.length) {
       return res.status(404).json({ error: "Activite introuvable" });
     }
 
-    if (!isFormOpen(actRes.rows[0].activity_date)) {
+    if (!isFormOpen(actRes.rows[0].activity_date, actRes.rows[0].date_fin)) {
       return res.status(403).json({ error: "La periode d'inscription est cloturee.", closed: true });
     }
 

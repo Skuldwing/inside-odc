@@ -67,6 +67,7 @@ export default function Activities({
     title: "",
     description: "",
     activity_date: "",
+    date_fin: "",
     duration_hours: "",
     location: "",
     device_id: "",
@@ -78,6 +79,7 @@ export default function Activities({
     title: "",
     description: "",
     activity_date: "",
+    date_fin: "",
     duration_hours: "",
     location: "",
     device_id: "",
@@ -131,6 +133,7 @@ export default function Activities({
           duration_hours: a.duration_hours || "",
           participants: a.participants_count ?? 0,
           participants_manual: a.participants_manual ?? null,
+          date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
           status: statusValue,
           statusLabel:
             statusValue === "completed"
@@ -259,6 +262,7 @@ export default function Activities({
       title: activity.title || "",
       description: activity.description || "",
       activity_date: activity.date || "",
+      date_fin: activity.date_fin || "",
       duration_hours: activity.duration_hours || "",
       location: activity.location === "-" ? "" : activity.location || "",
       device_id: activity.device_id || "",
@@ -277,6 +281,7 @@ export default function Activities({
         title: editForm.title,
         description: editForm.description,
         activity_date: editForm.activity_date,
+        date_fin: editForm.date_fin || null,
         duration_hours: editForm.duration_hours || null,
         location: editForm.location || null,
         device_id: editForm.device_id || null,
@@ -334,6 +339,7 @@ export default function Activities({
         fd.append("title", form.title);
         fd.append("description", form.description);
         fd.append("activity_date", form.activity_date);
+        if (form.date_fin) fd.append("date_fin", form.date_fin);
         if (form.duration_hours) fd.append("duration_hours", form.duration_hours);
         fd.append("location", form.location);
         if (form.device_id) fd.append("device_id", form.device_id);
@@ -354,6 +360,7 @@ export default function Activities({
           title: form.title,
           description: form.description,
           activity_date: form.activity_date,
+          date_fin: form.date_fin || null,
           duration_hours: form.duration_hours || null,
           location: form.location || null,
           device_id: form.device_id || null,
@@ -738,13 +745,24 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
-        <label className="text-sm font-medium">Date *</label>
+        <label className="text-sm font-medium">Date de debut *</label>
         <input
           type="date"
           required
           className="input mt-1"
           value={form.activity_date}
           onChange={(e) => setForm({ ...form, activity_date: e.target.value })}
+        />
+      </div>
+
+      <div>
+        <label className="text-sm font-medium">Date de fin <span className="text-slate-400 font-normal text-xs">(optionnel — si activite multi-jours)</span></label>
+        <input
+          type="date"
+          className="input mt-1"
+          min={form.activity_date || undefined}
+          value={form.date_fin || ""}
+          onChange={(e) => setForm({ ...form, date_fin: e.target.value })}
         />
       </div>
 
@@ -1148,7 +1166,9 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
             </span>
             <span className="flex items-center gap-1">
               <Calendar size={14} />
-              {activity.date || "-"}
+              {activity.date_fin && activity.date_fin !== activity.date
+                ? `Du ${activity.date} au ${activity.date_fin}`
+                : activity.date || "-"}
             </span>
           </p>
         </div>

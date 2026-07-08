@@ -146,6 +146,10 @@ pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS participants_manual 
   .then(() => console.log("Migration OK: participants_manual"))
   .catch((err) => console.warn("Migration participants_manual:", err.message));
 
+pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS date_fin DATE`)
+  .then(() => console.log("Migration OK: date_fin"))
+  .catch((err) => console.warn("Migration date_fin:", err.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
