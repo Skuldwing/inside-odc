@@ -3,6 +3,12 @@ const pool = require("../db");
 
 const router = express.Router();
 
+function isFormOpen(activityDate) {
+  const deadline = new Date(activityDate);
+  deadline.setUTCHours(23, 59, 59, 999);
+  return new Date() <= deadline;
+}
+
 /* ── GET /checkin/:activityId — info publique sur l'activite ── */
 router.get("/:activityId", async (req, res) => {
   try {
@@ -22,7 +28,9 @@ router.get("/:activityId", async (req, res) => {
     if (!result.rows.length) {
       return res.status(404).json({ error: "Activite introuvable" });
     }
-    res.json(result.rows[0]);
+    const activity = result.rows[0];
+    activity.is_open = isFormOpen(activity.activity_date);
+    res.json(activity);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -41,9 +49,13 @@ router.post("/:activityId", async (req, res) => {
     }
 
     // Vérifie que l'activité existe
-    const actRes = await client.query("SELECT id, title FROM activities WHERE id = $1", [activityId]);
+    const actRes = await client.query("SELECT id, title, activity_date FROM activities WHERE id = $1", [activityId]);
     if (!actRes.rows.length) {
       return res.status(404).json({ error: "Activite introuvable" });
+    }
+
+    if (!isFormOpen(actRes.rows[0].activity_date)) {
+      return res.status(403).json({ error: "La periode d'inscription est cloturee.", closed: true });
     }
 
     await client.query("BEGIN");

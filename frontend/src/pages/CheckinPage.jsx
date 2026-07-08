@@ -68,6 +68,26 @@ export default function CheckinPage() {
     );
   }
 
+  /* ── Formulaire clôturé ── */
+  if (activity && !activity.is_open) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-white px-4 text-center">
+        <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mb-6">
+          <AlertCircle className="w-10 h-10 text-slate-400" />
+        </div>
+        <p className="text-xl font-bold text-slate-800 mb-2">Formulaire cloture</p>
+        <p className="text-sm text-slate-500 max-w-xs mb-6">
+          Les inscriptions pour cette activite sont closes depuis le {formatDate(activity.activity_date)} a 23h59.
+        </p>
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm text-slate-700 max-w-xs w-full">
+          <p className="font-semibold text-slate-800 mb-1">{activity.title}</p>
+          {activity.location && <p className="text-slate-400 text-xs">{activity.location}</p>}
+        </div>
+        <p className="mt-8 text-xs text-slate-400">Orange Digital Center Senegal</p>
+      </div>
+    );
+  }
+
   /* ── Succès ── */
   if (result) {
     return (
