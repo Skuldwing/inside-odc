@@ -19,6 +19,11 @@ const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
 const CheckinPage = lazy(() => import("./pages/CheckinPage"));
+const VoteJoin = lazy(() => import("./pages/VoteJoin"));
+const VoteJury = lazy(() => import("./pages/VoteJury"));
+const Vote = lazy(() => import("./pages/Vote"));
+const VoteConfig = lazy(() => import("./pages/VoteConfig"));
+const VoteManage = lazy(() => import("./pages/VoteManage"));
 
 function PageLoader() {
   return (
@@ -47,6 +52,22 @@ export default function App() {
         element={
           <Suspense fallback={<PageLoader />}>
             <CheckinPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/vote/join/:sessionId"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <VoteJoin />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/vote/jury/:sessionId"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <VoteJury />
           </Suspense>
         }
       />
@@ -152,6 +173,36 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <Formulaires />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="vote"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <Vote />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="vote/:id"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <VoteConfig />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="vote/:id/manage"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <VoteManage />
               </Suspense>
             </AdminRoute>
           }

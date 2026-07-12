@@ -10,6 +10,7 @@ import {
   FileText,
   BarChart3,
   Bot,
+  Award,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -80,6 +81,13 @@ const managementNavigation = [
     path: "/formulaires",
     roles: ["admin"],
   },
+  {
+    name: "Vote / Jury",
+    icon: Award,
+    path: "/vote",
+    roles: ["admin"],
+    matchPrefix: true,
+  },
 ];
 
 export default function Sidebar({
@@ -133,9 +141,10 @@ export default function Sidebar({
             {navigation
               .filter((item) => item.roles.includes(safeRole))
               .map((item) => {
-                const active =
-                  (item.path === "/" && location.pathname === "/") ||
-                  (item.path !== "/" && location.pathname === item.path);
+                const active = item.matchPrefix
+                  ? location.pathname.startsWith(item.path)
+                  : (item.path === "/" && location.pathname === "/") ||
+                    (item.path !== "/" && location.pathname === item.path);
 
                 const Icon = item.icon;
 

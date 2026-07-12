@@ -20,6 +20,7 @@ const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const aiRoutes = require("./routes/ai.routes");
 const formsRoutes = require("./routes/forms.routes");
 const checkinRoutes = require("./routes/checkin.routes");
+const voteRoutes = require("./routes/vote.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -126,6 +127,7 @@ app.use("/social-dashboard", socialDashboardRoutes);
 app.use("/ai", aiRoutes);
 app.use("/forms", formsRoutes);
 app.use("/checkin", checkinRoutes);
+app.use("/vote", voteRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -149,6 +151,68 @@ pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS participants_manual 
 pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS date_fin DATE`)
   .then(() => console.log("Migration OK: date_fin"))
   .catch((err) => console.warn("Migration date_fin:", err.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    event_date DATE,
+    status VARCHAR(20) DEFAULT 'draft',
+    active_project_id UUID,
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_sessions")).catch(e => console.warn("Migration vote_sessions:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_projects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    porteur VARCHAR(255),
+    description TEXT,
+    order_num INTEGER DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_projects")).catch(e => console.warn("Migration vote_projects:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_criteria (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    scale INTEGER DEFAULT 10,
+    weight NUMERIC(4,2) DEFAULT 1,
+    order_num INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_criteria")).catch(e => console.warn("Migration vote_criteria:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_jury (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    pseudo VARCHAR(100) NOT NULL,
+    avatar VARCHAR(20) DEFAULT '🧑',
+    token UUID UNIQUE DEFAULT gen_random_uuid(),
+    joined_at TIMESTAMP DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_jury")).catch(e => console.warn("Migration vote_jury:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_scores (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES vote_projects(id) ON DELETE CASCADE,
+    jury_id UUID REFERENCES vote_jury(id) ON DELETE CASCADE,
+    criteria_id UUID REFERENCES vote_criteria(id) ON DELETE CASCADE,
+    score NUMERIC(4,1) NOT NULL,
+    comment TEXT,
+    submitted_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(project_id, jury_id, criteria_id)
+  )
+`).then(() => console.log("Migration OK: vote_scores")).catch(e => console.warn("Migration vote_scores:", e.message));
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;

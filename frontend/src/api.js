@@ -14,7 +14,7 @@ api.interceptors.request.use(config => {
   return config;
 });
 
-const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/"];
+const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/", "/vote/join/", "/vote/jury/"];
 
 api.interceptors.response.use(
   response => response,
