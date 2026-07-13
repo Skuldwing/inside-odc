@@ -61,6 +61,10 @@ export default function Activities({
   const [viewMode, setViewMode] = useState("liste");
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [qrActivity, setQrActivity] = useState(null);
+  const [importFile, setImportFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importDirectResult, setImportDirectResult] = useState(null);
+  const [importDirectError, setImportDirectError] = useState("");
 
   const [editForm, setEditForm] = useState({
     id: null,
@@ -257,6 +261,10 @@ export default function Activities({
 
   const openEdit = (activity) => {
     setEditError("");
+    setImportFile(null);
+    setImporting(false);
+    setImportDirectResult(null);
+    setImportDirectError("");
     setEditForm({
       id: activity.id,
       title: activity.title || "",
@@ -270,6 +278,26 @@ export default function Activities({
       participants_manual: activity.participants_manual ?? "",
     });
     setEditOpen(true);
+  };
+
+  const handleDirectImport = async () => {
+    if (!importFile) return;
+    setImporting(true);
+    setImportDirectError("");
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await api.post(`/import/direct/${editForm.id}`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setImportDirectResult(res.data);
+      setEditForm(f => ({ ...f, participants_manual: "" }));
+      fetchActivities();
+    } catch (err) {
+      setImportDirectError(err?.response?.data?.error || "Erreur lors de l'import.");
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleEditSave = async (e) => {
@@ -646,6 +674,50 @@ export default function Activities({
               </button>
             </div>
           </form>
+
+          {/* Import liste de présences */}
+          <div className="mt-5 pt-5 border-t border-slate-200">
+            <p className="text-sm font-semibold text-slate-700 mb-3">Importer la liste de présences Excel</p>
+
+            {editForm.participants_manual !== "" && editForm.participants_manual !== null && !importDirectResult && (
+              <div className="mb-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+                Estimation actuelle : <strong>{editForm.participants_manual} présences</strong>. L'import remplacera ce chiffre par le comptage réel.
+              </div>
+            )}
+
+            {!importDirectResult ? (
+              <div className="space-y-3">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={e => { setImportFile(e.target.files[0] || null); setImportDirectError(""); }}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
+                />
+                {importDirectError && (
+                  <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{importDirectError}</p>
+                )}
+                <button
+                  type="button"
+                  disabled={!importFile || importing}
+                  onClick={handleDirectImport}
+                  className="btn-primary text-sm disabled:opacity-50"
+                >
+                  {importing ? "Import en cours..." : "Importer"}
+                </button>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 space-y-1">
+                <p className="font-semibold">Import réussi !</p>
+                <p>{importDirectResult.participants_importes} participant(s) importé(s)</p>
+                {importDirectResult.doublons_dans_activite > 0 && (
+                  <p className="text-xs text-emerald-700">{importDirectResult.doublons_dans_activite} doublon(s) ignoré(s)</p>
+                )}
+                {importDirectResult.lignes_ignorees_nom_prenom_manquants > 0 && (
+                  <p className="text-xs text-amber-700">{importDirectResult.lignes_ignorees_nom_prenom_manquants} ligne(s) ignorée(s) (nom/prénom manquant)</p>
+                )}
+              </div>
+            )}
+          </div>
         </ActivityModal>
       )}
     </div>

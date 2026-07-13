@@ -539,4 +539,73 @@ router.post(
   }
 );
 
+/* ===== IMPORT DIRECT SUR ACTIVITE EXISTANTE (sans validation titre/date) ===== */
+router.post(
+  "/direct/:activityId",
+  authMiddleware,
+  upload.single("file"),
+  async (req, res) => {
+    const client = await pool.connect();
+    let inTransaction = false;
+    try {
+      const { activityId } = req.params;
+
+      if (!req.file) {
+        return res.status(400).json({ error: "Fichier Excel requis" });
+      }
+
+      const activityResult = await client.query(
+        "SELECT id, title, partner_id FROM activities WHERE id = $1",
+        [activityId]
+      );
+      if (!activityResult.rows.length) {
+        return res.status(404).json({ error: "Activite introuvable" });
+      }
+      const activity = activityResult.rows[0];
+
+      if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+        return res.status(403).json({ error: "Acces refuse" });
+      }
+
+      const workbook = xlsx.readFile(req.file.path);
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = xlsx.utils.sheet_to_json(sheet);
+
+      if (rows.length === 0) {
+        return res.status(400).json({ error: "Fichier Excel vide" });
+      }
+
+      await client.query("BEGIN");
+      inTransaction = true;
+
+      const stats = await importParticipantsRows(client, rows, activityId);
+
+      /* Effacer l'estimation manuelle maintenant qu'on a les vraies données */
+      await client.query(
+        "UPDATE activities SET participants_manual = NULL WHERE id = $1",
+        [activityId]
+      );
+
+      await client.query("COMMIT");
+      inTransaction = false;
+
+      res.json({
+        message: "Import termine avec succes",
+        activite: activity.title,
+        participants_importes: stats.imported,
+        total_lignes: rows.length,
+        lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
+        doublons_dans_activite: stats.duplicatesInActivity,
+      });
+    } catch (err) {
+      if (inTransaction) await client.query("ROLLBACK");
+      console.error(err);
+      res.status(500).json({ error: "Erreur import Excel" });
+    } finally {
+      client.release();
+      safeUnlink(req.file?.path);
+    }
+  }
+);
+
 module.exports = router;
