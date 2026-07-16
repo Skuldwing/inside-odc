@@ -21,7 +21,7 @@ export default function VoteConfig() {
 
   /* editable session info */
   const [editInfo, setEditInfo] = useState(false);
-  const [infoForm, setInfoForm] = useState({ name: "", event_date: "" });
+  const [infoForm, setInfoForm] = useState({ name: "", event_date: "", pitch_duration_minutes: 5 });
   const [savingInfo, setSavingInfo] = useState(false);
 
   /* project form */
@@ -42,7 +42,7 @@ export default function VoteConfig() {
     try {
       const r = await api.get(`/vote/sessions/${id}`);
       setSession(r.data);
-      setInfoForm({ name: r.data.name, event_date: r.data.event_date ? String(r.data.event_date).slice(0, 10) : "" });
+      setInfoForm({ name: r.data.name, event_date: r.data.event_date ? String(r.data.event_date).slice(0, 10) : "", pitch_duration_minutes: r.data.pitch_duration_minutes ?? 5 });
       if (r.data.status !== "draft") generateQr(r.data.id);
     } catch {
       setError("Session introuvable.");
@@ -217,6 +217,19 @@ export default function VoteConfig() {
               <label className="text-xs font-medium text-slate-600">Date</label>
               <input type="date" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" value={infoForm.event_date} onChange={e => setInfoForm(p => ({ ...p, event_date: e.target.value }))} />
             </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Durée du pitch</label>
+              <select
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none bg-white"
+                value={infoForm.pitch_duration_minutes}
+                onChange={e => setInfoForm(p => ({ ...p, pitch_duration_minutes: Number(e.target.value) }))}
+              >
+                {[1, 2, 3, 5, 7, 10, 15, 20].map(n => (
+                  <option key={n} value={n}>{n} minute{n > 1 ? "s" : ""}</option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">Timer affiché au jury pendant le pitch</p>
+            </div>
             <button onClick={saveInfo} disabled={savingInfo} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
               {savingInfo ? "Sauvegarde..." : "Sauvegarder"}
             </button>
@@ -225,6 +238,7 @@ export default function VoteConfig() {
           <div className="text-sm text-slate-700 space-y-1">
             <p><span className="text-slate-500">Nom :</span> {session.name}</p>
             <p><span className="text-slate-500">Date :</span> {session.event_date ? new Date(session.event_date).toLocaleDateString("fr-FR") : "—"}</p>
+            <p><span className="text-slate-500">Durée pitch :</span> {session.pitch_duration_minutes ?? 5} min</p>
             <p><span className="text-slate-500">Statut :</span> {STATUS_LABEL[session.status]}</p>
           </div>
         )}

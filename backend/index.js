@@ -214,6 +214,12 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: vote_scores")).catch(e => console.warn("Migration vote_scores:", e.message));
 
+/* Colonnes timer (ajout safe sur tables existantes) */
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS pitch_duration_minutes INT DEFAULT 5`)
+  .then(() => console.log("Migration OK: vote_sessions.pitch_duration_minutes")).catch(e => console.warn("Migration pitch_duration_minutes:", e.message));
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ`)
+  .then(() => console.log("Migration OK: vote_projects.started_at")).catch(e => console.warn("Migration started_at:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

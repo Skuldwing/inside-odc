@@ -1,7 +1,51 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Clock, CheckCircle2, Award, AlertCircle, Send } from "lucide-react";
+import { Loader2, Clock, CheckCircle2, Award, AlertCircle, Send, Timer } from "lucide-react";
 import api from "../api";
+
+function PitchTimer({ startedAt, durationMinutes }) {
+  const [timeLeft, setTimeLeft] = useState(null);
+
+  useEffect(() => {
+    if (!startedAt || !durationMinutes) return;
+    const endMs = new Date(startedAt).getTime() + durationMinutes * 60 * 1000;
+    const calc = () => Math.round((endMs - Date.now()) / 1000);
+    setTimeLeft(calc());
+    const iv = setInterval(() => setTimeLeft(calc()), 1000);
+    return () => clearInterval(iv);
+  }, [startedAt, durationMinutes]);
+
+  if (timeLeft === null) return null;
+
+  const elapsed = timeLeft <= 0;
+  const mins = Math.floor(Math.abs(timeLeft) / 60);
+  const secs = Math.abs(timeLeft) % 60;
+  const display = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  const pct = Math.max(0, Math.min(100, (timeLeft / (durationMinutes * 60)) * 100));
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 mb-4 ${elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+          <Timer className="w-3.5 h-3.5" />
+          Temps du pitch
+        </div>
+        <span className={`font-mono font-bold text-lg tabular-nums ${elapsed ? "text-red-600" : timeLeft < 30 ? "text-amber-600" : "text-slate-800"}`}>
+          {elapsed ? "+" : ""}{display}
+        </span>
+      </div>
+      <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : "bg-orange-400"}`}
+          style={{ width: elapsed ? "100%" : `${pct}%` }}
+        />
+      </div>
+      {elapsed && (
+        <p className="text-xs text-red-600 mt-1.5 font-medium">Temps écoulé — le jury délibère</p>
+      )}
+    </div>
+  );
+}
 
 export default function VoteJury() {
   const { sessionId } = useParams();
@@ -166,6 +210,8 @@ export default function VoteJury() {
             <p className="text-xs text-slate-400 mt-2 max-w-xs mx-auto">{proj.description}</p>
           )}
         </div>
+
+        <PitchTimer startedAt={proj.started_at} durationMinutes={status.pitch_duration_minutes} />
 
         {submitted ? (
           /* Already voted — show summary */

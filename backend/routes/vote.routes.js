@@ -46,11 +46,11 @@ router.get("/sessions", authMiddleware, async (req, res) => {
 /* POST /vote/sessions */
 router.post("/sessions", authMiddleware, async (req, res) => {
   try {
-    const { name, event_date } = req.body;
+    const { name, event_date, pitch_duration_minutes } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
     const r = await pool.query(
-      "INSERT INTO vote_sessions (name, event_date, created_by) VALUES ($1,$2,$3) RETURNING *",
-      [name.trim(), event_date || null, req.user.id]
+      "INSERT INTO vote_sessions (name, event_date, pitch_duration_minutes, created_by) VALUES ($1,$2,$3,$4) RETURNING *",
+      [name.trim(), event_date || null, pitch_duration_minutes || 5, req.user.id]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -80,10 +80,10 @@ router.get("/sessions/:id", authMiddleware, async (req, res) => {
 /* PUT /vote/sessions/:id */
 router.put("/sessions/:id", authMiddleware, async (req, res) => {
   try {
-    const { name, event_date } = req.body;
+    const { name, event_date, pitch_duration_minutes } = req.body;
     const r = await pool.query(
-      "UPDATE vote_sessions SET name=$1, event_date=$2 WHERE id=$3 RETURNING *",
-      [name, event_date || null, req.params.id]
+      "UPDATE vote_sessions SET name=$1, event_date=$2, pitch_duration_minutes=$3 WHERE id=$4 RETURNING *",
+      [name, event_date || null, pitch_duration_minutes || 5, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Session introuvable" });
     res.json(r.rows[0]);
@@ -139,11 +139,14 @@ router.put("/sessions/:id/active-project", authMiddleware, async (req, res) => {
   try {
     const { project_id } = req.body;
     await pool.query(
-      "UPDATE vote_projects SET status='pending' WHERE session_id=$1 AND status='active'",
+      "UPDATE vote_projects SET status='pending', started_at=NULL WHERE session_id=$1 AND status='active'",
       [req.params.id]
     );
     if (project_id) {
-      await pool.query("UPDATE vote_projects SET status='active' WHERE id=$1", [project_id]);
+      await pool.query(
+        "UPDATE vote_projects SET status='active', started_at=NOW() WHERE id=$1",
+        [project_id]
+      );
     }
     const r = await pool.query(
       "UPDATE vote_sessions SET active_project_id=$1 WHERE id=$2 RETURNING *",
@@ -217,7 +220,7 @@ router.get("/sessions/:id/live", authMiddleware, async (req, res) => {
       criteria = critRes.rows.map(c => ({ ...c, ...avgMap[c.id] }));
     }
 
-    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length });
+    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -409,6 +412,7 @@ router.get("/jury/status", juryAuth, async (req, res) => {
 
     res.json({
       session_status: session.status,
+      pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
       active_project,
       criteria: critRes.rows,
       my_scores,
