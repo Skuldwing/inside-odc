@@ -101,24 +101,26 @@ router.post("/", async (req, res) => {
     const createdUser = result.rows[0];
 
     // Send welcome email with password setup link (best-effort)
+    let inviteLink = null;
     try {
-      const appUrl =
-        process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
+      const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
       const token = await createPasswordToken(createdUser.id);
       const link = `${appUrl}/set-password?token=${token}`;
+      inviteLink = link;
+
       const subject = "Votre accès Inside ODC";
       const html = `
         <div>
           <p>Bonjour ${full_name || email},</p>
-          <p>Votre compte a été créé.</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p>Définissez votre mot de passe ici : <a href="${link}">${link}</a></p>
+          <p>Votre compte a été créé sur Inside ODC.</p>
+          <p><strong>Email :</strong> ${email}</p>
+          <p>Définissez votre mot de passe en cliquant sur ce lien : <a href="${link}">${link}</a></p>
           <p>Ce lien est valable 24h.</p>
         </div>
       `;
       const text =
         `Bonjour ${full_name || email}\n` +
-        `Votre compte a été créé.\n` +
+        `Votre compte Inside ODC a été créé.\n` +
         `Email: ${email}\n` +
         `Définir le mot de passe: ${link}\n` +
         `Ce lien est valable 24h.`;
@@ -134,7 +136,7 @@ router.post("/", async (req, res) => {
       console.error("Erreur envoi email création utilisateur", err);
     }
 
-    res.status(201).json(createdUser);
+    res.status(201).json({ ...createdUser, invite_link: inviteLink });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -330,11 +332,7 @@ router.post("/:id/reset-link", async (req, res) => {
   try {
     const { id } = req.params;
     const userRes = await pool.query(
-      `
-      SELECT id
-      FROM users
-      WHERE id = $1
-      `,
+      "SELECT id, full_name, email FROM users WHERE id = $1",
       [id]
     );
 
@@ -342,12 +340,11 @@ router.post("/:id/reset-link", async (req, res) => {
       return res.status(404).json({ error: "Utilisateur introuvable" });
     }
 
-    const appUrl =
-      process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
+    const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
     const token = await createPasswordToken(id);
     const link = `${appUrl}/set-password?token=${token}`;
 
-    res.json({ link });
+    res.json({ link, full_name: userRes.rows[0].full_name, email: userRes.rows[0].email });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
