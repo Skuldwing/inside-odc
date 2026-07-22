@@ -217,8 +217,8 @@ export default function Participants() {
                 </td>
               </tr>
             ) : (
-              filtered.map((p) => (
-                <tr key={p.id} className="table-row">
+              filtered.map((p, i) => (
+                <tr key={`${p.id}_${p.activity_id ?? i}`} className="table-row">
                   <td className="p-3 font-medium">{p.nom || "-"}</td>
                   <td className="p-3">{p.prenom || "-"}</td>
                   <td className="p-3">{p.structure || "-"}</td>
