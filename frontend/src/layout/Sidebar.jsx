@@ -31,7 +31,7 @@ const navigation = [
     roles: ["admin"],
   },
   {
-    name: "Assistant IA",
+    name: "Pobarr",
     icon: Bot,
     path: "/assistant-ia",
     roles: ["admin"],
