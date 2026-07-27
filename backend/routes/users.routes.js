@@ -289,36 +289,36 @@ router.post("/:id/reset-password", async (req, res) => {
 
     const user = result.rows[0];
 
-    // Send reset email with password setup link (best-effort)
-    try {
-      const appUrl =
-        process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
-      const token = await createPasswordToken(user.id);
-      const link = `${appUrl}/set-password?token=${token}`;
-      const subject = "Réinitialisation du mot de passe Inside ODC";
-      const html = `
-        <div>
-          <p>Bonjour ${user.full_name || user.email},</p>
-          <p>Un lien de réinitialisation a été demandé pour votre compte.</p>
-          <p>Définissez votre mot de passe ici : <a href="${link}">${link}</a></p>
-          <p>Ce lien est valable 24h.</p>
-        </div>
-      `;
-      const text =
-        `Bonjour ${user.full_name || user.email}\n` +
-        `Lien de réinitialisation: ${link}\n` +
-        `Ce lien est valable 24h.`;
-
-      await sendEmail({
-        toEmail: user.email,
-        toName: user.full_name || user.email,
-        subject,
-        html,
-        text,
-      });
-    } catch (err) {
-      console.error("Erreur envoi email reset mot de passe", err);
+    if (!process.env.BREVO_API_KEY && !process.env.SMTP_HOST) {
+      return res.status(503).json({ error: "Email non configuré. Ajoutez BREVO_API_KEY dans les variables Railway." });
     }
+
+    const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
+    const token = await createPasswordToken(user.id);
+    const link = `${appUrl}/set-password?token=${token}`;
+    const subject = "Réinitialisation du mot de passe Inside ODC";
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:#FF6600;padding:20px;text-align:center">
+          <h2 style="color:#fff;margin:0">Orange Digital Center</h2>
+        </div>
+        <div style="padding:24px">
+          <p>Bonjour ${user.full_name || user.email},</p>
+          <p>Un lien de réinitialisation a été demandé pour votre compte Inside ODC.</p>
+          <p><a href="${link}" style="display:inline-block;background:#FF6600;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Définir mon mot de passe</a></p>
+          <p style="color:#64748B;font-size:13px">Ce lien est valable 24h.</p>
+        </div>
+      </div>
+    `;
+    const text = `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable 24h.`;
+
+    await sendEmail({
+      toEmail: user.email,
+      toName: user.full_name || user.email,
+      subject,
+      html,
+      text,
+    });
 
     res.json({ success: true });
   } catch (err) {
