@@ -195,4 +195,74 @@ CREATE TABLE IF NOT EXISTS form_submissions (
 CREATE INDEX IF NOT EXISTS form_submissions_form_idx
   ON form_submissions(form_id, submitted_at DESC);
 
+-- ── Email templates (editables depuis l'interface Campagnes) ────────────────
+CREATE TABLE IF NOT EXISTS email_templates (
+  slug        TEXT PRIMARY KEY,
+  label       TEXT NOT NULL,
+  description TEXT,
+  subject     TEXT NOT NULL,
+  body_html   TEXT NOT NULL,
+  variables   JSONB NOT NULL DEFAULT '[]',
+  updated_at  TIMESTAMP DEFAULT NOW()
+);
+
+INSERT INTO email_templates (slug, label, description, subject, body_html, variables) VALUES
+(
+  'welcome',
+  'Bienvenue (création de compte)',
+  'Envoyé automatiquement quand un admin crée un nouveau compte utilisateur.',
+  'Votre accès Inside ODC',
+  '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#FF6600;padding:20px;text-align:center">
+    <h2 style="color:#fff;margin:0">Orange Digital Center</h2>
+  </div>
+  <div style="padding:24px">
+    <p>Bonjour {{nom}},</p>
+    <p>Votre compte a été créé sur Inside ODC.</p>
+    <p><strong>Email :</strong> {{email}}</p>
+    <p><a href="{{lien}}" style="display:inline-block;background:#FF6600;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Définir mon mot de passe</a></p>
+    <p style="color:#64748B;font-size:13px">Ce lien est valable 24h.</p>
+  </div>
+</div>',
+  '["{{nom}}","{{email}}","{{lien}}"]'
+),
+(
+  'reset_password',
+  'Réinitialisation du mot de passe',
+  'Envoyé quand un admin déclenche un reset depuis la page Utilisateurs.',
+  'Réinitialisation de votre mot de passe Inside ODC',
+  '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#FF6600;padding:20px;text-align:center">
+    <h2 style="color:#fff;margin:0">Orange Digital Center</h2>
+  </div>
+  <div style="padding:24px">
+    <p>Bonjour {{nom}},</p>
+    <p>Un lien de réinitialisation a été demandé pour votre compte Inside ODC.</p>
+    <p><a href="{{lien}}" style="display:inline-block;background:#FF6600;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Réinitialiser mon mot de passe</a></p>
+    <p style="color:#64748B;font-size:13px">Ce lien est valable 24h.</p>
+  </div>
+</div>',
+  '["{{nom}}","{{lien}}"]'
+),
+(
+  'attestation',
+  'Attestation de participation',
+  'Envoyé avec le PDF d'attestation quand l'admin clique le bouton ✉ sur une activité.',
+  'Attestation de participation — {{activite}}',
+  '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#FF6600;padding:20px;text-align:center">
+    <h2 style="color:#fff;margin:0">Orange Digital Center Sénégal</h2>
+  </div>
+  <div style="padding:24px">
+    <p>Bonjour {{nom}},</p>
+    <p>Veuillez trouver ci-joint votre attestation de participation à l''activité :</p>
+    <p style="background:#FFF3E0;border-left:4px solid #FF6600;padding:12px;font-weight:bold">{{activite}}</p>
+    <p>Nous vous remercions de votre participation et espérons vous revoir prochainement.</p>
+    <p style="color:#64748B;font-size:13px">— L''équipe Orange Digital Center Sénégal</p>
+  </div>
+</div>',
+  '["{{nom}}","{{activite}}","{{date}}","{{partenaire}}","{{dispositif}}","{{duree}}"]'
+)
+ON CONFLICT (slug) DO NOTHING;
+
 COMMIT;

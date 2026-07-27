@@ -21,6 +21,7 @@ const aiRoutes = require("./routes/ai.routes");
 const formsRoutes = require("./routes/forms.routes");
 const checkinRoutes = require("./routes/checkin.routes");
 const voteRoutes = require("./routes/vote.routes");
+const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -128,6 +129,7 @@ app.use("/ai", aiRoutes);
 app.use("/forms", formsRoutes);
 app.use("/checkin", checkinRoutes);
 app.use("/vote", voteRoutes);
+app.use("/email-templates", emailTemplatesRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -219,6 +221,18 @@ pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS pitch_duration_mi
   .then(() => console.log("Migration OK: vote_sessions.pitch_duration_minutes")).catch(e => console.warn("Migration pitch_duration_minutes:", e.message));
 pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ`)
   .then(() => console.log("Migration OK: vote_projects.started_at")).catch(e => console.warn("Migration started_at:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS email_templates (
+    slug        TEXT PRIMARY KEY,
+    label       TEXT NOT NULL,
+    description TEXT,
+    subject     TEXT NOT NULL,
+    body_html   TEXT NOT NULL,
+    variables   JSONB NOT NULL DEFAULT '[]',
+    updated_at  TIMESTAMP DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: email_templates")).catch(e => console.warn("Migration email_templates:", e.message));
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;

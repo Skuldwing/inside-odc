@@ -5,6 +5,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { createPasswordToken } = require("../services/passwordReset");
+const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const requireAdminPin = require("../middleware/pin.middleware");
 const crypto = require("crypto");
 
@@ -100,7 +101,6 @@ router.post("/", async (req, res) => {
 
     const createdUser = result.rows[0];
 
-    // Send welcome email with password setup link (best-effort)
     let inviteLink = null;
     try {
       const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
@@ -108,29 +108,14 @@ router.post("/", async (req, res) => {
       const link = `${appUrl}/set-password?token=${token}`;
       inviteLink = link;
 
-      const subject = "Votre accès Inside ODC";
-      const html = `
-        <div>
-          <p>Bonjour ${full_name || email},</p>
-          <p>Votre compte a été créé sur Inside ODC.</p>
-          <p><strong>Email :</strong> ${email}</p>
-          <p>Définissez votre mot de passe en cliquant sur ce lien : <a href="${link}">${link}</a></p>
-          <p>Ce lien est valable 24h.</p>
-        </div>
-      `;
-      const text =
-        `Bonjour ${full_name || email}\n` +
-        `Votre compte Inside ODC a été créé.\n` +
-        `Email: ${email}\n` +
-        `Définir le mot de passe: ${link}\n` +
-        `Ce lien est valable 24h.`;
-
+      const tpl = await getTemplate("welcome");
+      const vars = { nom: full_name || email, email, lien: link };
       await sendEmail({
         toEmail: email,
         toName: full_name || email,
-        subject,
-        html,
-        text,
+        subject: renderTemplate(tpl.subject, vars),
+        html: renderTemplate(tpl.body_html, vars),
+        text: `Bonjour ${full_name || email}\nDéfinir le mot de passe: ${link}\nCe lien est valable 24h.`,
       });
     } catch (err) {
       console.error("Erreur envoi email création utilisateur", err);
@@ -296,28 +281,15 @@ router.post("/:id/reset-password", async (req, res) => {
     const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
     const token = await createPasswordToken(user.id);
     const link = `${appUrl}/set-password?token=${token}`;
-    const subject = "Réinitialisation du mot de passe Inside ODC";
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-        <div style="background:#FF6600;padding:20px;text-align:center">
-          <h2 style="color:#fff;margin:0">Orange Digital Center</h2>
-        </div>
-        <div style="padding:24px">
-          <p>Bonjour ${user.full_name || user.email},</p>
-          <p>Un lien de réinitialisation a été demandé pour votre compte Inside ODC.</p>
-          <p><a href="${link}" style="display:inline-block;background:#FF6600;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold">Définir mon mot de passe</a></p>
-          <p style="color:#64748B;font-size:13px">Ce lien est valable 24h.</p>
-        </div>
-      </div>
-    `;
-    const text = `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable 24h.`;
 
+    const tpl = await getTemplate("reset_password");
+    const vars = { nom: user.full_name || user.email, lien: link };
     await sendEmail({
       toEmail: user.email,
       toName: user.full_name || user.email,
-      subject,
-      html,
-      text,
+      subject: renderTemplate(tpl.subject, vars),
+      html: renderTemplate(tpl.body_html, vars),
+      text: `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable 24h.`,
     });
 
     res.json({ success: true });

@@ -3,6 +3,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { sendEmail } = require("../services/mail");
 const { generateAttestationPDF } = require("../services/attestation");
+const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 
 const router = express.Router();
 
@@ -283,26 +284,21 @@ router.post("/:id/send-attestations", authMiddleware, async (req, res) => {
           .replace(/[^a-z0-9]/gi, "_")
           .toLowerCase();
 
+        const tpl = await getTemplate("attestation");
+        const tplVars = {
+          nom: fullName,
+          activite: activity.title,
+          date: activity.activity_date ? new Date(activity.activity_date).toLocaleDateString("fr-FR") : "",
+          partenaire: activity.partner_name || "",
+          dispositif: activity.device_name || "",
+          duree: activity.duration_hours ? `${activity.duration_hours}h` : "",
+        };
+
         await sendEmail({
           toEmail: participant.email,
           toName: fullName,
-          subject: `Attestation de participation — ${activity.title}`,
-          html: `
-            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
-              <div style="background:#FF6600;padding:20px;text-align:center">
-                <h2 style="color:#fff;margin:0">Orange Digital Center Sénégal</h2>
-              </div>
-              <div style="padding:24px">
-                <p>Bonjour ${fullName},</p>
-                <p>Veuillez trouver ci-joint votre <strong>attestation de participation</strong> à l'activité :</p>
-                <p style="background:#FFF3E0;border-left:4px solid #FF6600;padding:12px;font-weight:bold">
-                  ${activity.title}
-                </p>
-                <p>Nous vous remercions de votre participation et espérons vous revoir prochainement.</p>
-                <p style="color:#64748B;font-size:13px">— L'équipe Orange Digital Center Sénégal</p>
-              </div>
-            </div>
-          `,
+          subject: renderTemplate(tpl.subject, tplVars),
+          html: renderTemplate(tpl.body_html, tplVars),
           text: `Bonjour ${fullName},\n\nVeuillez trouver ci-joint votre attestation de participation à "${activity.title}".\n\n— ODC Sénégal`,
           attachments: [
             {
