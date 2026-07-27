@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus,
@@ -76,7 +76,7 @@ function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplic
         <button
           type="button"
           onClick={() => onToggleStatus(form)}
-          title={isActive ? "Desactiver" : "Activer"}
+          title={isActive ? "DÃ©sactiver" : "Activer"}
           className="flex-shrink-0"
         >
           {isActive ? (
@@ -94,7 +94,7 @@ function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplic
       <div className="flex items-center gap-3 text-xs text-slate-500">
         <span className="inline-flex items-center gap-1">
           <Users className="w-3.5 h-3.5" />
-          {Number(form.submissions_count || 0)} reponse{Number(form.submissions_count || 0) !== 1 ? "s" : ""}
+          {Number(form.submissions_count || 0)} rÃ©ponse{Number(form.submissions_count || 0) !== 1 ? "s" : ""}
         </span>
         <span
           className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -292,7 +292,7 @@ export default function Formulaires() {
     setActiveTab("champs");
     setValidationErrors([]);
     setCollapsedFields({});
-    setEditorNotice(restored ? "Brouillon local restaure." : "");
+    setEditorNotice(restored ? "Brouillon local restaurÃ©." : "");
     setLastDraftSavedAt(restoredSavedAt);
     setEditorOpen(true);
   };
@@ -416,12 +416,12 @@ export default function Formulaires() {
     editor.fields.forEach((field, idx) => {
       const label = String(field?.label || "").trim();
       const key = String(field?.key || "").trim();
-      if (!label) errors.push({ message: `Champ ${idx + 1}: libelle requis.`, fieldIndex: idx });
+      if (!label) errors.push({ message: `Champ ${idx + 1}: libellÃ© requis.`, fieldIndex: idx });
       if (field.type === "separator") return;
       if (!key) {
-        errors.push({ message: `Champ ${idx + 1}: cle requise.`, fieldIndex: idx });
+        errors.push({ message: `Champ ${idx + 1}: clÃ© requise.`, fieldIndex: idx });
       } else if (seenKeys.has(key)) {
-        errors.push({ message: `Champ ${idx + 1}: cle '${key}' en doublon.`, fieldIndex: idx });
+        errors.push({ message: `Champ ${idx + 1}: clÃ© '${key}' en doublon.`, fieldIndex: idx });
       } else {
         seenKeys.add(key);
       }
@@ -431,14 +431,14 @@ export default function Formulaires() {
         errors.push({ message: `Champ ${idx + 1}: ajoutez au moins une option.`, fieldIndex: idx });
       }
       if (field?.show_if && !String(field.show_if.key || "").trim()) {
-        errors.push({ message: `Champ ${idx + 1}: selectionnez un champ pour la condition.`, fieldIndex: idx });
+        errors.push({ message: `Champ ${idx + 1}: sÃ©lectionnez un champ pour la condition.`, fieldIndex: idx });
       }
     });
 
     const openAtIso = localDateTimeToIso(editor.settings?.open_at);
     const closeAtIso = localDateTimeToIso(editor.settings?.close_at);
     if (openAtIso && closeAtIso && Date.parse(openAtIso) >= Date.parse(closeAtIso)) {
-      errors.push({ message: "La date de fermeture doit etre apres l'ouverture." });
+      errors.push({ message: "La date de fermeture doit Ãªtre aprÃ¨s l'ouverture." });
     }
 
     if (errors.length > 0) {
@@ -497,7 +497,7 @@ export default function Formulaires() {
 
   /* ── Form card actions ── */
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer ce formulaire definititement ?")) return;
+    if (!confirm("Supprimer ce formulaire dÃ©finitivement ?")) return;
     try {
       await api.delete(`/forms/${id}`);
       await fetchForms();
@@ -512,7 +512,7 @@ export default function Formulaires() {
     const link = `${window.location.origin}/f/${slug}`;
     try {
       await navigator.clipboard.writeText(link);
-      alert("Lien copie !");
+      alert("Lien copiÃ© !");
     } catch {
       alert(link);
     }
@@ -642,7 +642,7 @@ export default function Formulaires() {
       <div className="space-y-6">
         <AdminPageHeader
           title="Formulaires"
-          subtitle="Creez et gerez vos formulaires d'inscription et d'enquete"
+          subtitle="CrÃ©ez et gÃ©rez vos formulaires d'inscription et d'enquÃªte"
           buttonLabel="Nouveau formulaire"
           buttonIcon={Plus}
           onAdd={openCreate}
@@ -665,7 +665,7 @@ export default function Formulaires() {
         ) : filteredForms.length === 0 ? (
           <div className="card p-8 text-center text-slate-400">
             <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-            <p className="text-sm">Aucun formulaire trouve.</p>
+            <p className="text-sm">Aucun formulaire trouvÃ©.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -760,7 +760,7 @@ export default function Formulaires() {
                   {editor.id && (
                     <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-500">
                       <Users className="w-3.5 h-3.5" />
-                      {editor.submissions_count} reponse{editor.submissions_count !== 1 ? "s" : ""}
+                      {editor.submissions_count} rÃ©ponse{editor.submissions_count !== 1 ? "s" : ""}
                     </span>
                   )}
                   {editor.slug && (
@@ -797,7 +797,7 @@ export default function Formulaires() {
                       </div>
 
                       <p className="text-xs text-slate-400">
-                        Glissez pour reordonner · Utilisez les fleches pour deplacer precisement
+                        Glissez pour rÃ©ordonner · Utilisez les fleches pour deplacer precisement
                       </p>
 
                       {editor.fields.map((field, idx) => (
@@ -880,7 +880,7 @@ export default function Formulaires() {
               <div className="sticky bottom-0 z-10 -mx-6 flex items-center justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
                 {!editor.id && lastDraftSavedAt && (
                   <p className="mr-auto text-xs text-slate-400">
-                    Brouillon sauvegarde a{" "}
+                    Brouillon sauvegardÃ© Ã {" "}
                     {new Date(lastDraftSavedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 )}
@@ -889,7 +889,7 @@ export default function Formulaires() {
                 </button>
                 <button type="submit" className="btn-primary" disabled={saving}>
                   <FileText className="w-4 h-4" />
-                  {saving ? "Sauvegarde..." : editor.id ? "Enregistrer les modifications" : "Creer le formulaire"}
+                  {saving ? "Sauvegarde..." : editor.id ? "Enregistrer les modifications" : "CrÃ©er le formulaire"}
                 </button>
               </div>
             </form>

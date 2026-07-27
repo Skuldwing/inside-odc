@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -264,13 +264,13 @@ export default function Dashboard() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-              Pilotage strategique
+              Pilotage stratÃ©gique
             </p>
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
               Centre de pilotage
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Vue consolidee des activites, objectifs et qualite de donnees.
+              Vue consolidÃ©e des activitÃ©s, objectifs et qualitÃ© de donnÃ©es.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -295,7 +295,7 @@ export default function Dashboard() {
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <div>
-            <label className="text-xs text-slate-500">Annee</label>
+            <label className="text-xs text-slate-500">AnnÃ©e</label>
             <select
               className="select mt-1"
               value={filters.year}
@@ -408,29 +408,29 @@ export default function Dashboard() {
           value={totals.participants ?? 0}
           icon={Users}
           accent="from-emerald-500 to-emerald-600"
-          hint="Beneficiaires consolides"
+          hint="BÃ©nÃ©ficiaires consolidÃ©s"
           prominent
         />
         <HeroKpiCard
-          label="Activites"
+          label="Activités"
           value={totals.activities ?? 0}
           icon={Calendar}
           accent="from-orange-500 to-orange-600"
-          hint="Execution annuelle"
+          hint="ExÃ©cution annuelle"
         />
         <HeroKpiCard
           label="Partenaires actifs"
           value={totals.partners_active ?? 0}
           icon={Building2}
           accent="from-blue-500 to-blue-600"
-          hint="Partenaires engages"
+          hint="Partenaires engagÃ©s"
         />
         <HeroKpiCard
           label="Heures de formation"
           value={`${totals.hours ?? 0}h`}
           icon={Clock}
           accent="from-indigo-500 to-indigo-600"
-          hint="Volume pedagogique"
+          hint="Volume pÃ©dagogique"
         />
       </section>
 
@@ -447,11 +447,11 @@ export default function Dashboard() {
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <ActivityBarChart
           data={summary?.beneficiariesByDevice || []}
-          title="Beneficiaires par dispositif"
+          title="BÃ©nÃ©ficiaires par dispositif"
         />
         <BeneficiaryPieChart
           data={summary?.gender || []}
-          title="Repartition par genre"
+          title="RÃ©partition par genre"
         />
       </section>
 
@@ -542,7 +542,7 @@ function TrendsLineChart({ data }) {
       <h3 className="font-semibold mb-4 text-slate-900">Tendances mensuelles</h3>
       {formatted.length === 0 ? (
         <div className="h-[280px] flex items-center justify-center text-slate-400">
-          Aucune donnee
+          Aucune donnÃ©e
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
@@ -557,7 +557,7 @@ function TrendsLineChart({ data }) {
               dataKey="activities"
               stroke="#f97316"
               strokeWidth={2.5}
-              name="Activites"
+              name="ActivitÃ©s"
               dot={false}
             />
             <Line
@@ -565,7 +565,7 @@ function TrendsLineChart({ data }) {
               dataKey="beneficiaries"
               stroke="#10b981"
               strokeWidth={2.5}
-              name="Beneficiaires"
+              name="BÃ©nÃ©ficiaires"
               dot={false}
             />
           </LineChart>
@@ -580,7 +580,7 @@ function TopListCard({ title, items }) {
     <div className="card p-5">
       <h3 className="font-semibold text-slate-900">{title}</h3>
       {items.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">Aucune donnee</p>
+        <p className="mt-3 text-sm text-slate-500">Aucune donnÃ©e</p>
       ) : (
         <div className="mt-4 space-y-2.5">
           {items.map((item, idx) => (
@@ -607,7 +607,7 @@ function BeneficiariesByPartnerTable({ data }) {
           <thead className="table-head">
             <tr>
               <th className="text-left p-4">Partenaire</th>
-              <th className="text-right p-4">Realise</th>
+              <th className="text-right p-4">RÃ©alisÃ©</th>
               <th className="text-right p-4">Objectif</th>
             </tr>
           </thead>
@@ -662,7 +662,7 @@ function BeneficiariesByPartnerTable({ data }) {
             {data.length === 0 && (
               <tr>
                 <td colSpan={3} className="text-center p-6 text-slate-500">
-                  Aucun partenaire enregistre
+                  Aucun partenaire enregistrÃ©
                 </td>
               </tr>
             )}
@@ -679,7 +679,7 @@ function ActivityBarChart({ data, title }) {
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
         <div className="h-[280px] flex items-center justify-center text-slate-400">
-          Aucune donnee
+          Aucune donnÃ©e
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
@@ -706,7 +706,7 @@ function BeneficiaryPieChart({ data, title }) {
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
         <div className="h-[280px] flex items-center justify-center text-slate-400">
-          Aucune donnee
+          Aucune donnÃ©e
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
@@ -729,7 +729,7 @@ function RecentActivitiesCard({ data }) {
     <div className="card p-6">
       <h3 className="flex items-center gap-2 font-semibold text-slate-900">
         <TrendingUp className="w-5 h-5 text-orange-500" />
-        Activites recentes
+        ActivitÃ©s rÃ©centes
       </h3>
       <div className="mt-3 space-y-2">
         {data.map((activity) => (
@@ -751,7 +751,7 @@ function RecentActivitiesCard({ data }) {
           </div>
         ))}
         {data.length === 0 && (
-          <p className="text-center text-slate-500 py-8">Aucune activite recente</p>
+          <p className="text-center text-slate-500 py-8">Aucune activitÃ© rÃ©cente</p>
         )}
       </div>
     </div>
@@ -770,7 +770,7 @@ function AlertsCard({ alerts }) {
       </h3>
       <div className="space-y-4">
         <div>
-          <p className="text-xs text-slate-500 mb-2">Partenaires sous 50% d objectif</p>
+          <p className="text-xs text-slate-500 mb-2">Partenaires sous 50% d'objectif</p>
           {partners.length === 0 ? (
             <p className="text-slate-500 text-sm">Aucune alerte</p>
           ) : (
@@ -786,7 +786,7 @@ function AlertsCard({ alerts }) {
           )}
         </div>
         <div>
-          <p className="text-xs text-slate-500 mb-2">Dispositifs sans activite recente (60j)</p>
+          <p className="text-xs text-slate-500 mb-2">Dispositifs sans activitÃ© rÃ©cente (60j)</p>
           {devices.length === 0 ? (
             <p className="text-slate-500 text-sm">Aucune alerte</p>
           ) : (
@@ -814,18 +814,18 @@ function DataQualityCard({ data }) {
     { label: "Contacts manquants", value: dq.missing_contact_pct || 0 },
     { label: "Genre manquant", value: dq.missing_gender_pct || 0 },
     {
-      label: "Activites sans dispositif",
+      label: "ActivitÃ©s sans dispositif",
       value: dq.activities_missing_device_pct || 0,
     },
     {
-      label: "Activites sans partenaire",
+      label: "ActivitÃ©s sans partenaire",
       value: dq.activities_missing_partner_pct || 0,
     },
   ];
 
   return (
     <div className="card p-6">
-      <h3 className="font-semibold mb-4 text-slate-900">Qualite des donnees</h3>
+      <h3 className="font-semibold mb-4 text-slate-900">QualitÃ© des donnÃ©es</h3>
       <div className="space-y-3 text-sm">
         {rows.map((row) => (
           <div key={row.label}>
@@ -902,7 +902,7 @@ function LocationsMap({ data, points, geoBoundary }) {
               <Popup>
                 <div className="text-sm">
                   <p className="font-semibold">{p.name}</p>
-                  <p>{p.value} beneficiaires</p>
+                  <p>{p.value} bÃ©nÃ©ficiaires</p>
                 </div>
               </Popup>
             </Marker>
@@ -912,9 +912,9 @@ function LocationsMap({ data, points, geoBoundary }) {
       <p className="text-xs text-slate-400 mt-2">
         Limites administratives : geoBoundaries (source ouverte).
       </p>
-      {data.length === 0 && <p className="text-slate-500 mt-3">Aucune donnee</p>}
+      {data.length === 0 && <p className="text-slate-500 mt-3">Aucune donnÃ©e</p>}
       {data.length > 0 && points.length === 0 && (
-        <p className="text-slate-500 mt-3">Coordonnees en cours de recuperation...</p>
+        <p className="text-slate-500 mt-3">CoordonnÃ©es en cours de rÃ©cupÃ©ration...</p>
       )}
     </div>
   );

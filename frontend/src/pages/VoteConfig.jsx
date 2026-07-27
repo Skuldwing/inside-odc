@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Plus, Trash2, Edit2, Check, X, Loader2, QrCode, Copy, ExternalLink,
@@ -76,7 +76,7 @@ export default function VoteConfig() {
   /* ---- Activate ---- */
   const activate = async () => {
     if (session.projects?.length === 0) { setError("Ajoutez au moins un projet avant d'activer."); return; }
-    if (session.criteria?.length === 0) { setError("Ajoutez au moins un critere avant d'activer."); return; }
+    if (session.criteria?.length === 0) { setError("Ajoutez au moins un critÃ¨re avant d'activer."); return; }
     setActivating(true);
     try {
       const r = await api.put(`/vote/sessions/${id}/activate`);
@@ -136,12 +136,12 @@ export default function VoteConfig() {
       }
       setCritForm({ name: "", scale: 10, weight: 1 });
       setShowCritForm(false);
-    } catch { setError("Erreur sauvegarde critere."); }
+    } catch { setError("Erreur sauvegarde critÃ¨re."); }
     setSavingCrit(false);
   };
 
   const deleteCriterion = async (cid) => {
-    if (!confirm("Supprimer ce critere ?")) return;
+    if (!confirm("Supprimer ce critÃ¨re ?")) return;
     try {
       await api.delete(`/vote/sessions/${id}/criteria/${cid}`);
       setSession(s => ({ ...s, criteria: s.criteria.filter(c => c.id !== cid) }));
@@ -186,7 +186,7 @@ export default function VoteConfig() {
             onClick={() => navigate(`/vote/${id}/manage`)}
             className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 transition-colors"
           >
-            <Play className="w-4 h-4" /> Gerer en direct
+            <Play className="w-4 h-4" /> GÃ©rer en direct
           </button>
         )}
       </div>
@@ -291,8 +291,8 @@ export default function VoteConfig() {
               <input required className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" placeholder="AgriTech AI" value={projForm.name} onChange={e => setProjForm(p => ({ ...p, name: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600">Porteur / Equipe</label>
-              <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" placeholder="Equipe Alpha" value={projForm.porteur} onChange={e => setProjForm(p => ({ ...p, porteur: e.target.value }))} />
+              <label className="text-xs font-medium text-slate-600">Porteur / Ã‰quipe</label>
+              <input className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" placeholder="Ã‰quipe Alpha" value={projForm.porteur} onChange={e => setProjForm(p => ({ ...p, porteur: e.target.value }))} />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600">Description</label>
@@ -312,7 +312,7 @@ export default function VoteConfig() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mb-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-slate-800">
-            Criteres de notation <span className="text-slate-400 font-normal text-sm">({session.criteria?.length || 0})</span>
+            CritÃ¨res de notation <span className="text-slate-400 font-normal text-sm">({session.criteria?.length || 0})</span>
           </h2>
           {session.status === "draft" && (
             <button
@@ -325,7 +325,7 @@ export default function VoteConfig() {
         </div>
 
         {session.criteria?.length === 0 && !showCritForm && (
-          <p className="text-sm text-slate-400 italic">Aucun critere ajoute</p>
+          <p className="text-sm text-slate-400 italic">Aucun critÃ¨re ajoutÃ©</p>
         )}
 
         <div className="space-y-2 mb-3">
@@ -347,14 +347,14 @@ export default function VoteConfig() {
 
         {showCritForm && session.status === "draft" && (
           <form onSubmit={saveCriterion} className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
-            <p className="text-xs font-semibold text-orange-700">{editingCrit ? "Modifier le critere" : "Nouveau critere"}</p>
+            <p className="text-xs font-semibold text-orange-700">{editingCrit ? "Modifier le critÃ¨re" : "Nouveau critÃ¨re"}</p>
             <div>
-              <label className="text-xs font-medium text-slate-600">Intitule *</label>
+              <label className="text-xs font-medium text-slate-600">IntitulÃ© *</label>
               <input required className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" placeholder="Innovation" value={critForm.name} onChange={e => setCritForm(p => ({ ...p, name: e.target.value }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-slate-600">Echelle de note</label>
+                <label className="text-xs font-medium text-slate-600">Ã‰chelle de note</label>
                 <select className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" value={critForm.scale} onChange={e => setCritForm(p => ({ ...p, scale: Number(e.target.value) }))}>
                   <option value={5}>Sur 5</option>
                   <option value={10}>Sur 10</option>
@@ -381,7 +381,7 @@ export default function VoteConfig() {
           <div>
             <h2 className="font-semibold text-slate-800 mb-2">Activer la session</h2>
             <p className="text-sm text-slate-500 mb-4">
-              Une fois activee, les jures pourront rejoindre via le QR code. Assurez-vous d&apos;avoir ajoute vos projets et criteres.
+              Une fois activÃ©e, les jurÃ©s pourront rejoindre via le QR code. Assurez-vous d&apos;avoir ajoutÃ© vos projets et critÃ¨res.
             </p>
             <button
               onClick={activate}
@@ -422,7 +422,7 @@ export default function VoteConfig() {
                   <ExternalLink className="w-3.5 h-3.5" /> Ouvrir la page jury
                 </a>
                 <div className="mt-4 pt-4 border-t border-slate-100">
-                  <p className="text-xs text-slate-500 mb-2">Jures connectes : <span className="font-semibold text-slate-700">{session.jury?.length || 0}</span></p>
+                  <p className="text-xs text-slate-500 mb-2">JurÃ©s connectÃ©s : <span className="font-semibold text-slate-700">{session.jury?.length || 0}</span></p>
                   <div className="flex flex-wrap gap-1.5">
                     {session.jury?.map(j => (
                       <span key={j.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">

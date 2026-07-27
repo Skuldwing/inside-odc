@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Megaphone } from "lucide-react";
 import api from "../api";
 
@@ -189,10 +189,10 @@ export default function SocialKpis() {
                 <th className="px-4 py-3 text-left">Mois</th>
                 <th className="px-4 py-3 text-left">Plateforme</th>
                 <th className="px-4 py-3 text-right">Followers</th>
-                <th className="px-4 py-3 text-right">Portee</th>
+                <th className="px-4 py-3 text-right">PortÃ©e</th>
                 <th className="px-4 py-3 text-right">Engagement</th>
                 <th className="px-4 py-3 text-right">Audience unique</th>
-                <th className="px-4 py-3 text-right">Resultats</th>
+                <th className="px-4 py-3 text-right">RÃ©sultats</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -207,7 +207,7 @@ export default function SocialKpis() {
               {!loading && rows.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
-                    Aucun KPI enregistre pour {year}
+                    Aucun KPI enregistrÃ© pour {year}
                   </td>
                 </tr>
               )}
@@ -286,7 +286,7 @@ export default function SocialKpis() {
                     onChange={(v) => setForm({ ...form, followers: v })}
                   />
                   <Field
-                    label="Portee"
+                    label="PortÃ©e"
                     value={form.reach}
                     onChange={(v) => setForm({ ...form, reach: v })}
                   />
@@ -301,7 +301,7 @@ export default function SocialKpis() {
                     onChange={(v) => setForm({ ...form, unique_users: v })}
                   />
                   <Field
-                    label="Resultats"
+                    label="RÃ©sultats"
                     value={form.results}
                     onChange={(v) => setForm({ ...form, results: v })}
                   />

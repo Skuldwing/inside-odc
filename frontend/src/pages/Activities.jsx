@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar,
   MapPin,
@@ -30,7 +30,7 @@ const importSteps = [
   { key: "upload", label: "Import", icon: FileSpreadsheet },
   { key: "validation", label: "Validation", icon: ScanSearch },
   { key: "mapping", label: "Correspondance", icon: Link2 },
-  { key: "resultat", label: "Resultat", icon: CheckCircle2 },
+  { key: "resultat", label: "RÃ©sultat", icon: CheckCircle2 },
 ];
 
 export default function Activities({
@@ -126,7 +126,7 @@ export default function Activities({
 
         return {
           id: a.id,
-          title: a.title || "Activite sans titre",
+          title: a.title || "ActivitÃ© sans titre",
           description: a.description || "",
           partner_id: a.partner_id || null,
           partner: a.partner_name || "-",
@@ -141,15 +141,15 @@ export default function Activities({
           status: statusValue,
           statusLabel:
             statusValue === "completed"
-              ? "Terminee"
+              ? "TerminÃ©e"
               : statusValue === "ongoing"
               ? "En cours"
-              : "Planifiee",
+              : "PlanifiÃ©e",
         };
       });
       setActivities(mapped);
     } catch {
-      setError("Erreur de chargement des activites.");
+      setError("Erreur de chargement des activitÃ©s.");
     } finally {
       setLoading(false);
     }
@@ -321,20 +321,20 @@ export default function Activities({
       setEditOpen(false);
       fetchActivities();
     } catch (err) {
-      setEditError(err.response?.data?.error || "Erreur mise a jour activite");
+      setEditError(err.response?.data?.error || "Erreur mise Ã  jour activitÃ©");
     } finally {
       setEditSaving(false);
     }
   };
 
   const handleDelete = async (activityId) => {
-    if (!confirm("Supprimer cette activite definitivement ?")) return;
+    if (!confirm("Supprimer cette activitÃ© dÃ©finitivement ?")) return;
     setDeleteError("");
     try {
       await api.delete(`/activities/${activityId}`);
       fetchActivities();
     } catch (err) {
-      setDeleteError(err.response?.data?.error || "Erreur suppression activite");
+      setDeleteError(err.response?.data?.error || "Erreur suppression activitÃ©");
     }
   };
 
@@ -348,7 +348,7 @@ export default function Activities({
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert("Erreur lors du telechargement de la liste.");
+      alert("Erreur lors du tÃ©lÃ©chargement de la liste.");
     }
   };
 
@@ -413,7 +413,7 @@ export default function Activities({
       setImportStep(4);
       fetchActivities();
     } catch (err) {
-      setUploadError(err.response?.data?.error || "Erreur creation activite");
+      setUploadError(err.response?.data?.error || "Erreur crÃ©ation activitÃ©");
       setImportStep(1);
     } finally {
       setUploading(false);
@@ -432,7 +432,7 @@ export default function Activities({
               Activites
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Gestion, import Excel et suivi des activites terrain.
+              Gestion, import Excel et suivi des activitÃ©s terrain.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -466,9 +466,9 @@ export default function Activities({
 
       <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <CountCard label="Total" value={stats.total} />
-        <CountCard label="Planifiees" value={stats.planned} />
+        <CountCard label="PlanifiÃ©es" value={stats.planned} />
         <CountCard label="En cours" value={stats.ongoing} />
-        <CountCard label="Terminees" value={stats.completed} />
+        <CountCard label="TerminÃ©es" value={stats.completed} />
       </section>
 
       <section className="card p-4 lg:p-5">
@@ -481,7 +481,7 @@ export default function Activities({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Rechercher une activite..."
+              placeholder="Rechercher une activitÃ©..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input pl-10"
@@ -520,9 +520,9 @@ export default function Activities({
 
           <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="all">Tous les statuts</option>
-            <option value="planned">Planifiee</option>
+            <option value="planned">PlanifiÃ©e</option>
             <option value="ongoing">En cours</option>
-            <option value="completed">Terminee</option>
+            <option value="completed">TerminÃ©e</option>
           </select>
         </div>
       </section>
@@ -553,7 +553,7 @@ export default function Activities({
         <div className="space-y-4">
           {loading && <div className="card p-6 text-center text-slate-500">Chargement...</div>}
           {!loading && filteredActivities.length === 0 && (
-            <div className="card p-6 text-center text-slate-500">Aucune activite trouvee</div>
+            <div className="card p-6 text-center text-slate-500">Aucune activitÃ© trouvÃ©e</div>
           )}
           {filteredActivities.map((activity) => (
             <ActivityCard
@@ -571,7 +571,7 @@ export default function Activities({
 
       {openUpload && (
         <ActivityModal
-          title="Nouvelle activite"
+          title="Nouvelle activitÃ©"
           maxWidthClass="max-w-2xl"
           error={uploadError}
           onClose={closeUploadModal}
@@ -594,7 +594,7 @@ export default function Activities({
                 <div className="flex items-center justify-between mb-1">
                   <div>
                     <label className="text-sm font-medium">Liste de presences Excel</label>
-                    <span className="ml-2 text-xs text-slate-400">(optionnel — peut etre ajoute plus tard)</span>
+                    <span className="ml-2 text-xs text-slate-400">(optionnel — peut Ãªtre ajoutÃ© plus tard)</span>
                   </div>
                   <a
                     href={`${import.meta.env.VITE_API_URL}/import/template`}
@@ -602,7 +602,7 @@ export default function Activities({
                     className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
                   >
                     <Download className="w-3 h-3" />
-                    Telecharger le template
+                    TÃ©lÃ©charger le template
                   </a>
                 </div>
                 <input
@@ -621,8 +621,8 @@ export default function Activities({
                   {uploading
                     ? "Enregistrement..."
                     : form.file
-                    ? "Creer et importer la liste"
-                    : "Creer l activite"}
+                    ? "CrÃ©er et importer la liste"
+                    : "CrÃ©er l'activitÃ©"}
                 </button>
               </div>
             </form>
@@ -651,7 +651,7 @@ export default function Activities({
 
       {editOpen && (
         <ActivityModal
-          title="Modifier activite"
+          title="Modifier activitÃ©"
           error={editError}
           onClose={() => setEditOpen(false)}
         >
@@ -761,10 +761,10 @@ function ImportResultSummary({ result }) {
     return (
       <div className="mt-4 space-y-3">
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
-          Activite creee avec succes.
+          ActivitÃ© crÃ©Ã©e avec succÃ¨s.
         </div>
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-700 text-sm">
-          Aucune liste de presences importee. Vous pourrez l&apos;ajouter ulterieurement via le bouton &laquo;&nbsp;Modifier&nbsp;&raquo;.
+          Aucune liste de prÃ©sences importÃ©e. Vous pourrez l&apos;ajouter ultÃ©rieurement via le bouton &laquo;&nbsp;Modifier&nbsp;&raquo;.
         </div>
       </div>
     );
@@ -773,12 +773,12 @@ function ImportResultSummary({ result }) {
   return (
     <div className="mt-4 space-y-4">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
-        Activite creee et liste importee avec succes.
+        Activité créée et liste importÃ©e avec succÃ¨s.
       </div>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryCard label="Lignes Excel" value={total} />
-        <SummaryCard label="Importees" value={imported} />
-        <SummaryCard label="Ignorees" value={ignored} />
+        <SummaryCard label="ImportÃ©es" value={imported} />
+        <SummaryCard label="IgnorÃ©es" value={ignored} />
         <SummaryCard label="Doublons" value={duplicates} />
       </div>
     </div>
@@ -817,7 +817,7 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
-        <label className="text-sm font-medium">Date de debut *</label>
+        <label className="text-sm font-medium">Date de dÃ©but *</label>
         <input
           type="date"
           required
@@ -828,7 +828,7 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
-        <label className="text-sm font-medium">Date de fin <span className="text-slate-400 font-normal text-xs">(optionnel — si activite multi-jours)</span></label>
+        <label className="text-sm font-medium">Date de fin <span className="text-slate-400 font-normal text-xs">(optionnel — si activitÃ© multi-jours)</span></label>
         <input
           type="date"
           className="input mt-1"
@@ -850,8 +850,8 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
-        <label className="text-sm font-medium">Nombre de presences (estime)</label>
-        <p className="text-xs text-slate-400 mb-1">Remplacement temporaire avant import Excel. Remplace automatiquement par le vrai compte une fois la liste importee.</p>
+        <label className="text-sm font-medium">Nombre de prÃ©sences (estimÃ©)</label>
+        <p className="text-xs text-slate-400 mb-1">Remplacement temporaire avant import Excel. Remplace automatiquement par le vrai compte une fois la liste importÃ©e.</p>
         <input
           type="number"
           min="0"
@@ -869,7 +869,7 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
           value={form.location}
           onChange={(e) => setForm({ ...form, location: e.target.value })}
         >
-          <option value="">Selectionner une region</option>
+          <option value="">SÃ©lectionner une rÃ©gion</option>
           {regions.map((region) => (
             <option key={region} value={region}>
               {region}
@@ -967,7 +967,7 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
             </button>
           </div>
           <button type="button" onClick={goToday} className="btn-ghost border text-sm">
-            Aujourd hui
+            Aujourd'hui
           </button>
         </div>
 
@@ -1033,7 +1033,7 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
           {Object.entries(STATUS_COLORS).map(([status, c]) => (
             <span key={status} className="flex items-center gap-1.5">
               <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
-              {status === "planned" ? "Planifiee" : status === "ongoing" ? "En cours" : "Terminee"}
+              {status === "planned" ? "PlanifiÃ©e" : status === "ongoing" ? "En cours" : "TerminÃ©e"}
             </span>
           ))}
         </div>
@@ -1045,11 +1045,11 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
           <p className="font-semibold text-slate-900 mb-3 capitalize">
             {format(parseISO(selectedDay), "EEEE d MMMM yyyy", { locale: fr })}
             <span className="ml-2 text-sm font-normal text-slate-500">
-              {selectedActivities.length} activite{selectedActivities.length > 1 ? "s" : ""}
+              {selectedActivities.length} activitÃ©{selectedActivities.length > 1 ? "s" : ""}
             </span>
           </p>
           {selectedActivities.length === 0 ? (
-            <p className="text-sm text-slate-400">Aucune activite ce jour.</p>
+            <p className="text-sm text-slate-400">Aucune activitÃ© ce jour.</p>
           ) : (
             <div className="space-y-3">
               {selectedActivities.map((activity) => (
@@ -1283,7 +1283,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
           </span>
 
           {activity.participants === 0 && (
-            <span className="badge bg-amber-50 border-amber-200 text-amber-700" title="Aucune liste de presences importee">
+            <span className="badge bg-amber-50 border-amber-200 text-amber-700" title="Aucune liste de prÃ©sences importÃ©e">
               Sans liste
             </span>
           )}
@@ -1300,7 +1300,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
               <button
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
                 onClick={onExport}
-                title="Telecharger liste de presences"
+                title="TÃ©lÃ©charger liste de prÃ©sences"
               >
                 <Download className="w-4 h-4" />
               </button>

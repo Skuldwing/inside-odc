@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+﻿import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Calendar,
@@ -37,7 +37,7 @@ const navigation = [
     roles: ["admin"],
   },
   {
-    name: "Activites",
+    name: "ActivitÃ©s",
     icon: Calendar,
     path: "/activities",
     roles: ["admin", "partner", "viewer"],

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Plus, Layers, Pencil, Trash2, Palette } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -18,7 +18,7 @@ const categoryLabels = {
   formation: "Formation",
   hackathon: "Hackathon",
   programme: "Programme",
-  evenement: "Evenement",
+  evenement: "Ã‰vÃ©nement",
   autre: "Autre",
 };
 
@@ -118,7 +118,7 @@ export default function Dispositifs() {
       <div className="space-y-6">
         <AdminPageHeader
           title="Dispositifs"
-          subtitle="Gerez les programmes et initiatives"
+          subtitle="GÃ©rez les programmes et initiatives"
           buttonLabel="Nouveau dispositif"
           buttonIcon={Plus}
           onAdd={() => {
@@ -161,7 +161,7 @@ export default function Dispositifs() {
               </div>
 
               <div>
-                <label className="text-sm font-medium">Categorie</label>
+                <label className="text-sm font-medium">CatÃ©gorie</label>
                 <select
                   className="select mt-1"
                   value={form.category}
@@ -233,7 +233,7 @@ export default function Dispositifs() {
 
         {filteredDevices.length === 0 && (
           <div className="card p-8 text-center text-slate-500">
-            Aucun dispositif enregistre
+            Aucun dispositif enregistrÃ©
           </div>
         )}
 
@@ -292,13 +292,13 @@ export default function Dispositifs() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-xs text-slate-500 mb-1">Activites</p>
+                    <p className="text-xs text-slate-500 mb-1">ActivitÃ©s</p>
                     <p className="text-xl font-semibold text-slate-900">
                       {activities}
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-xs text-slate-500 mb-1">Beneficiaires</p>
+                    <p className="text-xs text-slate-500 mb-1">BÃ©nÃ©ficiaires</p>
                     <p className="text-xl font-semibold text-slate-900">
                       {beneficiaries}
                     </p>

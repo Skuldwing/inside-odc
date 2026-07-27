@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, Clock, CheckCircle2, Award, AlertCircle, Send, Timer } from "lucide-react";
 import api from "../api";
@@ -170,7 +170,7 @@ export default function VoteJury() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-green-50 to-white px-4 text-center">
         <CheckCircle2 className="w-16 h-16 text-green-400 mb-4" />
-        <p className="text-2xl font-bold text-slate-900 mb-2">Session terminee</p>
+        <p className="text-2xl font-bold text-slate-900 mb-2">Session terminÃ©e</p>
         <p className="text-slate-500 text-sm">Merci pour votre participation, {juryInfo?.pseudo} !</p>
         <p className="mt-8 text-xs text-slate-400">Orange Digital Center Senegal</p>
       </div>
@@ -218,7 +218,7 @@ export default function VoteJury() {
           <div className="rounded-2xl bg-white border border-green-200 shadow-sm p-5 mb-4">
             <div className="flex items-center gap-2 text-green-600 mb-3">
               <CheckCircle2 className="w-5 h-5" />
-              <p className="font-semibold text-sm">Votes enregistres !</p>
+              <p className="font-semibold text-sm">Votes enregistrÃ©s !</p>
             </div>
             <p className="text-xs text-slate-500 mb-4">En attente de la fin des votes pour ce projet.</p>
             <div className="space-y-2">

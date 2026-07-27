@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { Users, Search, Download, Filter, UserRound } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import api from "../api";
@@ -76,14 +76,14 @@ export default function Participants() {
   const exportExcel = () => {
     const headers = [
       "Nom",
-      "Prenom",
+      "PrÃ©nom",
       "Structure/Etablissement",
       "Genre",
-      "Tranche d age",
+      "Tranche d'Ã¢ge",
       "Email",
       "Telephone",
       "Statut",
-      "Activite",
+      "ActivitÃ©",
       "Date activite",
       "Partenaire",
       "Dispositif",
@@ -124,10 +124,10 @@ export default function Participants() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
-              Base unifiee
+              Base unifiÃ©e
             </p>
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
-              Participants / Beneficiaires
+              Participants / BÃ©nÃ©ficiaires
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Suivi complet des profils issus des activites.
@@ -144,7 +144,7 @@ export default function Participants() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <StatCard label="Total filtres" value={stats.total} />
+        <StatCard label="Total filtrÃ©s" value={stats.total} />
         <StatCard label="Hommes" value={stats.male} />
         <StatCard label="Femmes" value={stats.female} />
       </section>
@@ -162,7 +162,7 @@ export default function Participants() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher nom, activite, partenaire..."
+              placeholder="Rechercher nom, activitÃ©, partenaire..."
               className="input pl-10"
             />
           </div>
@@ -189,14 +189,14 @@ export default function Participants() {
           <thead className="table-head">
             <tr>
               <th className="p-3">Nom</th>
-              <th className="p-3">Prenom</th>
+              <th className="p-3">PrÃ©nom</th>
               <th className="p-3">Structure/Etablissement</th>
               <th className="p-3">Genre</th>
-              <th className="p-3">Tranche d age</th>
+              <th className="p-3">Tranche d'Ã¢ge</th>
               <th className="p-3">Email</th>
               <th className="p-3">Telephone</th>
               <th className="p-3">Statut</th>
-              <th className="p-3">Activite</th>
+              <th className="p-3">ActivitÃ©</th>
               <th className="p-3">Date</th>
               <th className="p-3">Partenaire</th>
               <th className="p-3">Dispositif</th>
@@ -213,7 +213,7 @@ export default function Participants() {
               <tr>
                 <td colSpan={12} className="text-center p-8 text-slate-500">
                   <Users className="mx-auto mb-2 text-slate-300" />
-                  Aucun participant trouve
+                  Aucun participant trouvÃ©
                 </td>
               </tr>
             ) : (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Users,
@@ -117,7 +117,7 @@ export default function SocialDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
         <SocialCard
           icon={Users}
-          label="Portee"
+          label="PortÃ©e"
           value={formatCompact(cards.followers?.value)}
           growth={cards.followers?.growth_pct}
         />
@@ -135,13 +135,13 @@ export default function SocialDashboard() {
         />
         <SocialCard
           icon={Target}
-          label="Resultats"
+          label="RÃ©sultats"
           value={formatCompact(cards.results?.value)}
           growth={cards.results?.growth_pct}
         />
         <SocialCard
           icon={BarChart3}
-          label="Portee totale"
+          label="PortÃ©e totale"
           value={formatCompact(cards.reach?.value)}
           growth={cards.reach?.growth_pct}
         />
@@ -156,7 +156,7 @@ export default function SocialDashboard() {
             {loading ? (
               <div className="h-full flex items-center justify-center text-slate-400">Chargement...</div>
             ) : followersBar.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-slate-400">Aucune donnee</div>
+              <div className="h-full flex items-center justify-center text-slate-400">Aucune donnÃ©e</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={followersBar}>
@@ -172,12 +172,12 @@ export default function SocialDashboard() {
         </div>
 
         <div className="card p-6">
-          <h3 className="font-semibold text-slate-900 mb-3">Repartition par plateforme</h3>
+          <h3 className="font-semibold text-slate-900 mb-3">RÃ©partition par plateforme</h3>
           <div className="h-72">
             {loading ? (
               <div className="h-full flex items-center justify-center text-slate-400">Chargement...</div>
             ) : distribution.length === 0 || distribution.every((d) => d.value === 0) ? (
-              <div className="h-full flex items-center justify-center text-slate-400">Aucune donnee</div>
+              <div className="h-full flex items-center justify-center text-slate-400">Aucune donnÃ©e</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -219,7 +219,7 @@ export default function SocialDashboard() {
           {loading ? (
             <div className="h-full flex items-center justify-center text-slate-400">Chargement...</div>
           ) : monthly.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-slate-400">Aucune donnee</div>
+            <div className="h-full flex items-center justify-center text-slate-400">Aucune donnÃ©e</div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={monthly}>
@@ -228,9 +228,9 @@ export default function SocialDashboard() {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="reach" stroke="#F97316" strokeWidth={2} name="Portee" />
+                <Line type="monotone" dataKey="reach" stroke="#F97316" strokeWidth={2} name="PortÃ©e" />
                 <Line type="monotone" dataKey="engagement" stroke="#10B981" strokeWidth={2} name="Engagement" />
-                <Line type="monotone" dataKey="results" stroke="#3B82F6" strokeWidth={2} name="Resultats" />
+                <Line type="monotone" dataKey="results" stroke="#3B82F6" strokeWidth={2} name="RÃ©sultats" />
               </LineChart>
             </ResponsiveContainer>
           )}
@@ -265,7 +265,7 @@ function SocialCard({ icon: Icon, label, value, growth }) {
       <p className="text-3xl font-bold text-slate-900 mt-1">{value}</p>
       <p className={`text-xs mt-1 ${positive ? "text-green-600" : "text-red-600"}`}>
         {positive ? "+" : ""}
-        {Number(growth || 0)}% vs periode precedente
+        {Number(growth || 0)}% vs pÃ©riode prÃ©cÃ©dente
       </p>
     </div>
   );
