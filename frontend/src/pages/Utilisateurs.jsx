@@ -39,6 +39,7 @@ export default function Utilisateurs() {
   const [linkModal, setLinkModal]   = useState(null); // { link, full_name, email }
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkCopied2, setLinkCopied2] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -126,13 +127,24 @@ export default function Utilisateurs() {
     setLinkLoading(true);
     setLinkModal(null);
     setLinkCopied2(false);
+    setEmailSent(false);
     try {
       const res = await api.post(`/users/${u.id}/reset-link`);
-      setLinkModal({ link: res.data.link, full_name: res.data.full_name || u.full_name, email: res.data.email || u.email });
+      setLinkModal({ link: res.data.link, full_name: res.data.full_name || u.full_name, email: res.data.email || u.email, userId: u.id });
     } catch {
       alert("Erreur lors de la génération du lien.");
     } finally {
       setLinkLoading(false);
+    }
+  };
+
+  const sendResetEmail = async () => {
+    if (!linkModal?.userId) return;
+    try {
+      await api.post(`/users/${linkModal.userId}/reset-password`);
+      setEmailSent(true);
+    } catch {
+      alert("Erreur lors de l'envoi de l'email.");
     }
   };
 
@@ -332,8 +344,27 @@ export default function Utilisateurs() {
                     </button>
                   </div>
                   <p className="text-xs text-slate-400">Ce lien est valable 24h. Un nouveau lien invalide le précédent.</p>
+
+                  {linkModal.email && (
+                    <div className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-3 ${emailSent ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">
+                          {emailSent ? "Email envoyé !" : "Envoyer par email"}
+                        </p>
+                        <p className="text-xs text-slate-400">{linkModal.email}</p>
+                      </div>
+                      {emailSent ? (
+                        <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
+                      ) : (
+                        <button onClick={sendResetEmail} className="btn-primary text-sm flex-shrink-0">
+                          <Mail className="w-4 h-4" /> Envoyer
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex justify-end">
-                    <button onClick={() => { setLinkModal(null); setLinkCopied2(false); }} className="btn-ghost border">Fermer</button>
+                    <button onClick={() => { setLinkModal(null); setLinkCopied2(false); setEmailSent(false); }} className="btn-ghost border">Fermer</button>
                   </div>
                 </div>
               )}
