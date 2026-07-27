@@ -81,7 +81,7 @@ export default function AiAssistant() {
             </p>
           </div>
           <div className="ml-auto flex items-center gap-1.5 text-xs bg-white/20 rounded-full px-3 py-1">
-            <Zap className="w-3 h-3" /> Live data
+            <Zap className="w-3 h-3" /> Données en direct
           </div>
         </div>
       </div>

@@ -119,7 +119,7 @@ export default function Sidebar({
                 Inside ODC
               </h1>
               <p className="text-[11px] text-slate-400 uppercase tracking-[0.2em]">
-                Command Center
+                Centre de pilotage
               </p>
             </div>
           </div>

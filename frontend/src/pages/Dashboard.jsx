@@ -267,7 +267,7 @@ export default function Dashboard() {
               Pilotage strategique
             </p>
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
-              Dashboard Command Center
+              Centre de pilotage
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Vue consolidee des activites, objectifs et qualite de donnees.
@@ -910,7 +910,7 @@ function LocationsMap({ data, points, geoBoundary }) {
         </MapContainer>
       </div>
       <p className="text-xs text-slate-400 mt-2">
-        Limites administratives: geoBoundaries (gbOpen).
+        Limites administratives : geoBoundaries (source ouverte).
       </p>
       {data.length === 0 && <p className="text-slate-500 mt-3">Aucune donnee</p>}
       {data.length > 0 && points.length === 0 && (

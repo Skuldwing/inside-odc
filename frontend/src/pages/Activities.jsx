@@ -27,9 +27,9 @@ import api from "../api";
 import { useAuth } from "../auth/useAuth";
 
 const importSteps = [
-  { key: "upload", label: "Upload", icon: FileSpreadsheet },
+  { key: "upload", label: "Import", icon: FileSpreadsheet },
   { key: "validation", label: "Validation", icon: ScanSearch },
-  { key: "mapping", label: "Mapping", icon: Link2 },
+  { key: "mapping", label: "Correspondance", icon: Link2 },
   { key: "resultat", label: "Resultat", icon: CheckCircle2 },
 ];
 
@@ -1167,7 +1167,7 @@ function QrModal({ activity, onClose }) {
       <div className="card-solid w-full max-w-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-orange-500 font-semibold">QR Code Check-in</p>
+            <p className="text-xs uppercase tracking-wide text-orange-500 font-semibold">QR Code d'émargement</p>
             <h3 className="font-semibold text-slate-900 mt-0.5 leading-tight">{activity.title}</h3>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50">
@@ -1292,7 +1292,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
             <button
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
               onClick={onQrCode}
-              title="QR Code check-in"
+              title="QR Code d'émargement"
             >
               <QrCode className="w-4 h-4" />
             </button>

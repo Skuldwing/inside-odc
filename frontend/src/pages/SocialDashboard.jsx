@@ -91,7 +91,7 @@ export default function SocialDashboard() {
       <div className="card p-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white border-none shadow-xl shadow-orange-300/60">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Social Media Performance {year}</h1>
+            <h1 className="text-3xl font-semibold tracking-tight">Performance Réseaux Sociaux {year}</h1>
             <p className="text-orange-100 mt-1">
               Vue consolidée des performances Facebook, Instagram, LinkedIn, X et TikTok
             </p>
@@ -150,11 +150,8 @@ export default function SocialDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 card p-6">
           <h3 className="font-semibold text-slate-900 mb-3">
-            Evolution globale des followers (Janvier a Decembre)
+            Évolution globale des abonnés (Janvier à Décembre)
           </h3>
-          <p className="text-sm text-slate-500 mb-4">
-            Croissance cumulée de l’ensemble des plateformes.
-          </p>
           <div className="h-72">
             {loading ? (
               <div className="h-full flex items-center justify-center text-slate-400">Chargement...</div>
@@ -249,7 +246,7 @@ export default function SocialDashboard() {
             <p className="text-3xl font-bold mt-2" style={{ color: platformColors[p.platform] || "#F97316" }}>
               {formatCompact(p.followers)}
             </p>
-            <p className="text-xs text-slate-500">Followers</p>
+            <p className="text-xs text-slate-500">Abonnés</p>
           </div>
         ))}
       </div>
