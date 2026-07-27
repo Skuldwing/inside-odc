@@ -42,13 +42,16 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
     subject,
     htmlContent: html,
     textContent: text,
-    attachment: attachments.map((a) => ({
+  };
+
+  if (attachments && attachments.length > 0) {
+    payload.attachment = attachments.map((a) => ({
       name: a.filename,
       content: Buffer.isBuffer(a.content)
         ? a.content.toString("base64")
         : a.content,
-    })),
-  };
+    }));
+  }
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
