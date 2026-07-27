@@ -292,7 +292,7 @@ router.post("/:id/reset-password", async (req, res) => {
     // Send reset email with password setup link (best-effort)
     try {
       const appUrl =
-        process.env.APP_BASE_URL || "https://inside-odc.netlify.app";
+        process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
       const token = await createPasswordToken(user.id);
       const link = `${appUrl}/set-password?token=${token}`;
       const subject = "Réinitialisation du mot de passe Inside ODC";

@@ -7,7 +7,7 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false") === "true";
 
-async function sendEmail({ toEmail, toName, subject, html, text }) {
+async function sendEmail({ toEmail, toName, subject, html, text, attachments = [] }) {
   if (SMTP_HOST && SMTP_USER && SMTP_PASS && MAIL_FROM) {
     const nodemailer = require("nodemailer");
     const transporter = nodemailer.createTransport({
@@ -26,6 +26,7 @@ async function sendEmail({ toEmail, toName, subject, html, text }) {
       subject,
       html,
       text,
+      attachments,
     });
     return;
   }
@@ -41,6 +42,12 @@ async function sendEmail({ toEmail, toName, subject, html, text }) {
     subject,
     htmlContent: html,
     textContent: text,
+    attachment: attachments.map((a) => ({
+      name: a.filename,
+      content: Buffer.isBuffer(a.content)
+        ? a.content.toString("base64")
+        : a.content,
+    })),
   };
 
   const res = await fetch("https://api.brevo.com/v3/smtp/email", {

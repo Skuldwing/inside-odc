@@ -1,6 +1,8 @@
 const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const { sendEmail } = require("../services/mail");
+const { generateAttestationPDF } = require("../services/attestation");
 
 const router = express.Router();
 
@@ -216,6 +218,114 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.send(buf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== SEND ATTESTATIONS ===== */
+router.post("/:id/send-attestations", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const actRes = await pool.query(
+      `SELECT a.*, p.name AS partner_name, d.name AS device_name
+       FROM activities a
+       LEFT JOIN partners p ON p.id = a.partner_id
+       LEFT JOIN devices  d ON d.id  = a.device_id
+       WHERE a.id = $1`,
+      [id]
+    );
+    if (!actRes.rows.length) {
+      return res.status(404).json({ error: "Activité introuvable" });
+    }
+    const activity = actRes.rows[0];
+
+    const partRes = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.email
+       FROM participants p
+       JOIN activity_participants ap ON ap.participant_id = p.id
+       WHERE ap.activity_id = $1
+       ORDER BY p.nom, p.prenom`,
+      [id]
+    );
+
+    const participants = partRes.rows;
+    const withEmail = participants.filter((p) => p.email);
+    const withoutEmail = participants.filter((p) => !p.email);
+
+    if (withEmail.length === 0) {
+      return res.status(200).json({
+        sent: 0,
+        skipped: withoutEmail.length,
+        message: "Aucun participant avec adresse email.",
+      });
+    }
+
+    let sent = 0;
+    const errors = [];
+
+    for (const participant of withEmail) {
+      try {
+        const pdfBuffer = await generateAttestationPDF({
+          participant,
+          activity,
+          partner: activity.partner_name,
+          device: activity.device_name,
+        });
+
+        const fullName =
+          [participant.prenom, participant.nom].filter(Boolean).join(" ") ||
+          participant.email;
+
+        const safeName = (activity.title || "activite")
+          .replace(/[^a-z0-9]/gi, "_")
+          .toLowerCase();
+
+        await sendEmail({
+          toEmail: participant.email,
+          toName: fullName,
+          subject: `Attestation de participation — ${activity.title}`,
+          html: `
+            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+              <div style="background:#FF6600;padding:20px;text-align:center">
+                <h2 style="color:#fff;margin:0">Orange Digital Center Sénégal</h2>
+              </div>
+              <div style="padding:24px">
+                <p>Bonjour ${fullName},</p>
+                <p>Veuillez trouver ci-joint votre <strong>attestation de participation</strong> à l'activité :</p>
+                <p style="background:#FFF3E0;border-left:4px solid #FF6600;padding:12px;font-weight:bold">
+                  ${activity.title}
+                </p>
+                <p>Nous vous remercions de votre participation et espérons vous revoir prochainement.</p>
+                <p style="color:#64748B;font-size:13px">— L'équipe Orange Digital Center Sénégal</p>
+              </div>
+            </div>
+          `,
+          text: `Bonjour ${fullName},\n\nVeuillez trouver ci-joint votre attestation de participation à "${activity.title}".\n\n— ODC Sénégal`,
+          attachments: [
+            {
+              filename: `attestation_${safeName}.pdf`,
+              content: pdfBuffer,
+              contentType: "application/pdf",
+            },
+          ],
+        });
+
+        sent++;
+      } catch (err) {
+        console.error(`Attestation error for ${participant.email}:`, err.message);
+        errors.push(participant.email);
+      }
+    }
+
+    res.json({
+      sent,
+      skipped: withoutEmail.length,
+      errors: errors.length > 0 ? errors : undefined,
+      message: `${sent} attestation(s) envoyée(s)${withoutEmail.length > 0 ? `, ${withoutEmail.length} ignorée(s) (pas d'email)` : ""}.`,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

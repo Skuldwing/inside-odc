@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy, Timer,
@@ -50,7 +50,7 @@ function PitchTimer({ startedAt, durationMinutes }) {
 const PROJ_STATUS = {
   pending: { label: "En attente", cls: "bg-slate-100 text-slate-600" },
   active:  { label: "En cours",   cls: "bg-orange-100 text-orange-700" },
-  closed:  { label: "Vote fermÃ©", cls: "bg-green-100 text-green-700"  },
+  closed:  { label: "Vote fermé", cls: "bg-green-100 text-green-700"  },
 };
 
 export default function VoteManage() {
@@ -71,7 +71,7 @@ export default function VoteManage() {
       setData(r.data);
       if (loading) setLoading(false);
     } catch {
-      setError("Impossible de charger les donnÃ©es.");
+      setError("Impossible de charger les données.");
       setLoading(false);
     }
   }, [id]);
@@ -103,7 +103,7 @@ export default function VoteManage() {
   };
 
   const closeSession = async () => {
-    if (!confirm("Terminer la session de vote ? Les rÃ©sultats seront finalisÃ©s.")) return;
+    if (!confirm("Terminer la session de vote ? Les résultats seront finalisés.")) return;
     try {
       await api.put(`/vote/sessions/${id}/close`);
       await fetchLive();
@@ -115,7 +115,7 @@ export default function VoteManage() {
       const r = await api.get(`/vote/sessions/${id}/results`);
       setResults(r.data);
       setShowResults(true);
-    } catch { setError("Erreur chargement rÃ©sultats."); }
+    } catch { setError("Erreur chargement résultats."); }
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-orange-400" /></div>;
@@ -138,11 +138,11 @@ export default function VoteManage() {
         </button>
         <div className="flex-1">
           <h1 className="text-xl font-bold text-slate-900">{session?.name}</h1>
-          <p className="text-sm text-slate-500">{juryTotal} jurÃ©{juryTotal !== 1 ? "s" : ""} connectÃ©{juryTotal !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-slate-500">{juryTotal} juré{juryTotal !== 1 ? "s" : ""} connecté{juryTotal !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={loadResults} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
-            <BarChart3 className="w-3.5 h-3.5" /> RÃ©sultats
+            <BarChart3 className="w-3.5 h-3.5" /> Résultats
           </button>
           {session?.status === "active" && (
             <button onClick={closeSession} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors">
@@ -159,7 +159,7 @@ export default function VoteManage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2"><Trophy className="w-5 h-5 text-orange-500" /> RÃ©sultats</h3>
+              <h3 className="font-bold text-slate-900 flex items-center gap-2"><Trophy className="w-5 h-5 text-orange-500" /> Résultats</h3>
               <button onClick={() => setShowResults(false)} className="text-slate-400 hover:text-slate-700">✕</button>
             </div>
             <div className="p-5 space-y-3">
@@ -178,7 +178,7 @@ export default function VoteManage() {
                   </div>
                 </div>
               ))}
-              {results.ranking.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Aucun vote enregistrÃ©</p>}
+              {results.ranking.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Aucun vote enregistré</p>}
             </div>
           </div>
         </div>
@@ -250,7 +250,7 @@ export default function VoteManage() {
               {/* Vote progress */}
               <div className="mb-4">
                 <div className="flex items-center justify-between text-sm mb-1.5">
-                  <span className="text-slate-600">Votes reÃ§us</span>
+                  <span className="text-slate-600">Votes reçus</span>
                   <span className="font-semibold text-slate-900">{votedCount} / {juryTotal}</span>
                 </div>
                 <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
@@ -285,18 +285,18 @@ export default function VoteManage() {
             <div className="flex flex-col items-center justify-center py-10 text-slate-400">
               <Clock className="w-10 h-10 mb-2 opacity-30" />
               <p className="text-sm">Aucun projet actif</p>
-              <p className="text-xs mt-1">SÃ©lectionnez un projet Ã  gauche</p>
+              <p className="text-xs mt-1">Sélectionnez un projet à gauche</p>
             </div>
           )}
         </div>
 
         {/* Right: jury list */}
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold text-slate-800 mb-3">JurÃ©s ({juryTotal})</h2>
+          <h2 className="font-semibold text-slate-800 mb-3">Jurés ({juryTotal})</h2>
           {jury.length === 0 ? (
             <div className="text-center py-8 text-slate-400">
               <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">En attente des jurÃ©s</p>
+              <p className="text-sm">En attente des jurés</p>
             </div>
           ) : (
             <div className="space-y-2">

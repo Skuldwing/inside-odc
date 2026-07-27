@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, Award, AlertCircle } from "lucide-react";
 import api from "../api";
@@ -37,7 +37,7 @@ export default function VoteJoin() {
       localStorage.setItem(`vote_jury_${sessionId}`, JSON.stringify({ token: r.data.token, pseudo: r.data.pseudo, avatar: r.data.avatar }));
       navigate(`/vote/jury/${sessionId}`, { replace: true });
     } catch (err) {
-      setJoinError(err?.response?.data?.error || "Erreur. RÃ©essayez.");
+      setJoinError(err?.response?.data?.error || "Erreur. Réessayez.");
       setJoining(false);
     }
   };
@@ -135,7 +135,7 @@ export default function VoteJoin() {
                 <Loader2 className="w-5 h-5 animate-spin" /> Connexion...
               </span>
             ) : (
-              "Rejoindre comme jurÃ©"
+              "Rejoindre comme juré"
             )}
           </button>
 

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Plus,
   Building2,
@@ -180,7 +180,7 @@ export default function Partenaires() {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium">TÃ©lÃ©phone</label>
+                  <label className="text-sm font-medium">Téléphone</label>
                   <input
                     className="input mt-1"
                     value={form.contact_phone}
@@ -196,7 +196,7 @@ export default function Partenaires() {
 
               <div>
                 <label className="text-sm font-medium">
-                  Objectif bÃ©nÃ©ficiaires
+                  Objectif bénéficiaires
                 </label>
                 <input
                   type="number"
@@ -252,7 +252,7 @@ export default function Partenaires() {
 
         {filteredPartners.length === 0 && (
           <div className="card p-8 text-center text-slate-500">
-            Aucun partenaire enregistrÃ©
+            Aucun partenaire enregistré
           </div>
         )}
 
@@ -307,13 +307,13 @@ export default function Partenaires() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-xs text-slate-500 mb-1">ActivitÃ©s</p>
+                    <p className="text-xs text-slate-500 mb-1">Activités</p>
                     <p className="text-xl font-semibold text-slate-900">
                       {activities}
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-xs text-slate-500 mb-1">BÃ©nÃ©ficiaires</p>
+                    <p className="text-xs text-slate-500 mb-1">Bénéficiaires</p>
                     <p className="text-xl font-semibold text-slate-900">
                       {beneficiaries}
                     </p>
