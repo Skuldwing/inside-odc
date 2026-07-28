@@ -263,14 +263,22 @@ router.get("/summary", authMiddleware, async (req, res) => {
       ${partnerId ? "AND pr.id = $3" : ""}
     `;
 
-    const alertsDevicesQuery = `
-      SELECT d.name,
-             MAX(a.activity_date) AS last_activity
-      FROM devices d
-      LEFT JOIN activities a ON a.device_id = d.id
-      ${partnerId ? "AND a.partner_id = $1" : ""}
-      GROUP BY d.name
-    `;
+    const alertsDevicesQuery = partnerId
+      ? `
+        SELECT d.name,
+               MAX(a.activity_date) AS last_activity
+        FROM devices d
+        JOIN partner_devices pd ON pd.device_id = d.id AND pd.partner_id = $1
+        LEFT JOIN activities a ON a.device_id = d.id AND a.partner_id = $1
+        GROUP BY d.name
+      `
+      : `
+        SELECT d.name,
+               MAX(a.activity_date) AS last_activity
+        FROM devices d
+        LEFT JOIN activities a ON a.device_id = d.id
+        GROUP BY d.name
+      `;
 
     const partnersIsActiveCheck = await pool.query(
       `
