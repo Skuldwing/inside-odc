@@ -9,9 +9,10 @@ import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
 
 const ROLES = [
-  { value: "admin",   label: "Administrateur", cls: "bg-orange-100 text-orange-700 border-orange-200" },
-  { value: "partner", label: "Partenaire",      cls: "bg-blue-100 text-blue-700 border-blue-200" },
-  { value: "viewer",  label: "Lecteur",         cls: "bg-slate-100 text-slate-600 border-slate-200" },
+  { value: "admin",   label: "Administrateur",  cls: "bg-orange-100 text-orange-700 border-orange-200" },
+  { value: "partner", label: "Partenaire",       cls: "bg-blue-100 text-blue-700 border-blue-200" },
+  { value: "coach",   label: "Coach/Formateur",  cls: "bg-purple-100 text-purple-700 border-purple-200" },
+  { value: "viewer",  label: "Lecteur",          cls: "bg-slate-100 text-slate-600 border-slate-200" },
 ];
 
 const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active" };
@@ -282,13 +283,15 @@ export default function Utilisateurs() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium">Partenaire (optionnel)</label>
-                  <select className="select mt-1" value={form.partner_id} onChange={e => setForm(f => ({ ...f, partner_id: e.target.value }))}>
-                    <option value="">— Aucun partenaire —</option>
-                    {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </div>
+                {form.role === "partner" && (
+                  <div>
+                    <label className="text-sm font-medium">Partenaire (optionnel)</label>
+                    <select className="select mt-1" value={form.partner_id} onChange={e => setForm(f => ({ ...f, partner_id: e.target.value }))}>
+                      <option value="">— Aucun partenaire —</option>
+                      {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-sm font-medium">Statut</label>

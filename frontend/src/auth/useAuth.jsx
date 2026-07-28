@@ -72,6 +72,7 @@ export function AuthProvider({ children }) {
         isAuthenticated: !!user,
         isAdmin: role === "admin",
         isPartner: role === "partner",
+        isCoach: role === "coach",
         isViewer: role === "viewer",
         login,
         logout,

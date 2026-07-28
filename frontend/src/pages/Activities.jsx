@@ -19,6 +19,8 @@ import {
   Plus,
   QrCode,
   X,
+  FileText,
+  Upload,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
@@ -37,7 +39,7 @@ export default function Activities({
   forceUploadOpen = false,
   initialSearchQuery = "",
 }) {
-  const { role, user, isViewer } = useAuth();
+  const { role, user, isViewer, isCoach } = useAuth();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -77,7 +79,13 @@ export default function Activities({
     device_id: "",
     partner_id: "",
     participants_manual: "",
+    report_filename: null,
   });
+
+  const [reportFile, setReportFile] = useState(null);
+  const [reportUploading, setReportUploading] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [reportSuccess, setReportSuccess] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -132,12 +140,15 @@ export default function Activities({
           partner: a.partner_name || "-",
           device_id: a.device_id || null,
           device: a.device_name || "-",
+          coach_id: a.coach_id || null,
+          coach_name: a.coach_name || null,
           location: a.location || "-",
           date,
           duration_hours: a.duration_hours || "",
           participants: a.participants_count ?? 0,
           participants_manual: a.participants_manual ?? null,
           date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
+          report_filename: a.report_filename || null,
           status: statusValue,
           statusLabel:
             statusValue === "completed"
@@ -265,6 +276,9 @@ export default function Activities({
     setImporting(false);
     setImportDirectResult(null);
     setImportDirectError("");
+    setReportFile(null);
+    setReportError("");
+    setReportSuccess(false);
     setEditForm({
       id: activity.id,
       title: activity.title || "",
@@ -276,8 +290,44 @@ export default function Activities({
       device_id: activity.device_id || "",
       partner_id: activity.partner_id || "",
       participants_manual: activity.participants_manual ?? "",
+      report_filename: activity.report_filename || null,
     });
     setEditOpen(true);
+  };
+
+  const handleReportUpload = async () => {
+    if (!reportFile || !editForm.id) return;
+    setReportUploading(true);
+    setReportError("");
+    setReportSuccess(false);
+    try {
+      const fd = new FormData();
+      fd.append("report", reportFile);
+      await api.post(`/activities/${editForm.id}/report`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setReportSuccess(true);
+      setEditForm(f => ({ ...f, report_filename: reportFile.name }));
+      fetchActivities();
+    } catch (err) {
+      setReportError(err?.response?.data?.error || "Erreur lors de l'upload.");
+    } finally {
+      setReportUploading(false);
+    }
+  };
+
+  const handleDownloadReport = async (activityId) => {
+    try {
+      const res = await api.get(`/activities/${activityId}/report`, { responseType: "blob" });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rapport_activite_${activityId}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Erreur lors du téléchargement du rapport.");
+    }
   };
 
   const handleDirectImport = async () => {
@@ -370,11 +420,13 @@ export default function Activities({
         if (form.date_fin) fd.append("date_fin", form.date_fin);
         if (form.duration_hours) fd.append("duration_hours", form.duration_hours);
         fd.append("location", form.location);
-        if (form.device_id) fd.append("device_id", form.device_id);
-        if (role === "admin" && form.partner_id) {
-          fd.append("partner_id", form.partner_id);
-        } else if (role === "partner" && user?.partner_id) {
-          fd.append("partner_id", user.partner_id);
+        if (role !== "coach") {
+          if (form.device_id) fd.append("device_id", form.device_id);
+          if (role === "admin" && form.partner_id) {
+            fd.append("partner_id", form.partner_id);
+          } else if (role === "partner" && user?.partner_id) {
+            fd.append("partner_id", user.partner_id);
+          }
         }
         if (form.participants_manual !== "") fd.append("participants_manual", form.participants_manual);
         fd.append("file", form.file);
@@ -391,7 +443,7 @@ export default function Activities({
           date_fin: form.date_fin || null,
           duration_hours: form.duration_hours || null,
           location: form.location || null,
-          device_id: form.device_id || null,
+          device_id: role !== "coach" ? (form.device_id || null) : null,
           participants_manual: form.participants_manual !== "" ? Number(form.participants_manual) : null,
           partner_id:
             role === "admin"
@@ -548,6 +600,8 @@ export default function Activities({
           onDelete={handleDelete}
           onQrCode={setQrActivity}
           onExport={handleExportActivity}
+          onDownloadReport={handleDownloadReport}
+          showQrCode={role !== "partner" && role !== "coach"}
         />
       ) : (
         <div className="space-y-4">
@@ -564,6 +618,8 @@ export default function Activities({
               onDelete={() => handleDelete(activity.id)}
               onQrCode={() => setQrActivity(activity)}
               onExport={() => handleExportActivity(activity)}
+              onDownloadReport={() => handleDownloadReport(activity.id)}
+              showQrCode={role !== "partner" && role !== "coach"}
             />
           ))}
         </div>
@@ -674,6 +730,50 @@ export default function Activities({
               </button>
             </div>
           </form>
+
+          {/* Rapport d'activité */}
+          <div className="mt-5 pt-5 border-t border-slate-200">
+            <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-slate-400" />
+              Rapport d'activité
+            </p>
+            {editForm.report_filename && (
+              <div className="mb-3 flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-3 py-2">
+                <FileText className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                <span className="text-xs text-slate-600 flex-1 truncate">{editForm.report_filename}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadReport(editForm.id)}
+                  className="btn-ghost border text-xs flex items-center gap-1"
+                >
+                  <Download className="w-3 h-3" /> Télécharger
+                </button>
+              </div>
+            )}
+            <div className="space-y-2">
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xls"
+                onChange={e => { setReportFile(e.target.files[0] || null); setReportError(""); setReportSuccess(false); }}
+                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
+              />
+              {reportError && (
+                <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{reportError}</p>
+              )}
+              {reportSuccess && (
+                <p className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">Rapport uploadé avec succès.</p>
+              )}
+              <button
+                type="button"
+                disabled={!reportFile || reportUploading}
+                onClick={handleReportUpload}
+                className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                {reportUploading ? "Upload en cours..." : "Uploader le rapport"}
+              </button>
+            </div>
+          </div>
 
           {/* Import liste de présences */}
           <div className="mt-5 pt-5 border-t border-slate-200">
@@ -896,21 +996,23 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
         </div>
       )}
 
-      <div>
-        <label className="text-sm font-medium">Dispositif</label>
-        <select
-          className="select mt-1"
-          value={form.device_id}
-          onChange={(e) => setForm({ ...form, device_id: e.target.value })}
-        >
-          <option value="">Selectionner</option>
-          {devices.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {role !== "coach" && (
+        <div>
+          <label className="text-sm font-medium">Dispositif</label>
+          <select
+            className="select mt-1"
+            value={form.device_id}
+            onChange={(e) => setForm({ ...form, device_id: e.target.value })}
+          >
+            <option value="">Selectionner</option>
+            {devices.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </>
   );
 }
@@ -922,7 +1024,7 @@ const STATUS_COLORS = {
   completed: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
 };
 
-function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode, onExport }) {
+function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, showQrCode }) {
   const [selectedDay, setSelectedDay] = useState(null);
 
   const monthStart = startOfMonth(calendarDate);
@@ -1061,6 +1163,8 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
                   onDelete={() => onDelete(activity.id)}
                   onQrCode={() => onQrCode && onQrCode(activity)}
                   onExport={() => onExport && onExport(activity)}
+                  onDownloadReport={() => onDownloadReport && onDownloadReport(activity.id)}
+                  showQrCode={showQrCode}
                 />
               ))}
             </div>
@@ -1213,7 +1317,7 @@ function QrModal({ activity, onClose }) {
   );
 }
 
-function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport }) {
+function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, showQrCode = true }) {
   const statusColors = {
     planned: "bg-blue-100 border-blue-200 text-blue-700",
     ongoing: "bg-orange-100 border-orange-200 text-orange-700",
@@ -1226,7 +1330,10 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
         <div>
           <p className="font-semibold text-slate-900 text-lg">{activity.title}</p>
           <p className="text-sm text-slate-500 mt-1">
-            {activity.partner} · {activity.device}
+            {activity.coach_name
+              ? `Formateur : ${activity.coach_name}`
+              : `${activity.partner} · ${activity.device}`
+            }
           </p>
           {activity.description && (
             <p className="text-sm text-slate-600 mt-2">{activity.description}</p>
@@ -1289,13 +1396,15 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
           )}
 
           <div className="flex items-center gap-2">
-            <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
-              onClick={onQrCode}
-              title="QR Code d'émargement"
-            >
-              <QrCode className="w-4 h-4" />
-            </button>
+            {showQrCode && (
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
+                onClick={onQrCode}
+                title="QR Code d'émargement"
+              >
+                <QrCode className="w-4 h-4" />
+              </button>
+            )}
             {activity.participants > 0 && (
               <button
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50"
@@ -1303,6 +1412,15 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport 
                 title="Télécharger liste de présences"
               >
                 <Download className="w-4 h-4" />
+              </button>
+            )}
+            {activity.report_filename && onDownloadReport && (
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                onClick={onDownloadReport}
+                title={`Rapport : ${activity.report_filename}`}
+              >
+                <FileText className="w-4 h-4" />
               </button>
             )}
             {canEdit && (

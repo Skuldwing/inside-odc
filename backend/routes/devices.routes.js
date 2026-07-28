@@ -9,6 +9,8 @@ const router = express.Router();
 /* ===== GET DEVICES ===== */
 router.get("/", authMiddleware, async (req, res) => {
   try {
+    if (req.user.role === "coach") return res.json([]);
+
     let query, params = [];
 
     if (req.user.role === "partner") {

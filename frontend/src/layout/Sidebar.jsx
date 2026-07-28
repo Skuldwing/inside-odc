@@ -22,7 +22,7 @@ const navigation = [
     name: "Dashboard",
     icon: LayoutDashboard,
     path: "/",
-    roles: ["admin", "partner", "viewer"],
+    roles: ["admin", "partner", "coach", "viewer"],
   },
   {
     name: "Dashboard Social",
@@ -40,13 +40,13 @@ const navigation = [
     name: "Activités",
     icon: Calendar,
     path: "/activities",
-    roles: ["admin", "partner", "viewer"],
+    roles: ["admin", "partner", "coach", "viewer"],
   },
   {
     name: "Participants",
     icon: Users,
     path: "/participants",
-    roles: ["admin", "partner", "viewer"],
+    roles: ["admin", "partner", "coach", "viewer"],
   },
 ];
 
@@ -214,6 +214,8 @@ export default function Sidebar({
                   ? "Admin"
                   : safeRole === "partner"
                   ? "Partenaire"
+                  : safeRole === "coach"
+                  ? "Coach / Formateur"
                   : "Lecteur"}
               </p>
               <p className="text-xs text-slate-400">
@@ -221,6 +223,8 @@ export default function Sidebar({
                   ? "Administrateur"
                   : safeRole === "partner"
                   ? "Compte partenaire"
+                  : safeRole === "coach"
+                  ? "Compte formateur"
                   : "Lecture seule"}
               </p>
             </div>

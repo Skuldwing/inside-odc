@@ -242,6 +242,31 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: email_templates")).catch(e => console.warn("Migration email_templates:", e.message));
 
+/* Rôle coach */
+pool.query(`
+  DO $$
+  BEGIN
+    BEGIN
+      ALTER TABLE users DROP CONSTRAINT users_role_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END;
+    BEGIN
+      ALTER TABLE users ADD CONSTRAINT users_role_check
+        CHECK (role IN ('admin','partner','viewer','coach'));
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END$$;
+`).then(() => console.log("Migration OK: users role=coach")).catch(e => console.warn("Migration users role:", e.message));
+
+pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS coach_id INTEGER REFERENCES users(id)`)
+  .then(() => console.log("Migration OK: activities.coach_id")).catch(e => console.warn("Migration coach_id:", e.message));
+
+pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS report_filename TEXT`)
+  .then(() => console.log("Migration OK: activities.report_filename")).catch(e => console.warn("Migration report_filename:", e.message));
+
+pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS report_data BYTEA`)
+  .then(() => console.log("Migration OK: activities.report_data")).catch(e => console.warn("Migration report_data:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

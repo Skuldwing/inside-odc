@@ -1,4 +1,5 @@
 const express = require("express");
+const multer = require("multer");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
@@ -8,11 +9,22 @@ const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 
 const router = express.Router();
 
-function requireAdminOrPartner(req, res, next) {
+const reportUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+function requireWriteAccess(req, res, next) {
   if (req.user.role === "viewer") {
     return res.status(403).json({ error: "Accès refusé" });
   }
   next();
+}
+
+function isOwner(req, activity) {
+  if (req.user.role === "partner") return activity.partner_id === req.user.partner_id;
+  if (req.user.role === "coach") return activity.coach_id === req.user.id;
+  return true; // admin
 }
 
 /* ===== GET ACTIVITIES ===== */
@@ -22,10 +34,12 @@ router.get("/", authMiddleware, async (req, res) => {
       SELECT a.*,
              p.name AS partner_name,
              d.name AS device_name,
+             u.full_name AS coach_name,
              COALESCE(ap.participants_count, 0) AS participants_count
       FROM activities a
       LEFT JOIN partners p ON a.partner_id = p.id
       LEFT JOIN devices d ON a.device_id = d.id
+      LEFT JOIN users u ON a.coach_id = u.id
       LEFT JOIN (
         SELECT activity_id, COUNT(*)::int AS participants_count
         FROM activity_participants
@@ -35,10 +49,12 @@ router.get("/", authMiddleware, async (req, res) => {
 
     const params = [];
 
-    // Partner ne voit que ses activités
     if (req.user.role === "partner") {
       query += " WHERE a.partner_id = $1";
       params.push(req.user.partner_id);
+    } else if (req.user.role === "coach") {
+      query += " WHERE a.coach_id = $1";
+      params.push(req.user.id);
     }
 
     query += " ORDER BY a.activity_date DESC";
@@ -52,7 +68,7 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 /* ===== CREATE ACTIVITY ===== */
-router.post("/", authMiddleware, requireAdminOrPartner, async (req, res) => {
+router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
     const {
       title,
@@ -71,15 +87,22 @@ router.post("/", authMiddleware, requireAdminOrPartner, async (req, res) => {
     }
 
     let resolvedPartnerId = partner_id || null;
+    let resolvedDeviceId = device_id || null;
+    let resolvedCoachId = null;
+
     if (req.user.role === "partner") {
       resolvedPartnerId = req.user.partner_id;
+    } else if (req.user.role === "coach") {
+      resolvedPartnerId = null;
+      resolvedDeviceId = null;
+      resolvedCoachId = req.user.id;
     }
 
     const result = await pool.query(
       `
       INSERT INTO activities
-      (title, description, activity_date, date_fin, duration_hours, location, device_id, partner_id, created_by, participants_manual)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      (title, description, activity_date, date_fin, duration_hours, location, device_id, partner_id, created_by, participants_manual, coach_id)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       RETURNING *
       `,
       [
@@ -89,10 +112,11 @@ router.post("/", authMiddleware, requireAdminOrPartner, async (req, res) => {
         date_fin || null,
         duration_hours || null,
         location,
-        device_id,
+        resolvedDeviceId,
         resolvedPartnerId,
         req.user.id,
         participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
+        resolvedCoachId,
       ]
     );
 
@@ -104,7 +128,7 @@ router.post("/", authMiddleware, requireAdminOrPartner, async (req, res) => {
 });
 
 /* ===== UPDATE ACTIVITY ===== */
-router.put("/:id", authMiddleware, requireAdminOrPartner, async (req, res) => {
+router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -124,22 +148,23 @@ router.put("/:id", authMiddleware, requireAdminOrPartner, async (req, res) => {
     }
 
     const existing = await pool.query(
-      "SELECT id, partner_id FROM activities WHERE id = $1",
+      "SELECT id, partner_id, coach_id FROM activities WHERE id = $1",
       [id]
     );
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: "Activite introuvable" });
     }
 
-    if (
-      req.user.role === "partner" &&
-      existing.rows[0].partner_id !== req.user.partner_id
-    ) {
+    if (!isOwner(req, existing.rows[0])) {
       return res.status(403).json({ error: "Acces refuse" });
     }
 
     const resolvedPartnerId =
-      req.user.role === "partner" ? req.user.partner_id : partner_id || null;
+      req.user.role === "partner" ? req.user.partner_id
+      : req.user.role === "coach" ? null
+      : partner_id || null;
+
+    const resolvedDeviceId = req.user.role === "coach" ? null : device_id || null;
 
     const result = await pool.query(
       `
@@ -163,7 +188,7 @@ router.put("/:id", authMiddleware, requireAdminOrPartner, async (req, res) => {
         date_fin || null,
         duration_hours || null,
         location || null,
-        device_id || null,
+        resolvedDeviceId,
         resolvedPartnerId,
         participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
         id,
@@ -184,7 +209,7 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     const { id } = req.params;
 
     const actRes = await pool.query(
-      `SELECT a.title, a.activity_date, a.partner_id, p.name AS partner_name
+      `SELECT a.title, a.activity_date, a.partner_id, a.coach_id, p.name AS partner_name
        FROM activities a LEFT JOIN partners p ON p.id = a.partner_id
        WHERE a.id = $1`,
       [id]
@@ -193,10 +218,10 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
 
     const activity = actRes.rows[0];
 
-    if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+    if (req.user.role === "viewer") {
       return res.status(403).json({ error: "Accès refusé" });
     }
-    if (req.user.role === "viewer") {
+    if (!isOwner(req, activity)) {
       return res.status(403).json({ error: "Accès refusé" });
     }
 
@@ -241,15 +266,16 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
 });
 
 /* ===== SEND ATTESTATIONS ===== */
-router.post("/:id/send-attestations", authMiddleware, requireAdminOrPartner, async (req, res) => {
+router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
     const { id } = req.params;
 
     const actRes = await pool.query(
-      `SELECT a.*, p.name AS partner_name, d.name AS device_name
+      `SELECT a.*, p.name AS partner_name, d.name AS device_name, u.full_name AS coach_name
        FROM activities a
        LEFT JOIN partners p ON p.id = a.partner_id
        LEFT JOIN devices  d ON d.id  = a.device_id
+       LEFT JOIN users    u ON u.id  = a.coach_id
        WHERE a.id = $1`,
       [id]
     );
@@ -258,7 +284,7 @@ router.post("/:id/send-attestations", authMiddleware, requireAdminOrPartner, asy
     }
     const activity = actRes.rows[0];
 
-    if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+    if (!isOwner(req, activity)) {
       return res.status(403).json({ error: "Accès refusé" });
     }
 
@@ -291,7 +317,7 @@ router.post("/:id/send-attestations", authMiddleware, requireAdminOrPartner, asy
         const pdfBuffer = await generateAttestationPDF({
           participant,
           activity,
-          partner: activity.partner_name,
+          partner: activity.partner_name || activity.coach_name,
           device: activity.device_name,
         });
 
@@ -308,7 +334,7 @@ router.post("/:id/send-attestations", authMiddleware, requireAdminOrPartner, asy
           nom: fullName,
           activite: activity.title,
           date: activity.activity_date ? new Date(activity.activity_date).toLocaleDateString("fr-FR") : "",
-          partenaire: activity.partner_name || "",
+          partenaire: activity.partner_name || activity.coach_name || "",
           dispositif: activity.device_name || "",
           duree: activity.duration_hours ? `${activity.duration_hours}h` : "",
         };
@@ -347,23 +373,75 @@ router.post("/:id/send-attestations", authMiddleware, requireAdminOrPartner, asy
   }
 });
 
+/* ===== UPLOAD RAPPORT ===== */
+router.post("/:id/report", authMiddleware, requireWriteAccess, reportUpload.single("report"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!req.file) return res.status(400).json({ error: "Fichier requis" });
+
+    const actRes = await pool.query(
+      "SELECT id, partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    if (!isOwner(req, actRes.rows[0])) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    await pool.query(
+      "UPDATE activities SET report_filename = $1, report_data = $2 WHERE id = $3",
+      [req.file.originalname, req.file.buffer, id]
+    );
+
+    res.json({ success: true, filename: req.file.originalname });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== TÉLÉCHARGER RAPPORT ===== */
+router.get("/:id/report", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const actRes = await pool.query(
+      "SELECT report_filename, report_data, partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    const activity = actRes.rows[0];
+    if (!activity.report_data) return res.status(404).json({ error: "Aucun rapport disponible" });
+
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    if (!isOwner(req, activity)) return res.status(403).json({ error: "Accès refusé" });
+
+    const filename = activity.report_filename || "rapport.pdf";
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.send(activity.report_data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== DELETE ACTIVITY ===== */
-router.delete("/:id", authMiddleware, requireAdminOrPartner, async (req, res) => {
+router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
     const { id } = req.params;
 
     const existing = await pool.query(
-      "SELECT id, partner_id FROM activities WHERE id = $1",
+      "SELECT id, partner_id, coach_id FROM activities WHERE id = $1",
       [id]
     );
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: "Activite introuvable" });
     }
 
-    if (
-      req.user.role === "partner" &&
-      existing.rows[0].partner_id !== req.user.partner_id
-    ) {
+    if (!isOwner(req, existing.rows[0])) {
       return res.status(403).json({ error: "Acces refuse" });
     }
 

@@ -23,6 +23,11 @@ function buildFilters(req) {
     partnerId = req.user.partner_id;
   }
 
+  let coachId = null;
+  if (req.user.role === "coach") {
+    coachId = req.user.id;
+  }
+
   const deviceId = req.query.device_id || null;
   const gender = req.query.gender || null;
 
@@ -30,20 +35,25 @@ function buildFilters(req) {
   let idx = 3;
   let where = "a.activity_date BETWEEN $1 AND $2";
 
-  if (partnerId) {
-    where += ` AND a.partner_id = $${idx++}`;
-    params.push(partnerId);
-  }
-  if (deviceId) {
-    where += ` AND a.device_id = $${idx++}`;
-    params.push(deviceId);
+  if (coachId) {
+    where += ` AND a.coach_id = $${idx++}`;
+    params.push(coachId);
+  } else {
+    if (partnerId) {
+      where += ` AND a.partner_id = $${idx++}`;
+      params.push(partnerId);
+    }
+    if (deviceId) {
+      where += ` AND a.device_id = $${idx++}`;
+      params.push(deviceId);
+    }
   }
   if (gender) {
     where += ` AND part.genre = $${idx++}`;
     params.push(gender);
   }
 
-  return { where, params, year, from, to, partnerId };
+  return { where, params, year, from, to, partnerId, coachId };
 }
 
 router.get("/summary", authMiddleware, async (req, res) => {

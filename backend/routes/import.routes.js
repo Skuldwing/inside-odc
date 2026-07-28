@@ -393,8 +393,14 @@ router.post(
       }
 
       let resolvedPartnerId = partner_id || null;
+      let resolvedDeviceId = device_id || null;
+      let resolvedCoachId = null;
       if (req.user.role === "partner") {
         resolvedPartnerId = req.user.partner_id;
+      } else if (req.user.role === "coach") {
+        resolvedPartnerId = null;
+        resolvedDeviceId = null;
+        resolvedCoachId = req.user.id;
       }
 
       const workbook = xlsx.readFile(req.file.path);
@@ -411,8 +417,8 @@ router.post(
       const activityResult = await client.query(
         `
         INSERT INTO activities
-        (title, description, activity_date, duration_hours, location, device_id, partner_id, created_by)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        (title, description, activity_date, duration_hours, location, device_id, partner_id, created_by, coach_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         RETURNING *
         `,
         [
@@ -421,9 +427,10 @@ router.post(
           activity_date,
           duration_hours || null,
           location || null,
-          device_id || null,
+          resolvedDeviceId,
           resolvedPartnerId,
           req.user.id,
+          resolvedCoachId,
         ]
       );
 
@@ -474,7 +481,7 @@ router.post(
       }
 
       const activityResult = await client.query(
-        "SELECT title, activity_date, partner_id FROM activities WHERE id = $1",
+        "SELECT title, activity_date, partner_id, coach_id FROM activities WHERE id = $1",
         [activityId]
       );
 
@@ -483,10 +490,10 @@ router.post(
       }
 
       const activity = activityResult.rows[0];
-      if (
-        req.user.role === "partner" &&
-        activity.partner_id !== req.user.partner_id
-      ) {
+      if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+        return res.status(403).json({ error: "Acces refuse" });
+      }
+      if (req.user.role === "coach" && activity.coach_id !== req.user.id) {
         return res.status(403).json({ error: "Acces refuse" });
       }
 
@@ -563,7 +570,7 @@ router.post(
       }
 
       const activityResult = await client.query(
-        "SELECT id, title, partner_id FROM activities WHERE id = $1",
+        "SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1",
         [activityId]
       );
       if (!activityResult.rows.length) {
@@ -572,6 +579,9 @@ router.post(
       const activity = activityResult.rows[0];
 
       if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+        return res.status(403).json({ error: "Acces refuse" });
+      }
+      if (req.user.role === "coach" && activity.coach_id !== req.user.id) {
         return res.status(403).json({ error: "Acces refuse" });
       }
 
