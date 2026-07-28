@@ -22,29 +22,18 @@ async function hasUsersIsActiveColumn() {
   return result.rowCount > 0;
 }
 
-async function hasObjectiveBeneficiariesColumn() {
-  const result = await pool.query(
-    `SELECT 1 FROM information_schema.columns
-     WHERE table_name = 'users' AND column_name = 'objective_beneficiaries' LIMIT 1`
-  );
-  return result.rowCount > 0;
-}
 
 /* ===== GET USERS ===== */
 router.get("/", async (req, res) => {
   try {
-    const [hasIsActive, hasObjCol] = await Promise.all([
-      hasUsersIsActiveColumn(),
-      hasObjectiveBeneficiariesColumn(),
-    ]);
+    const hasIsActive = await hasUsersIsActiveColumn();
     const statusExpr = hasIsActive
       ? "CASE WHEN u.is_active = true THEN 'active' ELSE 'inactive' END"
       : "'active'";
-    const objExpr = hasObjCol ? "u.objective_beneficiaries," : "";
 
     const result = await pool.query(
       `SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
-              ${objExpr}
+              u.objective_beneficiaries,
               p.name AS partner,
               ${statusExpr} AS status
        FROM users u
@@ -172,47 +161,25 @@ router.put("/:id", async (req, res) => {
       ? Number(objective_beneficiaries)
       : null;
 
-    const [hasIsActive, hasObjCol] = await Promise.all([
-      hasUsersIsActiveColumn(),
-      hasObjectiveBeneficiariesColumn(),
-    ]);
+    const hasIsActive = await hasUsersIsActiveColumn();
 
-    let result;
-    if (hasIsActive && hasObjCol) {
-      result = await pool.query(
-        `UPDATE users
-         SET email = $1, role = $2, partner_id = $3, full_name = $4,
-             is_active = $5, objective_beneficiaries = $6
-         WHERE id = $7
-         RETURNING id, email, role, full_name, partner_id, objective_beneficiaries`,
-        [email, role, resolvedPartnerId, full_name || null, isActive, coachObjective, id]
-      );
-    } else if (hasIsActive) {
-      result = await pool.query(
-        `UPDATE users
-         SET email = $1, role = $2, partner_id = $3, full_name = $4, is_active = $5
-         WHERE id = $6
-         RETURNING id, email, role, full_name, partner_id`,
-        [email, role, resolvedPartnerId, full_name || null, isActive, id]
-      );
-    } else if (hasObjCol) {
-      result = await pool.query(
-        `UPDATE users
-         SET email = $1, role = $2, partner_id = $3, full_name = $4,
-             objective_beneficiaries = $5
-         WHERE id = $6
-         RETURNING id, email, role, full_name, partner_id, objective_beneficiaries`,
-        [email, role, resolvedPartnerId, full_name || null, coachObjective, id]
-      );
-    } else {
-      result = await pool.query(
-        `UPDATE users
-         SET email = $1, role = $2, partner_id = $3, full_name = $4
-         WHERE id = $5
-         RETURNING id, email, role, full_name, partner_id`,
-        [email, role, resolvedPartnerId, full_name || null, id]
-      );
-    }
+    const result = hasIsActive
+      ? await pool.query(
+          `UPDATE users
+           SET email = $1, role = $2, partner_id = $3, full_name = $4,
+               is_active = $5, objective_beneficiaries = $6
+           WHERE id = $7
+           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries`,
+          [email, role, resolvedPartnerId, full_name || null, isActive, coachObjective, id]
+        )
+      : await pool.query(
+          `UPDATE users
+           SET email = $1, role = $2, partner_id = $3, full_name = $4,
+               objective_beneficiaries = $5
+           WHERE id = $6
+           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries`,
+          [email, role, resolvedPartnerId, full_name || null, coachObjective, id]
+        );
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Utilisateur introuvable" });
