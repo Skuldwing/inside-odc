@@ -1,11 +1,19 @@
 const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { generateAttestationPDF } = require("../services/attestation");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 
 const router = express.Router();
+
+function requireAdminOrPartner(req, res, next) {
+  if (req.user.role === "viewer") {
+    return res.status(403).json({ error: "Accès refusé" });
+  }
+  next();
+}
 
 /* ===== GET ACTIVITIES ===== */
 router.get("/", authMiddleware, async (req, res) => {
@@ -44,7 +52,7 @@ router.get("/", authMiddleware, async (req, res) => {
 });
 
 /* ===== CREATE ACTIVITY ===== */
-router.post("/", authMiddleware, async (req, res) => {
+router.post("/", authMiddleware, requireAdminOrPartner, async (req, res) => {
   try {
     const {
       title,
@@ -96,7 +104,7 @@ router.post("/", authMiddleware, async (req, res) => {
 });
 
 /* ===== UPDATE ACTIVITY ===== */
-router.put("/:id", authMiddleware, async (req, res) => {
+router.put("/:id", authMiddleware, requireAdminOrPartner, async (req, res) => {
   try {
     const { id } = req.params;
     const {
@@ -176,7 +184,7 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     const { id } = req.params;
 
     const actRes = await pool.query(
-      `SELECT a.title, a.activity_date, p.name AS partner_name
+      `SELECT a.title, a.activity_date, a.partner_id, p.name AS partner_name
        FROM activities a LEFT JOIN partners p ON p.id = a.partner_id
        WHERE a.id = $1`,
       [id]
@@ -184,6 +192,13 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     if (!actRes.rows.length) return res.status(404).json({ error: "Activite introuvable" });
 
     const activity = actRes.rows[0];
+
+    if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+    if (req.user.role === "viewer") {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
 
     const partRes = await pool.query(
       `SELECT p.prenom, p.nom, p.telephone, p.email, p.genre, p.age_range, p.structure
@@ -226,7 +241,7 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
 });
 
 /* ===== SEND ATTESTATIONS ===== */
-router.post("/:id/send-attestations", authMiddleware, async (req, res) => {
+router.post("/:id/send-attestations", authMiddleware, requireAdminOrPartner, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -242,6 +257,10 @@ router.post("/:id/send-attestations", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Activité introuvable" });
     }
     const activity = actRes.rows[0];
+
+    if (req.user.role === "partner" && activity.partner_id !== req.user.partner_id) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
 
     const partRes = await pool.query(
       `SELECT p.id, p.nom, p.prenom, p.email
@@ -329,7 +348,7 @@ router.post("/:id/send-attestations", authMiddleware, async (req, res) => {
 });
 
 /* ===== DELETE ACTIVITY ===== */
-router.delete("/:id", authMiddleware, async (req, res) => {
+router.delete("/:id", authMiddleware, requireAdminOrPartner, async (req, res) => {
   try {
     const { id } = req.params;
 

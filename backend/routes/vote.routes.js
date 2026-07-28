@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const requireAdmin = require("../middleware/role.middleware");
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ async function juryAuth(req, res, next) {
    ============================================================ */
 
 /* GET /vote/sessions */
-router.get("/sessions", authMiddleware, async (req, res) => {
+router.get("/sessions", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(`
       SELECT vs.*,
@@ -44,7 +45,7 @@ router.get("/sessions", authMiddleware, async (req, res) => {
 });
 
 /* POST /vote/sessions */
-router.post("/sessions", authMiddleware, async (req, res) => {
+router.post("/sessions", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, event_date, pitch_duration_minutes } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
@@ -60,7 +61,7 @@ router.post("/sessions", authMiddleware, async (req, res) => {
 });
 
 /* GET /vote/sessions/:id */
-router.get("/sessions/:id", authMiddleware, async (req, res) => {
+router.get("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const [sessRes, projRes, critRes, juryRes] = await Promise.all([
@@ -78,7 +79,7 @@ router.get("/sessions/:id", authMiddleware, async (req, res) => {
 });
 
 /* PUT /vote/sessions/:id */
-router.put("/sessions/:id", authMiddleware, async (req, res) => {
+router.put("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, event_date, pitch_duration_minutes } = req.body;
     const r = await pool.query(
@@ -94,7 +95,7 @@ router.put("/sessions/:id", authMiddleware, async (req, res) => {
 });
 
 /* DELETE /vote/sessions/:id */
-router.delete("/sessions/:id", authMiddleware, async (req, res) => {
+router.delete("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM vote_sessions WHERE id=$1", [req.params.id]);
     res.json({ success: true });
@@ -105,7 +106,7 @@ router.delete("/sessions/:id", authMiddleware, async (req, res) => {
 });
 
 /* PUT /vote/sessions/:id/activate */
-router.put("/sessions/:id/activate", authMiddleware, async (req, res) => {
+router.put("/sessions/:id/activate", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(
       "UPDATE vote_sessions SET status='active' WHERE id=$1 RETURNING *",
@@ -120,7 +121,7 @@ router.put("/sessions/:id/activate", authMiddleware, async (req, res) => {
 });
 
 /* PUT /vote/sessions/:id/close */
-router.put("/sessions/:id/close", authMiddleware, async (req, res) => {
+router.put("/sessions/:id/close", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const r = await pool.query(
       "UPDATE vote_sessions SET status='closed', active_project_id=NULL WHERE id=$1 RETURNING *",
@@ -135,7 +136,7 @@ router.put("/sessions/:id/close", authMiddleware, async (req, res) => {
 });
 
 /* PUT /vote/sessions/:id/active-project */
-router.put("/sessions/:id/active-project", authMiddleware, async (req, res) => {
+router.put("/sessions/:id/active-project", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { project_id } = req.body;
     await pool.query(
@@ -160,7 +161,7 @@ router.put("/sessions/:id/active-project", authMiddleware, async (req, res) => {
 });
 
 /* POST /vote/sessions/:id/close-project */
-router.post("/sessions/:id/close-project", authMiddleware, async (req, res) => {
+router.post("/sessions/:id/close-project", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const sessRes = await pool.query("SELECT active_project_id FROM vote_sessions WHERE id=$1", [id]);
@@ -178,7 +179,7 @@ router.post("/sessions/:id/close-project", authMiddleware, async (req, res) => {
 });
 
 /* GET /vote/sessions/:id/live */
-router.get("/sessions/:id/live", authMiddleware, async (req, res) => {
+router.get("/sessions/:id/live", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const sessRes = await pool.query("SELECT * FROM vote_sessions WHERE id=$1", [id]);
@@ -228,7 +229,7 @@ router.get("/sessions/:id/live", authMiddleware, async (req, res) => {
 });
 
 /* GET /vote/sessions/:id/results */
-router.get("/sessions/:id/results", authMiddleware, async (req, res) => {
+router.get("/sessions/:id/results", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const [critRes, projRes] = await Promise.all([
@@ -261,7 +262,7 @@ router.get("/sessions/:id/results", authMiddleware, async (req, res) => {
 });
 
 /* ------- PROJECTS ------- */
-router.post("/sessions/:id/projects", authMiddleware, async (req, res) => {
+router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, porteur, description, order_num } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
@@ -276,7 +277,7 @@ router.post("/sessions/:id/projects", authMiddleware, async (req, res) => {
   }
 });
 
-router.put("/sessions/:id/projects/:pid", authMiddleware, async (req, res) => {
+router.put("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, porteur, description, order_num } = req.body;
     const r = await pool.query(
@@ -291,7 +292,7 @@ router.put("/sessions/:id/projects/:pid", authMiddleware, async (req, res) => {
   }
 });
 
-router.delete("/sessions/:id/projects/:pid", authMiddleware, async (req, res) => {
+router.delete("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM vote_projects WHERE id=$1 AND session_id=$2", [req.params.pid, req.params.id]);
     res.json({ success: true });
@@ -302,7 +303,7 @@ router.delete("/sessions/:id/projects/:pid", authMiddleware, async (req, res) =>
 });
 
 /* ------- CRITERIA ------- */
-router.post("/sessions/:id/criteria", authMiddleware, async (req, res) => {
+router.post("/sessions/:id/criteria", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, scale, weight, order_num } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
@@ -317,7 +318,7 @@ router.post("/sessions/:id/criteria", authMiddleware, async (req, res) => {
   }
 });
 
-router.put("/sessions/:id/criteria/:cid", authMiddleware, async (req, res) => {
+router.put("/sessions/:id/criteria/:cid", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { name, scale, weight, order_num } = req.body;
     const r = await pool.query(
@@ -332,7 +333,7 @@ router.put("/sessions/:id/criteria/:cid", authMiddleware, async (req, res) => {
   }
 });
 
-router.delete("/sessions/:id/criteria/:cid", authMiddleware, async (req, res) => {
+router.delete("/sessions/:id/criteria/:cid", authMiddleware, requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM vote_criteria WHERE id=$1 AND session_id=$2", [req.params.cid, req.params.id]);
     res.json({ success: true });

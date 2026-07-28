@@ -166,9 +166,12 @@ function TemplatesTab() {
                 <div className="bg-slate-50 px-4 py-2 text-xs text-slate-500 border-b border-slate-100">
                   Objet : <strong>{form.subject}</strong>
                 </div>
-                <div
-                  className="p-4"
-                  dangerouslySetInnerHTML={{ __html: form.body_html }}
+                <iframe
+                  srcDoc={form.body_html}
+                  sandbox="allow-same-origin"
+                  title="Aperçu email"
+                  className="w-full"
+                  style={{ height: "320px", border: "none", display: "block" }}
                 />
               </div>
             ) : (

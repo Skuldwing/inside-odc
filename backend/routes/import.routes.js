@@ -469,6 +469,10 @@ router.post(
         return res.status(400).json({ error: "Fichier Excel requis" });
       }
 
+      if (req.user.role === "viewer") {
+        return res.status(403).json({ error: "Accès refusé" });
+      }
+
       const activityResult = await client.query(
         "SELECT title, activity_date, partner_id FROM activities WHERE id = $1",
         [activityId]
@@ -552,6 +556,10 @@ router.post(
 
       if (!req.file) {
         return res.status(400).json({ error: "Fichier Excel requis" });
+      }
+
+      if (req.user.role === "viewer") {
+        return res.status(403).json({ error: "Accès refusé" });
       }
 
       const activityResult = await client.query(
