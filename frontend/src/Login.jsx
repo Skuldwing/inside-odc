@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "./auth/useAuth";
 import ODCLogo from "./components/branding/ODCLogo";
@@ -13,6 +13,8 @@ export default function Login() {
 
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectMessage = location.state?.message || "";
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -48,6 +50,12 @@ export default function Login() {
                 Connectez-vous pour continuer
               </p>
             </div>
+
+            {redirectMessage && (
+              <div className="mt-6 rounded-xl bg-blue-50 text-blue-700 px-4 py-3 text-sm">
+                {redirectMessage}
+              </div>
+            )}
 
             {error && (
               <div className="mt-6 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">

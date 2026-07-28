@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import api from "../api";
 
@@ -7,19 +7,34 @@ export default function SetPassword() {
   const navigate = useNavigate();
   const token = searchParams.get("token") || "";
 
+  const [checking, setChecking] = useState(true);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  useEffect(() => {
+    if (!token) {
+      navigate("/login", { replace: true });
+      return;
+    }
+    api.get(`/auth/check-token?token=${encodeURIComponent(token)}`)
+      .then(res => {
+        if (!res.data.valid) {
+          navigate("/login", { replace: true, state: { message: "Ce lien a déjà été utilisé ou a expiré. Connectez-vous directement." } });
+        } else {
+          setChecking(false);
+        }
+      })
+      .catch(() => {
+        navigate("/login", { replace: true });
+      });
+  }, [token, navigate]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!token) {
-      setError("Lien invalide.");
-      return;
-    }
     if (!password || password.length < 6) {
       setError("Mot de passe trop court (6 caractères minimum).");
       return;
@@ -34,12 +49,22 @@ export default function SetPassword() {
       setSuccess(true);
       setTimeout(() => navigate("/login", { replace: true }), 1500);
     } catch (err) {
-      setError(
-        err?.response?.data?.error ||
-          "Erreur lors de la définition du mot de passe."
-      );
+      const msg = err?.response?.data?.error || "";
+      if (err?.response?.status === 400 && msg.toLowerCase().includes("token")) {
+        navigate("/login", { replace: true, state: { message: "Ce lien a déjà été utilisé ou a expiré." } });
+      } else {
+        setError(msg || "Erreur lors de la définition du mot de passe.");
+      }
     }
   };
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">

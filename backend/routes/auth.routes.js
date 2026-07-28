@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
-const { consumePasswordToken } = require("../services/passwordReset");
+const { consumePasswordToken, checkPasswordToken } = require("../services/passwordReset");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const requireAdminPin = require("../middleware/pin.middleware");
@@ -121,6 +121,19 @@ async function hasUsersIsActiveColumn() {
   );
   return result.rowCount > 0;
 }
+
+/* ================= CHECK TOKEN ================= */
+router.get("/check-token", async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) return res.json({ valid: false });
+    const valid = await checkPasswordToken(token);
+    res.json({ valid });
+  } catch (err) {
+    console.error(err);
+    res.json({ valid: false });
+  }
+});
 
 /* ================= SET PASSWORD ================= */
 router.post("/set-password", async (req, res) => {

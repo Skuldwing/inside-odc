@@ -5,7 +5,18 @@ function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
-async function createPasswordToken(userId, ttlHours = 24) {
+async function checkPasswordToken(token) {
+  const tokenHash = hashToken(token);
+  const res = await pool.query(
+    `SELECT 1 FROM password_reset_tokens
+     WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return res.rowCount > 0;
+}
+
+async function createPasswordToken(userId, ttlHours = 12) {
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
 
@@ -59,4 +70,4 @@ async function consumePasswordToken(token) {
   return row.user_id;
 }
 
-module.exports = { createPasswordToken, consumePasswordToken };
+module.exports = { createPasswordToken, consumePasswordToken, checkPasswordToken };
