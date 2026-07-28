@@ -36,16 +36,20 @@ export default function Partenaires() {
 
   const fetchPartners = async () => {
     try {
-      const [pRes, dRes, uRes] = await Promise.all([
+      const [pRes, dRes] = await Promise.all([
         api.get("/partners"),
         api.get("/devices"),
-        api.get("/users"),
       ]);
       setPartners(pRes.data);
       setAllDevices(dRes.data);
-      setCoaches((uRes.data || []).filter(u => u.role === "coach"));
     } catch (err) {
       console.error("Erreur chargement partenaires", err);
+    }
+    try {
+      const uRes = await api.get("/users");
+      setCoaches((uRes.data || []).filter(u => u.role === "coach"));
+    } catch {
+      /* coachs non disponibles, section masquée */
     }
   };
 
