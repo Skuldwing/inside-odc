@@ -6,32 +6,36 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
 import { Underline } from "@tiptap/extension-underline";
 import { Link } from "@tiptap/extension-link";
+import { Highlight } from "@tiptap/extension-highlight";
+import { Image } from "@tiptap/extension-image";
+import { Subscript } from "@tiptap/extension-subscript";
+import { Superscript } from "@tiptap/extension-superscript";
 import {
-  Plus,
-  Mail,
-  MessageSquare,
-  Calendar,
-  ShieldAlert,
-  Zap,
-  Save,
-  RotateCcw,
-  Check,
-  ChevronRight,
-  Bold,
-  Italic,
-  Underline as UnderlineIcon,
-  Strikethrough,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  AlignJustify,
-  List,
-  ListOrdered,
-  Link as LinkIcon,
-  Palette,
+  Plus, Mail, MessageSquare, Calendar, ShieldAlert, Zap,
+  Save, RotateCcw, Check, ChevronRight,
+  Bold, Italic, Underline as UnderlineIcon, Strikethrough,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  List, ListOrdered, Link as LinkIcon,
+  Palette, Highlighter, Image as ImageIcon,
+  Undo2, Redo2, RemoveFormatting, Minus, Quote,
+  Superscript as SuperscriptIcon, Subscript as SubscriptIcon,
 } from "lucide-react";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
+
+/* Extension TextStyle étendue pour la taille de police */
+const FontSizeTextStyle = TextStyle.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      fontSize: {
+        default: null,
+        parseHTML: el => el.style.fontSize || null,
+        renderHTML: ({ fontSize }) => fontSize ? { style: `font-size:${fontSize}` } : {},
+      },
+    };
+  },
+});
 
 /* ── Toolbar button ──────────────────────────────────────────── */
 function TBtn({ active, onClick, title, children }) {
@@ -69,16 +73,17 @@ function TemplatesTab() {
     extensions: [
       StarterKit,
       Underline,
-      TextStyle,
+      FontSizeTextStyle,
       Color,
+      Highlight.configure({ multicolor: true }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Link.configure({ openOnClick: false }),
+      Image.configure({ inline: false, allowBase64: true }),
+      Subscript,
+      Superscript,
     ],
     content: "",
-    onUpdate: ({ editor: e }) => {
-      setDirty(true);
-      setSavedSlug(null);
-    },
+    onUpdate: () => { setDirty(true); setSavedSlug(null); },
   });
 
   const loadTemplate = useCallback((tpl) => {
@@ -143,11 +148,26 @@ function TemplatesTab() {
   }
 
   function setLink() {
-    const url = window.prompt("URL du lien :", "https://");
-    if (!url) return;
+    const prev = editor?.getAttributes("link").href || "";
+    const url = window.prompt("URL du lien :", prev || "https://");
+    if (url === null) return;
     if (url === "") { editor?.chain().focus().extendMarkRange("link").unsetLink().run(); return; }
     editor?.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
+
+  function insertImage() {
+    const url = window.prompt("URL de l'image :");
+    if (url) editor?.chain().focus().setImage({ src: url }).run();
+  }
+
+  function setFontSize(size) {
+    if (!size) { editor?.chain().focus().setMark("textStyle", { fontSize: null }).run(); return; }
+    editor?.chain().focus().setMark("textStyle", { fontSize: size }).run();
+  }
+
+  const FONT_SIZES = ["10px","11px","12px","13px","14px","16px","18px","20px","24px","28px","32px","36px","48px"];
+
+  const currentFontSize = editor?.getAttributes("textStyle")?.fontSize || "";
 
   const canSave = dirty || subject !== (selected?.subject || "");
 
@@ -234,101 +254,167 @@ function TemplatesTab() {
                   />
                 </div>
 
-                {/* formatting toolbar */}
-                <div className="px-3 py-2 border-b border-slate-100 bg-slate-50 flex items-center gap-0.5 flex-wrap">
-                  {/* heading */}
-                  <select
-                    className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 mr-1"
-                    value={
-                      editor?.isActive("heading", { level: 1 }) ? "h1" :
-                      editor?.isActive("heading", { level: 2 }) ? "h2" :
-                      editor?.isActive("heading", { level: 3 }) ? "h3" : "p"
-                    }
-                    onChange={(e) => {
-                      if (e.target.value === "p") editor?.chain().focus().setParagraph().run();
-                      else editor?.chain().focus().setHeading({ level: parseInt(e.target.value.slice(1)) }).run();
-                    }}
-                  >
-                    <option value="p">Paragraphe</option>
-                    <option value="h1">Titre 1</option>
-                    <option value="h2">Titre 2</option>
-                    <option value="h3">Titre 3</option>
-                  </select>
+                {/* ── Barre d'outils ── */}
+                <div className="border-b border-slate-100 bg-slate-50 divide-y divide-slate-100">
+                  {/* Ligne 1 */}
+                  <div className="px-3 py-1.5 flex items-center gap-0.5 flex-wrap">
 
-                  <Divider />
+                    {/* Annuler / Refaire */}
+                    <TBtn onClick={() => editor?.chain().focus().undo().run()} title="Annuler (Ctrl+Z)">
+                      <Undo2 className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn onClick={() => editor?.chain().focus().redo().run()} title="Rétablir (Ctrl+Y)">
+                      <Redo2 className="w-4 h-4" />
+                    </TBtn>
 
-                  <TBtn active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()} title="Gras (Ctrl+B)">
-                    <Bold className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()} title="Italique (Ctrl+I)">
-                    <Italic className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Souligné (Ctrl+U)">
-                    <UnderlineIcon className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive("strike")} onClick={() => editor?.chain().focus().toggleStrike().run()} title="Barré">
-                    <Strikethrough className="w-4 h-4" />
-                  </TBtn>
+                    <Divider />
 
-                  <Divider />
+                    {/* Style de paragraphe */}
+                    <select
+                      className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700"
+                      value={
+                        editor?.isActive("heading", { level: 1 }) ? "h1" :
+                        editor?.isActive("heading", { level: 2 }) ? "h2" :
+                        editor?.isActive("heading", { level: 3 }) ? "h3" :
+                        editor?.isActive("blockquote") ? "bq" : "p"
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === "p") editor?.chain().focus().setParagraph().run();
+                        else if (v === "bq") editor?.chain().focus().toggleBlockquote().run();
+                        else editor?.chain().focus().setHeading({ level: parseInt(v.slice(1)) }).run();
+                      }}
+                    >
+                      <option value="p">Paragraphe</option>
+                      <option value="h1">Titre 1</option>
+                      <option value="h2">Titre 2</option>
+                      <option value="h3">Titre 3</option>
+                      <option value="bq">Citation</option>
+                    </select>
 
-                  {/* text color */}
-                  <label className="relative p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Couleur du texte">
-                    <Palette className="w-4 h-4 text-slate-600" />
-                    <input
-                      type="color"
-                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                      onInput={(e) => editor?.chain().focus().setColor(e.target.value).run()}
-                    />
-                  </label>
-
-                  <Divider />
-
-                  <TBtn active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()} title="Aligner à gauche">
-                    <AlignLeft className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()} title="Centrer">
-                    <AlignCenter className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()} title="Aligner à droite">
-                    <AlignRight className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive({ textAlign: "justify" })} onClick={() => editor?.chain().focus().setTextAlign("justify").run()} title="Justifier">
-                    <AlignJustify className="w-4 h-4" />
-                  </TBtn>
-
-                  <Divider />
-
-                  <TBtn active={editor?.isActive("bulletList")} onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Liste à puces">
-                    <List className="w-4 h-4" />
-                  </TBtn>
-                  <TBtn active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Liste numérotée">
-                    <ListOrdered className="w-4 h-4" />
-                  </TBtn>
-
-                  <Divider />
-
-                  <TBtn active={editor?.isActive("link")} onClick={setLink} title="Insérer un lien">
-                    <LinkIcon className="w-4 h-4" />
-                  </TBtn>
-
-                  {/* variables */}
-                  {(selected.variables || []).length > 0 && (
-                    <>
-                      <Divider />
-                      <span className="text-xs text-slate-400 mx-1 whitespace-nowrap">Insérer :</span>
-                      {(selected.variables || []).map((v) => (
-                        <button
-                          key={v}
-                          type="button"
-                          onMouseDown={(e) => { e.preventDefault(); insertVariable(v); }}
-                          className="font-mono text-xs bg-orange-50 border border-orange-200 text-orange-600 rounded px-2 py-0.5 hover:bg-orange-100 transition-colors mx-0.5"
-                        >
-                          {v}
-                        </button>
+                    {/* Taille de police */}
+                    <select
+                      className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 ml-1"
+                      value={currentFontSize}
+                      onChange={(e) => setFontSize(e.target.value || null)}
+                    >
+                      <option value="">Taille</option>
+                      {FONT_SIZES.map(s => (
+                        <option key={s} value={s}>{s.replace("px", " pt")}</option>
                       ))}
-                    </>
-                  )}
+                    </select>
+
+                    <Divider />
+
+                    {/* Gras / Italique / Souligné / Barré */}
+                    <TBtn active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()} title="Gras (Ctrl+B)">
+                      <Bold className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()} title="Italique (Ctrl+I)">
+                      <Italic className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Souligné (Ctrl+U)">
+                      <UnderlineIcon className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("strike")} onClick={() => editor?.chain().focus().toggleStrike().run()} title="Barré">
+                      <Strikethrough className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("subscript")} onClick={() => editor?.chain().focus().toggleSubscript().run()} title="Indice">
+                      <SubscriptIcon className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("superscript")} onClick={() => editor?.chain().focus().toggleSuperscript().run()} title="Exposant">
+                      <SuperscriptIcon className="w-4 h-4" />
+                    </TBtn>
+
+                    <Divider />
+
+                    {/* Couleur texte */}
+                    <label className="relative p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Couleur du texte">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Palette className="w-4 h-4 text-slate-600" />
+                        <div className="w-4 h-1 rounded-sm" style={{ background: editor?.getAttributes("textStyle")?.color || "#000" }} />
+                      </div>
+                      <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                        onInput={(e) => editor?.chain().focus().setColor(e.target.value).run()} />
+                    </label>
+
+                    {/* Couleur surlignage */}
+                    <label className="relative p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Surligner">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Highlighter className="w-4 h-4 text-slate-600" />
+                        <div className="w-4 h-1 rounded-sm" style={{ background: editor?.getAttributes("highlight")?.color || "#FFFF00" }} />
+                      </div>
+                      <input type="color" defaultValue="#FFFF00" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                        onInput={(e) => editor?.chain().focus().setHighlight({ color: e.target.value }).run()} />
+                    </label>
+
+                    {/* Effacer la mise en forme */}
+                    <TBtn onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()} title="Effacer la mise en forme">
+                      <RemoveFormatting className="w-4 h-4" />
+                    </TBtn>
+                  </div>
+
+                  {/* Ligne 2 */}
+                  <div className="px-3 py-1.5 flex items-center gap-0.5 flex-wrap">
+
+                    {/* Alignement */}
+                    <TBtn active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()} title="Aligner à gauche">
+                      <AlignLeft className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()} title="Centrer">
+                      <AlignCenter className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()} title="Aligner à droite">
+                      <AlignRight className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive({ textAlign: "justify" })} onClick={() => editor?.chain().focus().setTextAlign("justify").run()} title="Justifier">
+                      <AlignJustify className="w-4 h-4" />
+                    </TBtn>
+
+                    <Divider />
+
+                    {/* Listes */}
+                    <TBtn active={editor?.isActive("bulletList")} onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Liste à puces">
+                      <List className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Liste numérotée">
+                      <ListOrdered className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn active={editor?.isActive("blockquote")} onClick={() => editor?.chain().focus().toggleBlockquote().run()} title="Citation">
+                      <Quote className="w-4 h-4" />
+                    </TBtn>
+
+                    {/* Séparateur horizontal */}
+                    <TBtn onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Insérer une ligne de séparation">
+                      <Minus className="w-4 h-4" />
+                    </TBtn>
+
+                    <Divider />
+
+                    {/* Lien + Image */}
+                    <TBtn active={editor?.isActive("link")} onClick={setLink} title="Insérer / modifier un lien">
+                      <LinkIcon className="w-4 h-4" />
+                    </TBtn>
+                    <TBtn onClick={insertImage} title="Insérer une image (URL)">
+                      <ImageIcon className="w-4 h-4" />
+                    </TBtn>
+
+                    {/* Variables */}
+                    {(selected.variables || []).length > 0 && (
+                      <>
+                        <Divider />
+                        <span className="text-xs text-slate-400 mx-1 whitespace-nowrap">Insérer :</span>
+                        {(selected.variables || []).map((v) => (
+                          <button key={v} type="button"
+                            onMouseDown={(e) => { e.preventDefault(); insertVariable(v); }}
+                            className="font-mono text-xs bg-orange-50 border border-orange-200 text-orange-600 rounded px-2 py-0.5 hover:bg-orange-100 transition-colors mx-0.5"
+                          >
+                            {v}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* editor content */}
