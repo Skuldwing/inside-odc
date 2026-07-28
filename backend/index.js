@@ -22,6 +22,7 @@ const formsRoutes = require("./routes/forms.routes");
 const checkinRoutes = require("./routes/checkin.routes");
 const voteRoutes = require("./routes/vote.routes");
 const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes");
+const auditRoutes = require("./routes/audit.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -130,6 +131,7 @@ app.use("/forms", formsRoutes);
 app.use("/checkin", checkinRoutes);
 app.use("/vote", voteRoutes);
 app.use("/email-templates", emailTemplatesRoutes);
+app.use("/audit-logs", auditRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -269,6 +271,22 @@ pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS report_data BYTEA`)
 
 pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'presentiel'`)
   .then(() => console.log("Migration OK: activities.mode")).catch(e => console.warn("Migration mode:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id             BIGSERIAL PRIMARY KEY,
+    user_id        INTEGER,
+    user_full_name TEXT,
+    user_role      TEXT,
+    action         TEXT NOT NULL,
+    resource       TEXT NOT NULL,
+    resource_id    TEXT,
+    resource_label TEXT,
+    details        JSONB DEFAULT '{}',
+    ip_address     TEXT,
+    created_at     TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: audit_logs")).catch(e => console.warn("Migration audit_logs:", e.message));
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;

@@ -3,6 +3,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const requireAdminPin = require("../middleware/pin.middleware");
+const { logAudit } = require("../services/audit");
 
 const router = express.Router();
 
@@ -62,7 +63,9 @@ router.post("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res)
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const created = result.rows[0];
+    logAudit(req, "CREATE", "partners", created.id, created.name, { status: created.status });
+    res.status(201).json(created);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -113,7 +116,9 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
       return res.status(404).json({ error: "Partenaire introuvable" });
     }
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    logAudit(req, "UPDATE", "partners", updated.id, updated.name, { status: updated.status });
+    res.json(updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -163,6 +168,7 @@ router.put("/:id/devices", authMiddleware, requireAdmin, requireAdminPin, async 
 router.delete("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {
     const { id } = req.params;
+    const before = await pool.query("SELECT name FROM partners WHERE id = $1", [id]);
     const result = await pool.query(
       "DELETE FROM partners WHERE id = $1 RETURNING id",
       [id]
@@ -172,6 +178,7 @@ router.delete("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req,
       return res.status(404).json({ error: "Partenaire introuvable" });
     }
 
+    logAudit(req, "DELETE", "partners", id, before.rows[0]?.name ?? null, {});
     res.json({ success: true });
   } catch (err) {
     console.error(err);

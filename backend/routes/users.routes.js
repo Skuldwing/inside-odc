@@ -8,6 +8,7 @@ const { createPasswordToken } = require("../services/passwordReset");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const requireAdminPin = require("../middleware/pin.middleware");
 const crypto = require("crypto");
+const { logAudit } = require("../services/audit");
 
 const router = express.Router();
 
@@ -121,6 +122,10 @@ router.post("/", async (req, res) => {
       console.error("Erreur envoi email création utilisateur", err);
     }
 
+    logAudit(req, "CREATE", "users", createdUser.id, createdUser.full_name || email, {
+      email: createdUser.email,
+      role: createdUser.role,
+    });
     res.status(201).json({ ...createdUser, invite_link: inviteLink });
   } catch (err) {
     console.error(err);
@@ -188,7 +193,13 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ error: "Utilisateur introuvable" });
     }
 
-    res.json(result.rows[0]);
+    const updatedUser = result.rows[0];
+    logAudit(req, "UPDATE", "users", updatedUser.id, updatedUser.full_name || updatedUser.email, {
+      email: updatedUser.email,
+      role: updatedUser.role,
+      status,
+    });
+    res.json(updatedUser);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -199,6 +210,8 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
+
+    const targetUser = await pool.query("SELECT id, full_name, email, role FROM users WHERE id = $1", [id]);
     const hasIsActive = await hasUsersIsActiveColumn();
     const result = hasIsActive
       ? await pool.query(
@@ -223,6 +236,13 @@ router.delete("/:id", async (req, res) => {
       return res.status(404).json({ error: "Utilisateur introuvable" });
     }
 
+    const tu = targetUser.rows[0];
+    if (tu) {
+      logAudit(req, "DELETE", "users", id, tu.full_name || tu.email, {
+        email: tu.email,
+        role: tu.role,
+      });
+    }
     res.json({ success: true });
   } catch (err) {
     console.error(err);

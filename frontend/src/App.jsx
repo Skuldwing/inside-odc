@@ -24,6 +24,7 @@ const VoteJury = lazy(() => import("./pages/VoteJury"));
 const Vote = lazy(() => import("./pages/Vote"));
 const VoteConfig = lazy(() => import("./pages/VoteConfig"));
 const VoteManage = lazy(() => import("./pages/VoteManage"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 
 function PageLoader() {
   return (
@@ -203,6 +204,16 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <VoteManage />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="audit"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <AuditLogs />
               </Suspense>
             </AdminRoute>
           }

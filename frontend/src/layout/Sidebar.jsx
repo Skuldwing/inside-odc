@@ -11,6 +11,7 @@ import {
   BarChart3,
   Bot,
   Award,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -87,6 +88,12 @@ const managementNavigation = [
     path: "/vote",
     roles: ["admin"],
     matchPrefix: true,
+  },
+  {
+    name: "Journaux d'audit",
+    icon: ShieldCheck,
+    path: "/audit",
+    roles: ["admin"],
   },
 ];
 

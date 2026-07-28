@@ -6,6 +6,7 @@ const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { generateAttestationPDF } = require("../services/attestation");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
+const { logAudit } = require("../services/audit");
 
 const router = express.Router();
 
@@ -125,7 +126,13 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const created = result.rows[0];
+    logAudit(req, "CREATE", "activities", created.id, created.title, {
+      date: created.activity_date,
+      partner_id: created.partner_id,
+      device_id: created.device_id,
+    });
+    res.status(201).json(created);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -206,7 +213,13 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
       ]
     );
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    logAudit(req, "UPDATE", "activities", updated.id, updated.title, {
+      date: updated.activity_date,
+      partner_id: updated.partner_id,
+      device_id: updated.device_id,
+    });
+    res.json(updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -445,7 +458,7 @@ router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      "SELECT id, partner_id, coach_id FROM activities WHERE id = $1",
+      "SELECT id, title, activity_date, partner_id, coach_id FROM activities WHERE id = $1",
       [id]
     );
     if (existing.rows.length === 0) {
@@ -456,11 +469,16 @@ router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
       return res.status(403).json({ error: "Acces refuse" });
     }
 
+    const deletedActivity = existing.rows[0];
     const result = await pool.query(
       "DELETE FROM activities WHERE id = $1 RETURNING id",
       [id]
     );
 
+    logAudit(req, "DELETE", "activities", id, deletedActivity.title, {
+      date: deletedActivity.activity_date,
+      partner_id: deletedActivity.partner_id,
+    });
     res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
     console.error(err);

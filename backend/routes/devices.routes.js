@@ -3,6 +3,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const requireAdminPin = require("../middleware/pin.middleware");
+const { logAudit } = require("../services/audit");
 
 const router = express.Router();
 
@@ -72,7 +73,9 @@ router.post("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res)
       [name, description, category, color, status]
     );
 
-    res.status(201).json(result.rows[0]);
+    const created = result.rows[0];
+    logAudit(req, "CREATE", "devices", created.id, created.name, { category: created.category });
+    res.status(201).json(created);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -113,7 +116,9 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
       return res.status(404).json({ error: "Dispositif introuvable" });
     }
 
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    logAudit(req, "UPDATE", "devices", updated.id, updated.name, { category: updated.category, status: updated.status });
+    res.json(updated);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -124,6 +129,7 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
 router.delete("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {
     const { id } = req.params;
+    const before = await pool.query("SELECT name FROM devices WHERE id = $1", [id]);
     const result = await pool.query(
       "DELETE FROM devices WHERE id = $1 RETURNING id",
       [id]
@@ -133,6 +139,7 @@ router.delete("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req,
       return res.status(404).json({ error: "Dispositif introuvable" });
     }
 
+    logAudit(req, "DELETE", "devices", id, before.rows[0]?.name ?? null, {});
     res.json({ success: true });
   } catch (err) {
     console.error(err);
