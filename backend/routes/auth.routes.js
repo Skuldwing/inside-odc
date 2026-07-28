@@ -53,7 +53,7 @@ router.post("/login", async (req, res) => {
         partner_id: user.partner_id,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "30m" }
+      { expiresIn: "2h" }
     );
 
     res.cookie("token", token, cookieOptions());
