@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Editor from "@monaco-editor/react";
 import {
   Plus,
   Mail,
@@ -10,6 +11,7 @@ import {
   RotateCcw,
   Check,
   ChevronRight,
+  Code2,
 } from "lucide-react";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
@@ -22,6 +24,7 @@ function TemplatesTab() {
   const [saving, setSaving] = useState(false);
   const [savedSlug, setSavedSlug] = useState(null);
   const [previewMode, setPreviewMode] = useState(false);
+  const editorRef = useRef(null);
 
   useEffect(() => {
     api.get("/email-templates").then((r) => {
@@ -44,9 +47,7 @@ function TemplatesTab() {
       await api.put(`/email-templates/${selected.slug}`, form);
       setSavedSlug(selected.slug);
       setTemplates((prev) =>
-        prev.map((t) =>
-          t.slug === selected.slug ? { ...t, ...form } : t
-        )
+        prev.map((t) => (t.slug === selected.slug ? { ...t, ...form } : t))
       );
       setSelected((t) => ({ ...t, ...form }));
     } catch {
@@ -72,12 +73,30 @@ function TemplatesTab() {
     }
   }
 
+  function handleEditorMount(editor) {
+    editorRef.current = editor;
+  }
+
+  function insertVariable(variable) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const selection = editor.getSelection();
+    editor.executeEdits("insert-variable", [
+      { identifier: { major: 1, minor: 1 }, range: selection, text: variable, forceMoveMarkers: true },
+    ]);
+    editor.focus();
+  }
+
+  function formatDocument() {
+    editorRef.current?.getAction("editor.action.formatDocument")?.run();
+  }
+
   const dirty =
     selected &&
     (form.subject !== selected.subject || form.body_html !== selected.body_html);
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[480px]">
+    <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[520px]">
       {/* sidebar */}
       <div className="w-64 flex-shrink-0 space-y-1">
         {templates.map((tpl) => (
@@ -90,9 +109,7 @@ function TemplatesTab() {
                 : "border border-transparent hover:bg-slate-50 text-slate-700"
             }`}
           >
-            <div>
-              <p className="text-sm font-medium leading-tight">{tpl.label}</p>
-            </div>
+            <p className="text-sm font-medium leading-tight">{tpl.label}</p>
             {selected?.slug === tpl.slug && (
               <ChevronRight className="w-4 h-4 flex-shrink-0" />
             )}
@@ -100,7 +117,7 @@ function TemplatesTab() {
         ))}
       </div>
 
-      {/* editor */}
+      {/* editor panel */}
       {selected && (
         <div className="flex-1 card p-0 overflow-hidden flex flex-col">
           {/* header */}
@@ -114,7 +131,7 @@ function TemplatesTab() {
                 onClick={() => setPreviewMode((v) => !v)}
                 className={`btn-ghost border text-sm px-3 ${previewMode ? "bg-slate-100" : ""}`}
               >
-                {previewMode ? "Modifier" : "Aperçu"}
+                {previewMode ? "Éditeur" : "Aperçu"}
               </button>
               <button
                 onClick={reset}
@@ -143,65 +160,98 @@ function TemplatesTab() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
-            {/* variables */}
-            <div className="flex flex-wrap gap-2">
-              {(selected.variables || []).map((v) => (
-                <span
-                  key={v}
-                  className="font-mono text-xs bg-orange-50 border border-orange-200 text-orange-700 rounded px-2 py-0.5"
-                >
-                  {v}
-                </span>
-              ))}
-              {(selected.variables || []).length > 0 && (
-                <span className="text-xs text-slate-400 self-center">
-                  variables disponibles
-                </span>
-              )}
-            </div>
-
+          <div className="flex-1 flex flex-col overflow-hidden">
             {previewMode ? (
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="bg-slate-50 px-4 py-2 text-xs text-slate-500 border-b border-slate-100">
+              <div className="flex-1 flex flex-col">
+                <div className="bg-slate-50 px-6 py-2 text-xs text-slate-500 border-b border-slate-100">
                   Objet : <strong>{form.subject}</strong>
                 </div>
                 <iframe
                   srcDoc={form.body_html}
                   sandbox="allow-same-origin"
                   title="Aperçu email"
-                  className="w-full"
-                  style={{ height: "320px", border: "none", display: "block" }}
+                  className="flex-1 w-full"
+                  style={{ border: "none", display: "block" }}
                 />
               </div>
             ) : (
-              <>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1">
-                    Objet de l'email
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* subject */}
+                <div className="px-6 py-3 border-b border-slate-100 flex items-center gap-3">
+                  <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+                    Objet
                   </label>
                   <input
-                    className="input"
+                    className="input flex-1 text-sm"
                     value={form.subject}
                     onChange={(e) =>
                       setForm((f) => ({ ...f, subject: e.target.value }))
                     }
                   />
                 </div>
-                <div className="flex-1">
-                  <label className="text-sm font-medium text-slate-700 block mb-1">
-                    Corps HTML
-                  </label>
-                  <textarea
-                    className="input font-mono text-sm resize-none"
-                    rows={18}
+
+                {/* editor toolbar */}
+                <div className="px-4 py-2 bg-[#1e1e1e] border-b border-[#333] flex items-center gap-3 flex-wrap">
+                  {(selected.variables || []).length > 0 && (
+                    <>
+                      <span className="text-xs text-slate-400 whitespace-nowrap">
+                        Insérer :
+                      </span>
+                      {(selected.variables || []).map((v) => (
+                        <button
+                          key={v}
+                          onClick={() => insertVariable(v)}
+                          title={`Insérer ${v} au curseur`}
+                          className="font-mono text-xs bg-orange-900/40 border border-orange-600/40 text-orange-300 rounded px-2 py-0.5 hover:bg-orange-600/30 transition-colors"
+                        >
+                          {v}
+                        </button>
+                      ))}
+                      <div className="w-px h-4 bg-slate-600 mx-1" />
+                    </>
+                  )}
+                  <button
+                    onClick={formatDocument}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                    title="Formater le HTML (Shift+Alt+F)"
+                  >
+                    <Code2 className="w-3.5 h-3.5" />
+                    Formater
+                  </button>
+                  <span className="ml-auto text-xs text-slate-600">
+                    Ctrl+F rechercher · Ctrl+H remplacer · Shift+Alt+F formater
+                  </span>
+                </div>
+
+                {/* Monaco editor */}
+                <div className="flex-1 min-h-0">
+                  <Editor
+                    height="100%"
+                    defaultLanguage="html"
                     value={form.body_html}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, body_html: e.target.value }))
+                    theme="vs-dark"
+                    onMount={handleEditorMount}
+                    onChange={(value) =>
+                      setForm((f) => ({ ...f, body_html: value ?? "" }))
                     }
+                    options={{
+                      fontSize: 13,
+                      lineNumbers: "on",
+                      minimap: { enabled: false },
+                      wordWrap: "on",
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      formatOnPaste: true,
+                      formatOnType: false,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      folding: true,
+                      renderLineHighlight: "line",
+                      scrollbar: { verticalScrollbarSize: 6 },
+                    }}
                   />
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
