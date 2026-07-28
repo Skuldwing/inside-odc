@@ -26,6 +26,9 @@ router.get("/", authMiddleware, async (req, res) => {
     if (req.user.role === "partner") {
       query += " WHERE a.partner_id = $1";
       params.push(req.user.partner_id);
+    } else if (req.user.role === "coach") {
+      query += " WHERE a.coach_id = $1";
+      params.push(req.user.id);
     }
 
     query += " ORDER BY a.activity_date DESC, p.nom, p.prenom";

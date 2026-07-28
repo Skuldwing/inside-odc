@@ -382,6 +382,7 @@ router.post(
         location,
         device_id,
         partner_id,
+        mode,
       } = req.body;
 
       if (!title || !activity_date) {
@@ -414,11 +415,13 @@ router.post(
       await client.query("BEGIN");
       inTransaction = true;
 
+      const resolvedMode = ["ligne", "presentiel"].includes(mode) ? mode : "presentiel";
+
       const activityResult = await client.query(
         `
         INSERT INTO activities
-        (title, description, activity_date, duration_hours, location, device_id, partner_id, created_by, coach_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        (title, description, activity_date, duration_hours, location, device_id, partner_id, created_by, coach_id, mode)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
         RETURNING *
         `,
         [
@@ -431,6 +434,7 @@ router.post(
           resolvedPartnerId,
           req.user.id,
           resolvedCoachId,
+          resolvedMode,
         ]
       );
 

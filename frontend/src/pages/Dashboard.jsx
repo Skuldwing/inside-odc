@@ -58,6 +58,9 @@ const markerIcon = new L.Icon({
 
 export default function Dashboard() {
   const { role, user } = useAuth();
+  const isCoach = role === "coach";
+  const isPartner = role === "partner";
+  const isAdmin = role === "admin";
   const currentYear = new Date().getFullYear();
   const todayLabel = format(new Date(), "dd MMMM yyyy", { locale: fr });
 
@@ -278,10 +281,12 @@ export default function Dashboard() {
               <Calendar className="mr-1 h-3.5 w-3.5" />
               {todayLabel}
             </span>
-            <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700">
-              <TrendingUp className="mr-1 h-3.5 w-3.5" />
-              {totals.partners_active || 0} partenaires actifs
-            </span>
+            {isAdmin && (
+              <span className="badge border-emerald-200 bg-emerald-50 text-emerald-700">
+                <TrendingUp className="mr-1 h-3.5 w-3.5" />
+                {totals.partners_active || 0} partenaires actifs
+              </span>
+            )}
           </div>
         </div>
       </section>
@@ -293,7 +298,7 @@ export default function Dashboard() {
             Filtres analytiques
           </h2>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className={`mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 ${isCoach ? "xl:grid-cols-3" : "xl:grid-cols-5"}`}>
           <div>
             <label className="text-xs text-slate-500">Année</label>
             <select
@@ -327,41 +332,45 @@ export default function Dashboard() {
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs text-slate-500">Partenaire</label>
-            <select
-              className="select mt-1"
-              value={filters.partner_id}
-              onChange={(e) =>
-                setFilters({ ...filters, partner_id: e.target.value })
-              }
-              disabled={role === "partner"}
-            >
-              <option value="">Tous</option>
-              {partnerOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500">Dispositif</label>
-            <select
-              className="select mt-1"
-              value={filters.device_id}
-              onChange={(e) =>
-                setFilters({ ...filters, device_id: e.target.value })
-              }
-            >
-              <option value="">Tous</option>
-              {devices.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isCoach && (
+            <div>
+              <label className="text-xs text-slate-500">Partenaire</label>
+              <select
+                className="select mt-1"
+                value={filters.partner_id}
+                onChange={(e) =>
+                  setFilters({ ...filters, partner_id: e.target.value })
+                }
+                disabled={isPartner}
+              >
+                <option value="">Tous</option>
+                {partnerOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {!isCoach && (
+            <div>
+              <label className="text-xs text-slate-500">Dispositif</label>
+              <select
+                className="select mt-1"
+                value={filters.device_id}
+                onChange={(e) =>
+                  setFilters({ ...filters, device_id: e.target.value })
+                }
+              >
+                <option value="">Tous</option>
+                {devices.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-xs text-slate-500">Genre</label>
             <select
@@ -376,10 +385,12 @@ export default function Dashboard() {
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
-          <button className="btn-primary" onClick={handleExport} disabled={exporting}>
-            <Download className="w-4 h-4" />
-            {exporting ? "Export..." : "Exporter objectifs"}
-          </button>
+          {isAdmin && (
+            <button className="btn-primary" onClick={handleExport} disabled={exporting}>
+              <Download className="w-4 h-4" />
+              {exporting ? "Export..." : "Exporter objectifs"}
+            </button>
+          )}
           <button
             className="btn-ghost border border-slate-200 bg-white"
             onClick={handleExportPdf}
@@ -394,14 +405,14 @@ export default function Dashboard() {
             disabled={!summary}
           >
             <FileText className="w-4 h-4" />
-            Rapport mensuel
+            Rapport
           </button>
         </div>
       </section>
 
       <section
         ref={kpiRef}
-        className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
+        className={`grid grid-cols-1 gap-4 ${isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"}`}
       >
         <HeroKpiCard
           label="Participants"
@@ -418,13 +429,15 @@ export default function Dashboard() {
           accent="from-orange-500 to-orange-600"
           hint="Exécution annuelle"
         />
-        <HeroKpiCard
-          label="Partenaires actifs"
-          value={totals.partners_active ?? 0}
-          icon={Building2}
-          accent="from-blue-500 to-blue-600"
-          hint="Partenaires engagés"
-        />
+        {isAdmin && (
+          <HeroKpiCard
+            label="Partenaires actifs"
+            value={totals.partners_active ?? 0}
+            icon={Building2}
+            accent="from-blue-500 to-blue-600"
+            hint="Partenaires engagés"
+          />
+        )}
         <HeroKpiCard
           label="Heures de formation"
           value={`${totals.hours ?? 0}h`}
@@ -434,36 +447,49 @@ export default function Dashboard() {
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-2">
+      <section className={`grid grid-cols-1 gap-6 ${isAdmin ? "xl:grid-cols-3" : ""}`}>
+        <div className={isAdmin ? "xl:col-span-2" : ""}>
           <TrendsLineChart data={summary?.trends || []} />
         </div>
-        <div className="space-y-6">
-          <TopListCard title="Top dispositifs" items={summary?.top?.devices || []} />
-          <TopListCard title="Top partenaires" items={summary?.top?.partners || []} />
-        </div>
+        {isAdmin && (
+          <div className="space-y-6">
+            <TopListCard title="Top dispositifs" items={summary?.top?.devices || []} />
+            <TopListCard title="Top partenaires" items={summary?.top?.partners || []} />
+          </div>
+        )}
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ActivityBarChart
-          data={summary?.beneficiariesByDevice || []}
-          title="Bénéficiaires par dispositif"
-        />
+        {isCoach ? (
+          <ActivityBarChart
+            data={summary?.beneficiariesByMode || []}
+            title="Bénéficiaires par mode (Ligne / Présentiel)"
+          />
+        ) : (
+          <ActivityBarChart
+            data={summary?.beneficiariesByDevice || []}
+            title="Bénéficiaires par dispositif"
+          />
+        )}
         <BeneficiaryPieChart
           data={summary?.gender || []}
           title="Répartition par genre"
         />
       </section>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-2">
-          <BeneficiariesByPartnerTable data={summary?.beneficiariesByPartner || []} />
-        </div>
+      <section className={`grid grid-cols-1 gap-6 ${!isCoach ? "xl:grid-cols-3" : ""}`}>
+        {!isCoach && (
+          <div className="xl:col-span-2">
+            <BeneficiariesByPartnerTable data={summary?.beneficiariesByPartner || []} />
+          </div>
+        )}
         <RecentActivitiesCard data={summary?.recentActivities || []} />
       </section>
 
-      <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-        <AlertsCard alerts={summary?.alerts} />
+      <section className={`grid grid-cols-1 gap-6 ${!isCoach ? "xl:grid-cols-3" : "xl:grid-cols-2"}`}>
+        {!isCoach && (
+          <AlertsCard alerts={summary?.alerts} />
+        )}
         <DataQualityCard data={summary?.dataQuality} />
         <LocationsMap
           data={summary?.locations || []}
@@ -478,6 +504,7 @@ export default function Dashboard() {
           filters={filters}
           partners={partners}
           devices={devices}
+          role={role}
           onClose={() => setShowRapport(false)}
         />
       )}

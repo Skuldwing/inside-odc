@@ -40,7 +40,8 @@ function buildFilters(req) {
     params.push(coachId);
   } else {
     if (partnerId) {
-      where += ` AND a.partner_id = $${idx++}`;
+      where += ` AND (a.partner_id = $${idx} OR a.coach_id IN (SELECT id FROM users WHERE partner_id = $${idx} AND role = 'coach'))`;
+      idx++;
       params.push(partnerId);
     }
     if (deviceId) {
@@ -84,16 +85,19 @@ router.get("/summary", authMiddleware, async (req, res) => {
                ${durationExpr} AS duration_hours,
                ${participantsManualExpr} AS participants_manual,
                a.location,
+               COALESCE(a.mode, 'presentiel') AS mode,
                a.device_id,
-               COALESCE(d.name, 'Non renseigne') AS device_name,
-               d.color AS device_color,
-               a.partner_id,
-               COALESCE(p.name, 'Non renseigne') AS partner_name,
+               COALESCE(d.name, uc.full_name, 'Non renseigne') AS device_name,
+               COALESCE(d.color, '#FF7900') AS device_color,
+               COALESCE(a.partner_id, uc.partner_id) AS partner_id,
+               COALESCE(p.name, pa.name, 'Non renseigne') AS partner_name,
                ap.participant_id,
                part.genre
         FROM activities a
         LEFT JOIN devices d ON a.device_id = d.id
         LEFT JOIN partners p ON a.partner_id = p.id
+        LEFT JOIN users uc ON a.coach_id = uc.id
+        LEFT JOIN partners pa ON pa.id = uc.partner_id
         LEFT JOIN activity_participants ap ON ap.activity_id = a.id
         LEFT JOIN participants part ON part.id = ap.participant_id
         WHERE ${where}
@@ -109,6 +113,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
           MAX(activity_date)  AS activity_date,
           MAX(duration_hours) AS duration_hours,
           MAX(location)       AS location,
+          MAX(mode)           AS mode,
           CASE WHEN COUNT(participant_id) > 0
                THEN COUNT(participant_id)::int
                ELSE COALESCE(MAX(participants_manual), 0)::int
@@ -227,6 +232,17 @@ router.get("/summary", authMiddleware, async (req, res) => {
       LIMIT 8
     `;
 
+    const beneficiariesByModeQuery = `
+      ${baseCte}
+      SELECT
+        CASE WHEN mode = 'ligne' THEN 'Ligne' ELSE 'Présentiel' END AS name,
+        COALESCE(SUM(effective_count), 0)::int AS value,
+        CASE WHEN mode = 'ligne' THEN '#6366f1' ELSE '#f97316' END AS color
+      FROM eff
+      GROUP BY mode
+      ORDER BY value DESC
+    `;
+
     const dataQualityQuery = `
       ${baseCte},
       scoped_participants AS (
@@ -311,7 +327,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       ${partnerId ? "AND id = $1" : ""}
     `;
 
-    const [totalsRes, genderRes, byDeviceRes, byPartnerRes, recentRes, trendsRes, topDevicesRes, topPartnersRes, locationsRes, dataQualityRes, alertsPartnersRes, alertsDevicesRes, partnersActiveRes] =
+    const [totalsRes, genderRes, byDeviceRes, byPartnerRes, recentRes, trendsRes, topDevicesRes, topPartnersRes, locationsRes, dataQualityRes, alertsPartnersRes, alertsDevicesRes, partnersActiveRes, byModeRes] =
       await Promise.all([
         pool.query(totalsQuery, params),
         pool.query(genderQuery, params),
@@ -326,6 +342,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
         pool.query(alertsPartnersQuery, params),
         pool.query(alertsDevicesQuery, partnerId ? [partnerId] : []),
         pool.query(partnersActiveQuery, partnerId ? [partnerId] : []),
+        pool.query(beneficiariesByModeQuery, params),
       ]);
 
     const totals = totalsRes.rows[0] || {
@@ -428,6 +445,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       },
       gender,
       beneficiariesByDevice: byDeviceRes.rows,
+      beneficiariesByMode: byModeRes.rows,
       beneficiariesByPartner,
       recentActivities: recentRes.rows,
       trends: trendsRes.rows,

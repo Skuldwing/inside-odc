@@ -267,6 +267,9 @@ pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS report_filename TEXT
 pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS report_data BYTEA`)
   .then(() => console.log("Migration OK: activities.report_data")).catch(e => console.warn("Migration report_data:", e.message));
 
+pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'presentiel'`)
+  .then(() => console.log("Migration OK: activities.mode")).catch(e => console.warn("Migration mode:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -98,11 +98,15 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
       resolvedCoachId = req.user.id;
     }
 
+    const resolvedMode = ["ligne", "presentiel"].includes(req.body.mode)
+      ? req.body.mode
+      : "presentiel";
+
     const result = await pool.query(
       `
       INSERT INTO activities
-      (title, description, activity_date, date_fin, duration_hours, location, device_id, partner_id, created_by, participants_manual, coach_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      (title, description, activity_date, date_fin, duration_hours, location, device_id, partner_id, created_by, participants_manual, coach_id, mode)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       RETURNING *
       `,
       [
@@ -117,6 +121,7 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
         req.user.id,
         participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
         resolvedCoachId,
+        resolvedMode,
       ]
     );
 
@@ -166,6 +171,10 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
 
     const resolvedDeviceId = req.user.role === "coach" ? null : device_id || null;
 
+    const resolvedMode = ["ligne", "presentiel"].includes(req.body.mode)
+      ? req.body.mode
+      : "presentiel";
+
     const result = await pool.query(
       `
       UPDATE activities
@@ -177,8 +186,9 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
           location = $6,
           device_id = $7,
           partner_id = $8,
-          participants_manual = $9
-      WHERE id = $10
+          participants_manual = $9,
+          mode = $10
+      WHERE id = $11
       RETURNING *
       `,
       [
@@ -191,6 +201,7 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
         resolvedDeviceId,
         resolvedPartnerId,
         participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
+        resolvedMode,
         id,
       ]
     );

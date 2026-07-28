@@ -283,9 +283,11 @@ export default function Utilisateurs() {
                   </select>
                 </div>
 
-                {form.role === "partner" && (
+                {(form.role === "partner" || form.role === "coach") && (
                   <div>
-                    <label className="text-sm font-medium">Partenaire (optionnel)</label>
+                    <label className="text-sm font-medium">
+                      {form.role === "coach" ? "Partenaire affilié" : "Partenaire (optionnel)"}
+                    </label>
                     <select className="select mt-1" value={form.partner_id} onChange={e => setForm(f => ({ ...f, partner_id: e.target.value }))}>
                       <option value="">— Aucun partenaire —</option>
                       {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}

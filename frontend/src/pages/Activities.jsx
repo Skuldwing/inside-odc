@@ -87,6 +87,8 @@ export default function Activities({
   const [reportError, setReportError] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
 
+  const [createReportFile, setCreateReportFile] = useState(null);
+
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -97,6 +99,7 @@ export default function Activities({
     device_id: "",
     partner_id: "",
     participants_manual: "",
+    mode: "presentiel",
     file: null,
   });
 
@@ -149,6 +152,7 @@ export default function Activities({
           participants_manual: a.participants_manual ?? null,
           date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
           report_filename: a.report_filename || null,
+          mode: a.mode || "presentiel",
           status: statusValue,
           statusLabel:
             statusValue === "completed"
@@ -251,11 +255,13 @@ export default function Activities({
       device_id: "",
       partner_id: "",
       participants_manual: "",
+      mode: "presentiel",
       file: null,
     });
     setUploadError("");
     setUploadResult(null);
     setImportStep(1);
+    setCreateReportFile(null);
   };
 
   const openUploadModal = () => {
@@ -268,6 +274,7 @@ export default function Activities({
     setUploadError("");
     setUploadResult(null);
     setImportStep(0);
+    setCreateReportFile(null);
   };
 
   const openEdit = (activity) => {
@@ -291,6 +298,7 @@ export default function Activities({
       partner_id: activity.partner_id || "",
       participants_manual: activity.participants_manual ?? "",
       report_filename: activity.report_filename || null,
+      mode: activity.mode || "presentiel",
     });
     setEditOpen(true);
   };
@@ -363,6 +371,7 @@ export default function Activities({
         duration_hours: editForm.duration_hours || null,
         location: editForm.location || null,
         device_id: editForm.device_id || null,
+        mode: editForm.mode || "presentiel",
         participants_manual: editForm.participants_manual !== "" ? Number(editForm.participants_manual) : null,
       };
       if (role === "admin") payload.partner_id = editForm.partner_id || null;
@@ -420,6 +429,7 @@ export default function Activities({
         if (form.date_fin) fd.append("date_fin", form.date_fin);
         if (form.duration_hours) fd.append("duration_hours", form.duration_hours);
         fd.append("location", form.location);
+        fd.append("mode", form.mode || "presentiel");
         if (role !== "coach") {
           if (form.device_id) fd.append("device_id", form.device_id);
           if (role === "admin" && form.partner_id) {
@@ -433,6 +443,13 @@ export default function Activities({
         const res = await api.post("/import/activity", fd, {
           headers: { "Content-Type": "multipart/form-data" },
         });
+        if (createReportFile && res.data?.activity?.id) {
+          const rfd = new FormData();
+          rfd.append("report", createReportFile);
+          await api.post(`/activities/${res.data.activity.id}/report`, rfd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+        }
         setUploadResult(res.data || {});
       } else {
         // Sans fichier → création simple
@@ -443,6 +460,7 @@ export default function Activities({
           date_fin: form.date_fin || null,
           duration_hours: form.duration_hours || null,
           location: form.location || null,
+          mode: form.mode || "presentiel",
           device_id: role !== "coach" ? (form.device_id || null) : null,
           participants_manual: form.participants_manual !== "" ? Number(form.participants_manual) : null,
           partner_id:
@@ -453,6 +471,13 @@ export default function Activities({
               : null,
         };
         const res = await api.post("/activities", payload);
+        if (createReportFile && res.data?.id) {
+          const rfd = new FormData();
+          rfd.append("report", createReportFile);
+          await api.post(`/activities/${res.data.id}/report`, rfd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+        }
         setUploadResult({
           sans_fichier: true,
           activity: res.data,
@@ -646,6 +671,25 @@ export default function Activities({
                 devices={devices}
                 regions={senegalRegions}
               />
+              <div className="border-t border-slate-100 pt-4">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-slate-400" />
+                  Rapport d'activité PDF
+                  <span className="text-xs text-slate-400 font-normal">(optionnel)</span>
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  className="mt-2 block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
+                  onChange={(e) => setCreateReportFile(e.target.files?.[0] || null)}
+                />
+                {createReportFile && (
+                  <p className="mt-1 text-xs text-emerald-600">
+                    Rapport sélectionné : {createReportFile.name}
+                  </p>
+                )}
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <div>
@@ -753,7 +797,7 @@ export default function Activities({
             <div className="space-y-2">
               <input
                 type="file"
-                accept=".pdf,.doc,.docx,.ppt,.pptx,.xlsx,.xls"
+                accept=".pdf"
                 onChange={e => { setReportFile(e.target.files[0] || null); setReportError(""); setReportSuccess(false); }}
                 className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
               />
@@ -963,20 +1007,34 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
-        <label className="text-sm font-medium">Lieu</label>
+        <label className="text-sm font-medium">Mode</label>
         <select
           className="select mt-1"
-          value={form.location}
-          onChange={(e) => setForm({ ...form, location: e.target.value })}
+          value={form.mode || "presentiel"}
+          onChange={(e) => setForm({ ...form, mode: e.target.value })}
         >
-          <option value="">Sélectionner une région</option>
-          {regions.map((region) => (
-            <option key={region} value={region}>
-              {region}
-            </option>
-          ))}
+          <option value="presentiel">Présentiel</option>
+          <option value="ligne">En ligne</option>
         </select>
       </div>
+
+      {(form.mode || "presentiel") === "presentiel" && (
+        <div>
+          <label className="text-sm font-medium">Lieu</label>
+          <select
+            className="select mt-1"
+            value={form.location}
+            onChange={(e) => setForm({ ...form, location: e.target.value })}
+          >
+            <option value="">Sélectionner une région</option>
+            {regions.map((region) => (
+              <option key={region} value={region}>
+                {region}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {role === "admin" && (
         <div>
@@ -1388,6 +1446,16 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
           >
             {activity.statusLabel}
           </span>
+
+          {activity.report_filename ? (
+            <span className="badge bg-emerald-50 border-emerald-200 text-emerald-700" title={`Rapport : ${activity.report_filename}`}>
+              Rapport ✓
+            </span>
+          ) : (
+            <span className="badge bg-slate-100 border-slate-200 text-slate-400">
+              Sans rapport
+            </span>
+          )}
 
           {activity.participants === 0 && (
             <span className="badge bg-amber-50 border-amber-200 text-amber-700" title="Aucune liste de présences importée">

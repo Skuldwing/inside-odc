@@ -19,7 +19,9 @@ function progressBar(pct, color = "#f97316") {
 }
 
 /* ── Contenu du rapport (rendu A4) ── */
-function RapportContent({ summary, filters, partners, devices }) {
+function RapportContent({ summary, filters, partners, devices, role }) {
+  const isCoach = role === "coach";
+  const isAdmin = role === "admin";
   const now = new Date();
   const monthLabel = filters.month
     ? format(new Date(filters.year, Number(filters.month) - 1, 1), "MMMM yyyy", { locale: fr })
@@ -89,11 +91,11 @@ function RapportContent({ summary, filters, partners, devices }) {
         {/* ── KPIs ── */}
         <div style={{ marginBottom: 32 }}>
           <SectionTitle>Indicateurs cles</SectionTitle>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
             <KpiBox label="Activites" value={totals.activities ?? 0} color="#f97316" />
             <KpiBox label="Participants" value={totals.participants ?? 0} color="#10b981" />
             <KpiBox label="Heures formation" value={`${totals.hours ?? 0}h`} color="#6366f1" />
-            <KpiBox label="Partenaires actifs" value={totals.partners_active ?? 0} color="#0ea5e9" />
+            {isAdmin && <KpiBox label="Partenaires actifs" value={totals.partners_active ?? 0} color="#0ea5e9" />}
           </div>
         </div>
 
@@ -107,28 +109,30 @@ function RapportContent({ summary, filters, partners, devices }) {
           </div>
 
           {/* ── Top dispositifs ── */}
-          <div>
-            <SectionTitle>Participants par dispositif</SectionTitle>
-            <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16 }}>
-              {byDevice.length === 0 ? (
-                <div style={{ color: "#94a3b8", fontSize: 12 }}>Aucune donnee</div>
-              ) : (
-                byDevice.slice(0, 5).map((d) => (
-                  <div key={d.name} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
-                      <span style={{ fontWeight: 500 }}>{d.name}</span>
-                      <span style={{ color: "#64748b" }}>{d.value}</span>
+          {!isCoach && (
+            <div>
+              <SectionTitle>Participants par dispositif</SectionTitle>
+              <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16 }}>
+                {byDevice.length === 0 ? (
+                  <div style={{ color: "#94a3b8", fontSize: 12 }}>Aucune donnee</div>
+                ) : (
+                  byDevice.slice(0, 5).map((d) => (
+                    <div key={d.name} style={{ marginBottom: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12 }}>
+                        <span style={{ fontWeight: 500 }}>{d.name}</span>
+                        <span style={{ color: "#64748b" }}>{d.value}</span>
+                      </div>
+                      {progressBar(percent(d.value, Math.max(...byDevice.map((x) => x.value))), d.color || "#f97316")}
                     </div>
-                    {progressBar(percent(d.value, Math.max(...byDevice.map((x) => x.value))), d.color || "#f97316")}
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── Partenaires et objectifs ── */}
-        {byPartner.length > 0 && (
+        {byPartner.length > 0 && !isCoach && (
           <div style={{ marginBottom: 32 }}>
             <SectionTitle>Objectifs par partenaire</SectionTitle>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -192,15 +196,17 @@ function RapportContent({ summary, filters, partners, devices }) {
         )}
 
         {/* ── Qualité données & alertes ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isCoach ? "1fr" : "1fr 1fr", gap: 24, marginBottom: 24 }}>
           <div>
             <SectionTitle>Qualite des donnees</SectionTitle>
             <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16 }}>
               {[
                 { label: "Contacts manquants", value: dq.missing_contact_pct || 0 },
                 { label: "Genre manquant", value: dq.missing_gender_pct || 0 },
-                { label: "Activites sans dispositif", value: dq.activities_missing_device_pct || 0 },
-                { label: "Activites sans partenaire", value: dq.activities_missing_partner_pct || 0 },
+                ...(!isCoach ? [
+                  { label: "Activites sans dispositif", value: dq.activities_missing_device_pct || 0 },
+                  { label: "Activites sans partenaire", value: dq.activities_missing_partner_pct || 0 },
+                ] : []),
               ].map((r) => (
                 <div key={r.label} style={{ marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
@@ -213,28 +219,30 @@ function RapportContent({ summary, filters, partners, devices }) {
             </div>
           </div>
 
-          <div>
-            <SectionTitle>Alertes</SectionTitle>
-            <div style={{ background: "#fff7ed", borderRadius: 10, padding: 16, border: "1px solid #fed7aa" }}>
-              {(alerts.partners || []).length === 0 && (alerts.devices || []).length === 0 ? (
-                <div style={{ color: "#059669", fontSize: 12 }}>✓ Aucune alerte active</div>
-              ) : (
-                <>
-                  {(alerts.partners || []).map((p) => (
-                    <div key={p.name} style={{ fontSize: 12, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
-                      <span>⚠ {p.name}</span>
-                      <span style={{ color: "#ea580c", fontWeight: 600 }}>{p.percent}% objectif</span>
-                    </div>
-                  ))}
-                  {(alerts.devices || []).map((d) => (
-                    <div key={d.name} style={{ fontSize: 12, marginBottom: 6 }}>
-                      <span>⚠ {d.name} — aucune activite recente</span>
-                    </div>
-                  ))}
-                </>
-              )}
+          {!isCoach && (
+            <div>
+              <SectionTitle>Alertes</SectionTitle>
+              <div style={{ background: "#fff7ed", borderRadius: 10, padding: 16, border: "1px solid #fed7aa" }}>
+                {(alerts.partners || []).length === 0 && (alerts.devices || []).length === 0 ? (
+                  <div style={{ color: "#059669", fontSize: 12 }}>✓ Aucune alerte active</div>
+                ) : (
+                  <>
+                    {(alerts.partners || []).map((p) => (
+                      <div key={p.name} style={{ fontSize: 12, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
+                        <span>⚠ {p.name}</span>
+                        <span style={{ color: "#ea580c", fontWeight: 600 }}>{p.percent}% objectif</span>
+                      </div>
+                    ))}
+                    {(alerts.devices || []).map((d) => (
+                      <div key={d.name} style={{ fontSize: 12, marginBottom: 6 }}>
+                        <span>⚠ {d.name} — aucune activite recente</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* ── Pied de page ── */}
@@ -288,7 +296,7 @@ function GenderBar({ pctF, pctH, femmes, hommes, total }) {
 }
 
 /* ── Modal principal ── */
-export default function RapportMensuelModal({ summary, filters, partners, devices, onClose }) {
+export default function RapportMensuelModal({ summary, filters, partners, devices, role, onClose }) {
   const contentRef = useRef(null);
   const [generating, setGenerating] = useState(false);
 
@@ -372,6 +380,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
               filters={filters}
               partners={partners}
               devices={devices}
+              role={role}
             />
           </div>
         </div>
