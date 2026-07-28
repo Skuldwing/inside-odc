@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
+import { useEffect, useState, useCallback } from "react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import TextAlign from "@tiptap/extension-text-align";
+import TextStyle from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
+import Underline from "@tiptap/extension-underline";
+import Link from "@tiptap/extension-link";
 import {
   Plus,
   Mail,
@@ -11,45 +17,102 @@ import {
   RotateCcw,
   Check,
   ChevronRight,
-  Code2,
+  Bold,
+  Italic,
+  Underline as UnderlineIcon,
+  Strikethrough,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  List,
+  ListOrdered,
+  Link as LinkIcon,
+  Palette,
 } from "lucide-react";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
+
+/* ── Toolbar button ──────────────────────────────────────────── */
+function TBtn({ active, onClick, title, children }) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => { e.preventDefault(); onClick(); }}
+      title={title}
+      className={`p-1.5 rounded transition-colors ${
+        active
+          ? "bg-orange-100 text-orange-600"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Divider() {
+  return <div className="w-px h-5 bg-slate-200 mx-1 self-center" />;
+}
 
 /* ── Templates automatiques ─────────────────────────────────── */
 function TemplatesTab() {
   const [templates, setTemplates] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ subject: "", body_html: "" });
+  const [subject, setSubject] = useState("");
   const [saving, setSaving] = useState(false);
   const [savedSlug, setSavedSlug] = useState(null);
   const [previewMode, setPreviewMode] = useState(false);
-  const editorRef = useRef(null);
+  const [dirty, setDirty] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Underline,
+      TextStyle,
+      Color,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      Link.configure({ openOnClick: false }),
+    ],
+    content: "",
+    onUpdate: ({ editor: e }) => {
+      setDirty(true);
+      setSavedSlug(null);
+    },
+  });
+
+  const loadTemplate = useCallback((tpl) => {
+    setSelected(tpl);
+    setSubject(tpl.subject);
+    setSavedSlug(null);
+    setPreviewMode(false);
+    setDirty(false);
+    if (editor) editor.commands.setContent(tpl.body_html || "");
+  }, [editor]);
 
   useEffect(() => {
     api.get("/email-templates").then((r) => {
       setTemplates(r.data);
-      if (r.data.length > 0) select(r.data[0]);
+      if (r.data.length > 0) loadTemplate(r.data[0]);
     });
   }, []);
 
-  function select(tpl) {
-    setSelected(tpl);
-    setForm({ subject: tpl.subject, body_html: tpl.body_html });
-    setSavedSlug(null);
-    setPreviewMode(false);
-  }
+  useEffect(() => {
+    if (editor && selected) editor.commands.setContent(selected.body_html || "");
+  }, [editor, selected?.slug]);
 
   async function save() {
-    if (!selected) return;
+    if (!selected || !editor) return;
     setSaving(true);
+    const body_html = editor.getHTML();
     try {
-      await api.put(`/email-templates/${selected.slug}`, form);
+      await api.put(`/email-templates/${selected.slug}`, { subject, body_html });
       setSavedSlug(selected.slug);
+      setDirty(false);
       setTemplates((prev) =>
-        prev.map((t) => (t.slug === selected.slug ? { ...t, ...form } : t))
+        prev.map((t) => (t.slug === selected.slug ? { ...t, subject, body_html } : t))
       );
-      setSelected((t) => ({ ...t, ...form }));
+      setSelected((t) => ({ ...t, subject, body_html }));
     } catch {
       alert("Erreur lors de la sauvegarde.");
     }
@@ -65,35 +128,28 @@ function TemplatesTab() {
       setTemplates((prev) =>
         prev.map((t) => (t.slug === selected.slug ? { ...t, ...def } : t))
       );
-      setForm({ subject: def.subject, body_html: def.body_html });
+      setSubject(def.subject);
+      editor?.commands.setContent(def.body_html || "");
       setSelected((t) => ({ ...t, ...def }));
+      setDirty(false);
       setSavedSlug(null);
     } catch {
       alert("Erreur lors de la réinitialisation.");
     }
   }
 
-  function handleEditorMount(editor) {
-    editorRef.current = editor;
+  function insertVariable(v) {
+    editor?.chain().focus().insertContent(v).run();
   }
 
-  function insertVariable(variable) {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const selection = editor.getSelection();
-    editor.executeEdits("insert-variable", [
-      { identifier: { major: 1, minor: 1 }, range: selection, text: variable, forceMoveMarkers: true },
-    ]);
-    editor.focus();
+  function setLink() {
+    const url = window.prompt("URL du lien :", "https://");
+    if (!url) return;
+    if (url === "") { editor?.chain().focus().extendMarkRange("link").unsetLink().run(); return; }
+    editor?.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
   }
 
-  function formatDocument() {
-    editorRef.current?.getAction("editor.action.formatDocument")?.run();
-  }
-
-  const dirty =
-    selected &&
-    (form.subject !== selected.subject || form.body_html !== selected.body_html);
+  const canSave = dirty || subject !== (selected?.subject || "");
 
   return (
     <div className="flex gap-4 h-[calc(100vh-220px)] min-h-[520px]">
@@ -102,7 +158,7 @@ function TemplatesTab() {
         {templates.map((tpl) => (
           <button
             key={tpl.slug}
-            onClick={() => select(tpl)}
+            onClick={() => loadTemplate(tpl)}
             className={`w-full text-left rounded-xl px-4 py-3 transition-colors flex items-center justify-between gap-2 ${
               selected?.slug === tpl.slug
                 ? "bg-orange-50 border border-orange-200 text-orange-700"
@@ -133,28 +189,18 @@ function TemplatesTab() {
               >
                 {previewMode ? "Éditeur" : "Aperçu"}
               </button>
-              <button
-                onClick={reset}
-                className="btn-ghost border text-sm px-3"
-                title="Remettre aux valeurs par défaut"
-              >
+              <button onClick={reset} className="btn-ghost border text-sm px-3" title="Remettre aux valeurs par défaut">
                 <RotateCcw className="w-4 h-4" />
               </button>
               <button
                 onClick={save}
-                disabled={saving || !dirty}
+                disabled={saving || !canSave}
                 className="btn-primary text-sm px-4 disabled:opacity-50"
               >
-                {saving ? (
-                  "Sauvegarde..."
-                ) : savedSlug === selected.slug && !dirty ? (
-                  <span className="flex items-center gap-1">
-                    <Check className="w-4 h-4" /> Sauvegardé
-                  </span>
+                {saving ? "Sauvegarde..." : savedSlug === selected.slug && !canSave ? (
+                  <span className="flex items-center gap-1"><Check className="w-4 h-4" /> Sauvegardé</span>
                 ) : (
-                  <span className="flex items-center gap-1">
-                    <Save className="w-4 h-4" /> Sauvegarder
-                  </span>
+                  <span className="flex items-center gap-1"><Save className="w-4 h-4" /> Sauvegarder</span>
                 )}
               </button>
             </div>
@@ -164,10 +210,10 @@ function TemplatesTab() {
             {previewMode ? (
               <div className="flex-1 flex flex-col">
                 <div className="bg-slate-50 px-6 py-2 text-xs text-slate-500 border-b border-slate-100">
-                  Objet : <strong>{form.subject}</strong>
+                  Objet : <strong>{subject}</strong>
                 </div>
                 <iframe
-                  srcDoc={form.body_html}
+                  srcDoc={editor?.getHTML() || ""}
                   sandbox="allow-same-origin"
                   title="Aperçu email"
                   className="flex-1 w-full"
@@ -183,73 +229,111 @@ function TemplatesTab() {
                   </label>
                   <input
                     className="input flex-1 text-sm"
-                    value={form.subject}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, subject: e.target.value }))
-                    }
+                    value={subject}
+                    onChange={(e) => { setSubject(e.target.value); setDirty(true); }}
                   />
                 </div>
 
-                {/* editor toolbar */}
-                <div className="px-4 py-2 bg-[#1e1e1e] border-b border-[#333] flex items-center gap-3 flex-wrap">
+                {/* formatting toolbar */}
+                <div className="px-3 py-2 border-b border-slate-100 bg-slate-50 flex items-center gap-0.5 flex-wrap">
+                  {/* heading */}
+                  <select
+                    className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 mr-1"
+                    value={
+                      editor?.isActive("heading", { level: 1 }) ? "h1" :
+                      editor?.isActive("heading", { level: 2 }) ? "h2" :
+                      editor?.isActive("heading", { level: 3 }) ? "h3" : "p"
+                    }
+                    onChange={(e) => {
+                      if (e.target.value === "p") editor?.chain().focus().setParagraph().run();
+                      else editor?.chain().focus().setHeading({ level: parseInt(e.target.value.slice(1)) }).run();
+                    }}
+                  >
+                    <option value="p">Paragraphe</option>
+                    <option value="h1">Titre 1</option>
+                    <option value="h2">Titre 2</option>
+                    <option value="h3">Titre 3</option>
+                  </select>
+
+                  <Divider />
+
+                  <TBtn active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()} title="Gras (Ctrl+B)">
+                    <Bold className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive("italic")} onClick={() => editor?.chain().focus().toggleItalic().run()} title="Italique (Ctrl+I)">
+                    <Italic className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Souligné (Ctrl+U)">
+                    <UnderlineIcon className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive("strike")} onClick={() => editor?.chain().focus().toggleStrike().run()} title="Barré">
+                    <Strikethrough className="w-4 h-4" />
+                  </TBtn>
+
+                  <Divider />
+
+                  {/* text color */}
+                  <label className="relative p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Couleur du texte">
+                    <Palette className="w-4 h-4 text-slate-600" />
+                    <input
+                      type="color"
+                      className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                      onInput={(e) => editor?.chain().focus().setColor(e.target.value).run()}
+                    />
+                  </label>
+
+                  <Divider />
+
+                  <TBtn active={editor?.isActive({ textAlign: "left" })} onClick={() => editor?.chain().focus().setTextAlign("left").run()} title="Aligner à gauche">
+                    <AlignLeft className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive({ textAlign: "center" })} onClick={() => editor?.chain().focus().setTextAlign("center").run()} title="Centrer">
+                    <AlignCenter className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive({ textAlign: "right" })} onClick={() => editor?.chain().focus().setTextAlign("right").run()} title="Aligner à droite">
+                    <AlignRight className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive({ textAlign: "justify" })} onClick={() => editor?.chain().focus().setTextAlign("justify").run()} title="Justifier">
+                    <AlignJustify className="w-4 h-4" />
+                  </TBtn>
+
+                  <Divider />
+
+                  <TBtn active={editor?.isActive("bulletList")} onClick={() => editor?.chain().focus().toggleBulletList().run()} title="Liste à puces">
+                    <List className="w-4 h-4" />
+                  </TBtn>
+                  <TBtn active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Liste numérotée">
+                    <ListOrdered className="w-4 h-4" />
+                  </TBtn>
+
+                  <Divider />
+
+                  <TBtn active={editor?.isActive("link")} onClick={setLink} title="Insérer un lien">
+                    <LinkIcon className="w-4 h-4" />
+                  </TBtn>
+
+                  {/* variables */}
                   {(selected.variables || []).length > 0 && (
                     <>
-                      <span className="text-xs text-slate-400 whitespace-nowrap">
-                        Insérer :
-                      </span>
+                      <Divider />
+                      <span className="text-xs text-slate-400 mx-1 whitespace-nowrap">Insérer :</span>
                       {(selected.variables || []).map((v) => (
                         <button
                           key={v}
-                          onClick={() => insertVariable(v)}
-                          title={`Insérer ${v} au curseur`}
-                          className="font-mono text-xs bg-orange-900/40 border border-orange-600/40 text-orange-300 rounded px-2 py-0.5 hover:bg-orange-600/30 transition-colors"
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); insertVariable(v); }}
+                          className="font-mono text-xs bg-orange-50 border border-orange-200 text-orange-600 rounded px-2 py-0.5 hover:bg-orange-100 transition-colors mx-0.5"
                         >
                           {v}
                         </button>
                       ))}
-                      <div className="w-px h-4 bg-slate-600 mx-1" />
                     </>
                   )}
-                  <button
-                    onClick={formatDocument}
-                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
-                    title="Formater le HTML (Shift+Alt+F)"
-                  >
-                    <Code2 className="w-3.5 h-3.5" />
-                    Formater
-                  </button>
-                  <span className="ml-auto text-xs text-slate-600">
-                    Ctrl+F rechercher · Ctrl+H remplacer · Shift+Alt+F formater
-                  </span>
                 </div>
 
-                {/* Monaco editor */}
-                <div className="flex-1 min-h-0">
-                  <Editor
-                    height="100%"
-                    defaultLanguage="html"
-                    value={form.body_html}
-                    theme="vs-dark"
-                    onMount={handleEditorMount}
-                    onChange={(value) =>
-                      setForm((f) => ({ ...f, body_html: value ?? "" }))
-                    }
-                    options={{
-                      fontSize: 13,
-                      lineNumbers: "on",
-                      minimap: { enabled: false },
-                      wordWrap: "on",
-                      scrollBeyondLastLine: false,
-                      automaticLayout: true,
-                      formatOnPaste: true,
-                      formatOnType: false,
-                      tabSize: 2,
-                      insertSpaces: true,
-                      folding: true,
-                      renderLineHighlight: "line",
-                      scrollbar: { verticalScrollbarSize: 6 },
-                    }}
-                  />
+                {/* editor content */}
+                <div className="flex-1 overflow-y-auto rich-editor">
+                  <EditorContent editor={editor} className="h-full" />
                 </div>
               </div>
             )}
