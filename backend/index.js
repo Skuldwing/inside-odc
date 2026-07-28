@@ -223,6 +223,14 @@ pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS started_at TIMEST
   .then(() => console.log("Migration OK: vote_projects.started_at")).catch(e => console.warn("Migration started_at:", e.message));
 
 pool.query(`
+  CREATE TABLE IF NOT EXISTS partner_devices (
+    partner_id INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+    device_id  INTEGER NOT NULL REFERENCES devices(id)  ON DELETE CASCADE,
+    PRIMARY KEY (partner_id, device_id)
+  )
+`).then(() => console.log("Migration OK: partner_devices")).catch(e => console.warn("Migration partner_devices:", e.message));
+
+pool.query(`
   CREATE TABLE IF NOT EXISTS email_templates (
     slug        TEXT PRIMARY KEY,
     label       TEXT NOT NULL,

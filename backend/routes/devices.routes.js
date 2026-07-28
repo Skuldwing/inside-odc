@@ -6,22 +6,39 @@ const requireAdminPin = require("../middleware/pin.middleware");
 
 const router = express.Router();
 
-/* ===== GET ALL DEVICES ===== */
-router.get("/", authMiddleware, requireAdmin, async (req, res) => {
+/* ===== GET DEVICES ===== */
+router.get("/", authMiddleware, async (req, res) => {
   try {
-    const result = await pool.query(
-      `
-      SELECT
-        d.*,
-        COUNT(DISTINCT a.id)::int AS activities_count,
-        COUNT(ap.participant_id)::int AS beneficiaries_count
-      FROM devices d
-      LEFT JOIN activities a ON a.device_id = d.id
-      LEFT JOIN activity_participants ap ON ap.activity_id = a.id
-      GROUP BY d.id
-      ORDER BY d.name
-      `
-    );
+    let query, params = [];
+
+    if (req.user.role === "partner") {
+      query = `
+        SELECT d.*,
+               COUNT(DISTINCT a.id)::int AS activities_count,
+               COUNT(ap.participant_id)::int AS beneficiaries_count
+        FROM devices d
+        JOIN partner_devices pd ON pd.device_id = d.id
+        LEFT JOIN activities a ON a.device_id = d.id
+        LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+        WHERE pd.partner_id = $1
+        GROUP BY d.id
+        ORDER BY d.name
+      `;
+      params = [req.user.partner_id];
+    } else {
+      query = `
+        SELECT d.*,
+               COUNT(DISTINCT a.id)::int AS activities_count,
+               COUNT(ap.participant_id)::int AS beneficiaries_count
+        FROM devices d
+        LEFT JOIN activities a ON a.device_id = d.id
+        LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+        GROUP BY d.id
+        ORDER BY d.name
+      `;
+    }
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (err) {
     console.error(err);

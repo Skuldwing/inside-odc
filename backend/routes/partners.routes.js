@@ -120,6 +120,45 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
   }
 });
 
+/* ===== GET PARTNER DEVICES ===== */
+router.get("/:id/devices", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT device_id FROM partner_devices WHERE partner_id = $1",
+      [req.params.id]
+    );
+    res.json(result.rows.map((r) => r.device_id));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== SET PARTNER DEVICES ===== */
+router.put("/:id/devices", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
+  try {
+    const { device_ids = [] } = req.body;
+    const { id } = req.params;
+
+    await pool.query("DELETE FROM partner_devices WHERE partner_id = $1", [id]);
+
+    if (device_ids.length > 0) {
+      const values = device_ids
+        .map((_, i) => `($1, $${i + 2})`)
+        .join(", ");
+      await pool.query(
+        `INSERT INTO partner_devices (partner_id, device_id) VALUES ${values}`,
+        [id, ...device_ids]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== DELETE PARTNER ===== */
 router.delete("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
   try {

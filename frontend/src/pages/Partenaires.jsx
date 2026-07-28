@@ -7,6 +7,7 @@ import {
   Target,
   Pencil,
   Trash2,
+  Layers,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -15,11 +16,10 @@ import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
 
 export default function Partenaires() {
-  const partnersApi = api;
-
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [partners, setPartners] = useState([]);
+  const [allDevices, setAllDevices] = useState([]);
   const [search, setSearch] = useState("");
 
   const [form, setForm] = useState({
@@ -30,11 +30,16 @@ export default function Partenaires() {
     objective_beneficiaries: "",
     status: "active",
   });
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
 
   const fetchPartners = async () => {
     try {
-      const res = await partnersApi.get("/partners");
-      setPartners(res.data);
+      const [pRes, dRes] = await Promise.all([
+        api.get("/partners"),
+        api.get("/devices"),
+      ]);
+      setPartners(pRes.data);
+      setAllDevices(dRes.data);
     } catch (err) {
       console.error("Erreur chargement partenaires", err);
     }
@@ -53,23 +58,29 @@ export default function Partenaires() {
       objective_beneficiaries: "",
       status: "active",
     });
+    setSelectedDeviceIds([]);
     setEditing(null);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     const payload = {
       ...form,
       objective_beneficiaries: Number(form.objective_beneficiaries || 0),
     };
 
     try {
+      let partnerId = editing;
       if (editing) {
-        await partnersApi.put(`/partners/${editing}`, payload);
+        await api.put(`/partners/${editing}`, payload);
       } else {
-        await partnersApi.post("/partners", payload);
+        const res = await api.post("/partners", payload);
+        partnerId = res.data.id;
       }
+
+      await api.put(`/partners/${partnerId}/devices`, {
+        device_ids: selectedDeviceIds,
+      });
 
       fetchPartners();
       resetForm();
@@ -79,7 +90,7 @@ export default function Partenaires() {
     }
   };
 
-  const handleEdit = (partner) => {
+  const handleEdit = async (partner) => {
     setForm({
       name: partner.name || "",
       description: partner.description || "",
@@ -89,18 +100,33 @@ export default function Partenaires() {
       status: partner.status || "active",
     });
     setEditing(partner.id);
+
+    try {
+      const res = await api.get(`/partners/${partner.id}/devices`);
+      setSelectedDeviceIds(res.data);
+    } catch {
+      setSelectedDeviceIds([]);
+    }
+
     setOpen(true);
   };
 
   const handleDelete = async (id) => {
     if (!confirm("Supprimer ce partenaire ?")) return;
-
     try {
-      await partnersApi.delete(`/partners/${id}`);
+      await api.delete(`/partners/${id}`);
       fetchPartners();
     } catch (err) {
       console.error("Erreur suppression partenaire", err);
     }
+  };
+
+  const toggleDevice = (deviceId) => {
+    setSelectedDeviceIds((prev) =>
+      prev.includes(deviceId)
+        ? prev.filter((id) => id !== deviceId)
+        : [...prev, deviceId]
+    );
   };
 
   const filteredPartners = partners.filter((p) => {
@@ -139,12 +165,7 @@ export default function Partenaires() {
                   required
                   className="input mt-1"
                   value={form.name}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      name: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </div>
 
@@ -155,10 +176,7 @@ export default function Partenaires() {
                   className="input mt-1"
                   value={form.description}
                   onChange={(e) =>
-                    setForm({
-                      ...form,
-                      description: e.target.value,
-                    })
+                    setForm({ ...form, description: e.target.value })
                   }
                 />
               </div>
@@ -171,24 +189,17 @@ export default function Partenaires() {
                     className="input mt-1"
                     value={form.contact_email}
                     onChange={(e) =>
-                      setForm({
-                        ...form,
-                        contact_email: e.target.value,
-                      })
+                      setForm({ ...form, contact_email: e.target.value })
                     }
                   />
                 </div>
-
                 <div>
                   <label className="text-sm font-medium">Téléphone</label>
                   <input
                     className="input mt-1"
                     value={form.contact_phone}
                     onChange={(e) =>
-                      setForm({
-                        ...form,
-                        contact_phone: e.target.value,
-                      })
+                      setForm({ ...form, contact_phone: e.target.value })
                     }
                   />
                 </div>
@@ -217,16 +228,62 @@ export default function Partenaires() {
                   className="select mt-1"
                   value={form.status}
                   onChange={(e) =>
-                    setForm({
-                      ...form,
-                      status: e.target.value,
-                    })
+                    setForm({ ...form, status: e.target.value })
                   }
                 >
                   <option value="active">Actif</option>
                   <option value="inactive">Inactif</option>
                 </select>
               </div>
+
+              {/* Dispositifs assignés */}
+              {allDevices.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium flex items-center gap-1 mb-2">
+                    <Layers className="w-4 h-4 text-orange-500" />
+                    Dispositifs accessibles
+                  </label>
+                  <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                    {allDevices.map((d) => {
+                      const checked = selectedDeviceIds.includes(d.id);
+                      return (
+                        <label
+                          key={d.id}
+                          className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleDevice(d.id)}
+                            className="w-4 h-4 accent-orange-500"
+                          />
+                          <span
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{
+                              backgroundColor: d.color || "#FF7900",
+                            }}
+                          />
+                          <span className="text-sm text-slate-700 flex-1">
+                            {d.name}
+                          </span>
+                          {d.category && (
+                            <span className="text-xs text-slate-400">
+                              {d.category}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {selectedDeviceIds.length > 0 && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {selectedDeviceIds.length} dispositif
+                      {selectedDeviceIds.length > 1 ? "s" : ""} sélectionné
+                      {selectedDeviceIds.length > 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-4">
                 <button
@@ -265,6 +322,7 @@ export default function Partenaires() {
               objective > 0
                 ? Math.min(100, Math.round((beneficiaries / objective) * 100))
                 : 0;
+
             return (
               <div key={p.id} className="card p-5 space-y-4">
                 <div className="flex items-start justify-between">
