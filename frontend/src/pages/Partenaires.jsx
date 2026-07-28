@@ -21,6 +21,7 @@ export default function Partenaires() {
   const [editing, setEditing] = useState(null);
   const [partners, setPartners] = useState([]);
   const [allDevices, setAllDevices] = useState([]);
+  const [coaches, setCoaches] = useState([]);
   const [search, setSearch] = useState("");
 
   const [form, setForm] = useState({
@@ -35,12 +36,14 @@ export default function Partenaires() {
 
   const fetchPartners = async () => {
     try {
-      const [pRes, dRes] = await Promise.all([
+      const [pRes, dRes, uRes] = await Promise.all([
         api.get("/partners"),
         api.get("/devices"),
+        api.get("/users"),
       ]);
       setPartners(pRes.data);
       setAllDevices(dRes.data);
+      setCoaches((uRes.data || []).filter(u => u.role === "coach"));
     } catch (err) {
       console.error("Erreur chargement partenaires", err);
     }
@@ -323,6 +326,7 @@ export default function Partenaires() {
               objective > 0
                 ? Math.min(100, Math.round((beneficiaries / objective) * 100))
                 : 0;
+            const partnerCoaches = coaches.filter(c => String(c.partner_id) === String(p.id));
             const coachesAllocated = Number(p.coaches_objective_allocated || 0);
             const coachesCount = Number(p.coaches_count || 0);
             const allocPct = objective > 0 ? Math.min(100, Math.round((coachesAllocated / objective) * 100)) : 0;
@@ -404,26 +408,68 @@ export default function Partenaires() {
                 </div>
 
                 {/* Répartition objectif → coachs */}
-                {coachesCount > 0 && objective > 0 && (
-                  <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-purple-700 font-medium flex items-center gap-1">
-                        <Target className="w-3.5 h-3.5" />
-                        Objectif alloué aux coachs
+                {partnerCoaches.length > 0 && (
+                  <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-purple-700 flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" />
+                        Coachs affiliés
                       </span>
-                      <span className={`font-semibold ${coachesAllocated > objective ? "text-red-500" : "text-purple-700"}`}>
-                        {coachesAllocated} / {objective}
-                      </span>
+                      {objective > 0 && (
+                        <span className={`text-xs font-semibold ${coachesAllocated > objective ? "text-red-500" : "text-purple-600"}`}>
+                          {coachesAllocated} / {objective} alloués
+                        </span>
+                      )}
                     </div>
-                    <div className="w-full h-1.5 bg-purple-100 rounded-full">
-                      <div
-                        className={`h-full rounded-full ${coachesAllocated > objective ? "bg-red-400" : "bg-purple-400"}`}
-                        style={{ width: `${allocPct}%` }}
-                      />
+
+                    {/* Barre globale */}
+                    {objective > 0 && (
+                      <div className="w-full h-1.5 bg-purple-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${coachesAllocated > objective ? "bg-red-400" : "bg-purple-400"}`}
+                          style={{ width: `${allocPct}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Liste par coach */}
+                    <div className="space-y-1.5">
+                      {partnerCoaches.map(coach => {
+                        const coachObj = Number(coach.objective_beneficiaries || 0);
+                        const coachPct = objective > 0 && coachObj > 0
+                          ? Math.min(100, Math.round((coachObj / objective) * 100))
+                          : 0;
+                        return (
+                          <div key={coach.id} className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-purple-200 text-purple-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                              {(coach.full_name || "?")[0].toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-0.5">
+                                <span className="text-xs text-slate-700 truncate">{coach.full_name || coach.email}</span>
+                                <span className="text-[11px] text-purple-600 font-medium ml-2 flex-shrink-0">
+                                  {coachObj > 0 ? `${coachObj} bénéf.` : "—"}
+                                </span>
+                              </div>
+                              {objective > 0 && coachObj > 0 && (
+                                <div className="w-full h-1 bg-purple-100 rounded-full">
+                                  <div
+                                    className="h-full bg-purple-400 rounded-full"
+                                    style={{ width: `${coachPct}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <p className="text-[11px] text-purple-500">
-                      {coachesCount} coach{coachesCount > 1 ? "s" : ""} · {allocPct}% de l'objectif attribué
-                    </p>
+
+                    {objective > 0 && coachesAllocated < objective && (
+                      <p className="text-[11px] text-purple-400">
+                        {objective - coachesAllocated} bénéficiaire{objective - coachesAllocated > 1 ? "s" : ""} non encore attribué{objective - coachesAllocated > 1 ? "s" : ""}
+                      </p>
+                    )}
                   </div>
                 )}
 
