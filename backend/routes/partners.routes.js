@@ -15,7 +15,17 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
       SELECT
         p.*,
         COUNT(DISTINCT a.id)::int AS activities_count,
-        COUNT(ap.participant_id)::int AS beneficiaries_count
+        COUNT(ap.participant_id)::int AS beneficiaries_count,
+        COALESCE((
+          SELECT SUM(u.objective_beneficiaries)
+          FROM users u
+          WHERE u.partner_id = p.id AND u.role = 'coach' AND u.objective_beneficiaries IS NOT NULL
+        ), 0)::int AS coaches_objective_allocated,
+        (
+          SELECT COUNT(*)
+          FROM users u
+          WHERE u.partner_id = p.id AND u.role = 'coach'
+        )::int AS coaches_count
       FROM partners p
       LEFT JOIN activities a ON a.partner_id = p.id
       LEFT JOIN activity_participants ap ON ap.activity_id = a.id

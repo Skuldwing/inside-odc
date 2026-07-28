@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus, User, Mail, Shield, Building2, Link2, Pencil, Trash2,
-  Search, UsersRound, Copy, Check, X, AlertCircle, Loader2,
+  Search, UsersRound, Copy, Check, X, AlertCircle, Loader2, Target,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -15,7 +15,7 @@ const ROLES = [
   { value: "viewer",  label: "Lecteur",          cls: "bg-slate-100 text-slate-600 border-slate-200" },
 ];
 
-const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active" };
+const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active", objective_beneficiaries: "" };
 
 export default function Utilisateurs() {
   const [searchParams] = useSearchParams();
@@ -77,7 +77,7 @@ export default function Utilisateurs() {
   };
 
   const openEdit = (u) => {
-    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, partner_id: u.partner_id || "", status: u.status });
+    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "" });
     setEditing(u.id);
     setFormError("");
     setInviteData(null);
@@ -295,6 +295,73 @@ export default function Utilisateurs() {
                   </div>
                 )}
 
+                {form.role === "coach" && form.partner_id && (() => {
+                  const partner = partners.find(p => String(p.id) === String(form.partner_id));
+                  const partnerObjective = Number(partner?.objective_beneficiaries || 0);
+                  const alreadyAllocated = users
+                    .filter(u => u.role === "coach" && String(u.partner_id) === String(form.partner_id) && u.id !== editing)
+                    .reduce((s, u) => s + Number(u.objective_beneficiaries || 0), 0);
+                  const thisCoach = Number(form.objective_beneficiaries || 0);
+                  const totalAllocated = alreadyAllocated + thisCoach;
+                  const remaining = partnerObjective - alreadyAllocated;
+                  const pct = partnerObjective > 0 ? Math.min(100, Math.round((totalAllocated / partnerObjective) * 100)) : 0;
+
+                  return (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-sm font-medium flex items-center gap-1.5">
+                          <Target className="w-4 h-4 text-orange-500" />
+                          Objectif assigné à ce coach (bénéficiaires)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={remaining + thisCoach}
+                          className="input mt-1"
+                          placeholder="0"
+                          value={form.objective_beneficiaries}
+                          onChange={e => setForm(f => ({ ...f, objective_beneficiaries: e.target.value }))}
+                        />
+                      </div>
+
+                      {partnerObjective > 0 && (
+                        <div className="rounded-xl border border-orange-100 bg-orange-50/60 p-3 space-y-2">
+                          <p className="text-xs font-medium text-orange-800 flex items-center gap-1">
+                            <Target className="w-3.5 h-3.5" />
+                            Répartition de l'objectif partenaire — {partner?.name}
+                          </p>
+                          <div className="w-full h-2.5 bg-white rounded-full border border-orange-100 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${totalAllocated > partnerObjective ? "bg-red-400" : "bg-orange-400"}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-1 text-xs text-center">
+                            <div className="rounded-lg bg-white border border-orange-100 px-2 py-1.5">
+                              <p className="text-orange-600 font-semibold">{partnerObjective}</p>
+                              <p className="text-slate-400">Total</p>
+                            </div>
+                            <div className="rounded-lg bg-white border border-orange-100 px-2 py-1.5">
+                              <p className={`font-semibold ${totalAllocated > partnerObjective ? "text-red-500" : "text-slate-700"}`}>{totalAllocated}</p>
+                              <p className="text-slate-400">Alloués</p>
+                            </div>
+                            <div className="rounded-lg bg-white border border-orange-100 px-2 py-1.5">
+                              <p className={`font-semibold ${remaining - thisCoach < 0 ? "text-red-500" : "text-emerald-600"}`}>{Math.max(0, remaining - thisCoach)}</p>
+                              <p className="text-slate-400">Restant</p>
+                            </div>
+                          </div>
+                          {totalAllocated > partnerObjective && (
+                            <p className="text-xs text-red-600 flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5" />
+                              Le total alloué dépasse l'objectif du partenaire.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div>
                   <label className="text-sm font-medium">Statut</label>
                   <select className="select mt-1" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
@@ -419,7 +486,15 @@ export default function Utilisateurs() {
 
                     <td className="px-4 py-3 text-sm">
                       {u.partner
-                        ? <span className="flex items-center gap-1"><Building2 className="w-4 h-4 text-slate-400" />{u.partner}</span>
+                        ? <div>
+                            <span className="flex items-center gap-1"><Building2 className="w-4 h-4 text-slate-400" />{u.partner}</span>
+                            {u.role === "coach" && u.objective_beneficiaries != null && (
+                              <span className="flex items-center gap-1 mt-0.5 text-xs text-orange-600">
+                                <Target className="w-3 h-3" />
+                                Objectif : {u.objective_beneficiaries} bénéf.
+                              </span>
+                            )}
+                          </div>
                         : <span className="text-slate-400">—</span>}
                     </td>
 

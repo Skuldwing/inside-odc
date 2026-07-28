@@ -8,6 +8,7 @@ import {
   Pencil,
   Trash2,
   Layers,
+  Users,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
@@ -322,6 +323,9 @@ export default function Partenaires() {
               objective > 0
                 ? Math.min(100, Math.round((beneficiaries / objective) * 100))
                 : 0;
+            const coachesAllocated = Number(p.coaches_objective_allocated || 0);
+            const coachesCount = Number(p.coaches_count || 0);
+            const allocPct = objective > 0 ? Math.min(100, Math.round((coachesAllocated / objective) * 100)) : 0;
 
             return (
               <div key={p.id} className="card p-5 space-y-4">
@@ -398,6 +402,30 @@ export default function Partenaires() {
                     {pct}%
                   </div>
                 </div>
+
+                {/* Répartition objectif → coachs */}
+                {coachesCount > 0 && objective > 0 && (
+                  <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3 space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-purple-700 font-medium flex items-center gap-1">
+                        <Target className="w-3.5 h-3.5" />
+                        Objectif alloué aux coachs
+                      </span>
+                      <span className={`font-semibold ${coachesAllocated > objective ? "text-red-500" : "text-purple-700"}`}>
+                        {coachesAllocated} / {objective}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-purple-100 rounded-full">
+                      <div
+                        className={`h-full rounded-full ${coachesAllocated > objective ? "bg-red-400" : "bg-purple-400"}`}
+                        style={{ width: `${allocPct}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-purple-500">
+                      {coachesCount} coach{coachesCount > 1 ? "s" : ""} · {allocPct}% de l'objectif attribué
+                    </p>
+                  </div>
+                )}
 
                 <div className="pt-2 border-t border-slate-100 space-y-2 text-sm text-slate-600">
                   {p.contact_email && (

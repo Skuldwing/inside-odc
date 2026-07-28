@@ -272,6 +272,10 @@ pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS report_data BYTEA`)
 pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'presentiel'`)
   .then(() => console.log("Migration OK: activities.mode")).catch(e => console.warn("Migration mode:", e.message));
 
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS objective_beneficiaries INTEGER DEFAULT NULL`)
+  .then(() => console.log("Migration OK: users.objective_beneficiaries"))
+  .catch(e => console.warn("Migration users.objective_beneficiaries:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS audit_logs (
     id             BIGSERIAL PRIMARY KEY,

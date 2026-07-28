@@ -38,6 +38,7 @@ router.get("/", async (req, res) => {
     const result = await pool.query(
       `
       SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
+             u.objective_beneficiaries,
              p.name AS partner,
              ${statusExpr} AS status
       FROM users u
@@ -144,6 +145,7 @@ router.put("/:id", async (req, res) => {
       partner_id = null,
       partner = null,
       status = "active",
+      objective_beneficiaries = null,
     } = req.body;
 
     if (!email) {
@@ -162,6 +164,10 @@ router.put("/:id", async (req, res) => {
     const isActive = status !== "inactive";
     const hasIsActive = await hasUsersIsActiveColumn();
 
+    const coachObjective = role === "coach" && objective_beneficiaries !== null && objective_beneficiaries !== ""
+      ? Number(objective_beneficiaries)
+      : null;
+
     const result = hasIsActive
       ? await pool.query(
           `
@@ -170,11 +176,12 @@ router.put("/:id", async (req, res) => {
               role = $2,
               partner_id = $3,
               full_name = $4,
-              is_active = $5
-          WHERE id = $6
-          RETURNING id, email, role, full_name, partner_id
+              is_active = $5,
+              objective_beneficiaries = $6
+          WHERE id = $7
+          RETURNING id, email, role, full_name, partner_id, objective_beneficiaries
           `,
-          [email, role, resolvedPartnerId, full_name || null, isActive, id]
+          [email, role, resolvedPartnerId, full_name || null, isActive, coachObjective, id]
         )
       : await pool.query(
           `
@@ -182,11 +189,12 @@ router.put("/:id", async (req, res) => {
           SET email = $1,
               role = $2,
               partner_id = $3,
-              full_name = $4
-          WHERE id = $5
-          RETURNING id, email, role, full_name, partner_id
+              full_name = $4,
+              objective_beneficiaries = $5
+          WHERE id = $6
+          RETURNING id, email, role, full_name, partner_id, objective_beneficiaries
           `,
-          [email, role, resolvedPartnerId, full_name || null, id]
+          [email, role, resolvedPartnerId, full_name || null, coachObjective, id]
         );
 
     if (result.rows.length === 0) {
