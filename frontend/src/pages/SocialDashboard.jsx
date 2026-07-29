@@ -161,6 +161,12 @@ export default function SocialDashboard() {
     })), [monthly]
   );
 
+  // Toujours afficher les 6 plateformes, même sans données (= 0)
+  const latestByPlatform = useMemo(() => {
+    const apiMap = new Map((summary?.latest_by_platform || []).map(p => [p.platform, p.followers]));
+    return PLATFORMS.map(p => ({ platform: p.value, followers: apiMap.get(p.value) || 0 }));
+  }, [summary]);
+
   const distribution = useMemo(() =>
     (summary?.platform_distribution || [])
       .filter(d => d.value > 0)
@@ -359,7 +365,7 @@ export default function SocialDashboard() {
           <div>
             <p className="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Abonnés par plateforme — dernier mois</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-              {(summary?.latest_by_platform || PLATFORMS.map(p => ({ platform: p.value, followers: 0 }))).map(p => {
+              {latestByPlatform.map(p => {
                 const cfg = platformMap[p.platform];
                 if (!cfg) return null;
                 return (
