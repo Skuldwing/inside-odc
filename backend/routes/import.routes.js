@@ -394,31 +394,129 @@ async function resolveParticipantId(client, payload) {
   return participantId;
 }
 
-async function importParticipantsRows(client, rows, activityId) {
-  let imported = 0;
+async function importParticipantsRowsBatch(client, rows, activityId) {
   let skippedMissingName = 0;
-  let duplicatesInActivity = 0;
 
+  // 1. Parse all rows upfront
+  const items = [];
   for (const row of rows) {
-    const parsed = parseParticipantFromMapped(row);
+    const p = parseParticipantFromMapped(row);
+    if (!p.nom || !p.prenom) { skippedMissingName++; continue; }
+    items.push({ ...p, normalizedGender: normalizeGender(p.genre), resolvedId: null });
+  }
+  if (items.length === 0) return { imported: 0, skippedMissingName, duplicatesInActivity: 0 };
 
-    if (!parsed.nom || !parsed.prenom) {
-      skippedMissingName++;
-      continue;
+  // 2. Batch-fetch existing participants by email/phone (1 query)
+  const emailSet = new Set(items.filter(it => it.email).map(it => it.email.trim().toLowerCase()));
+  const phoneSet = new Set(items.filter(it => it.telephone).map(it => it.telephone.trim()));
+  const byEmail = new Map(); // lowercase email → {id,nom,prenom}
+  const byPhone = new Map(); // phone → {id,nom,prenom}
+
+  if (emailSet.size > 0 || phoneSet.size > 0) {
+    const parts = [], params = [];
+    if (emailSet.size > 0) { params.push([...emailSet]); parts.push(`LOWER(email) = ANY($${params.length})`); }
+    if (phoneSet.size > 0) { params.push([...phoneSet]); parts.push(`telephone = ANY($${params.length})`); }
+    const { rows: existing } = await client.query(
+      `SELECT id, nom, prenom, email, telephone FROM participants WHERE ${parts.join(' OR ')}`,
+      params
+    );
+    for (const r of existing) {
+      if (r.email) byEmail.set(r.email.trim().toLowerCase(), r);
+      if (r.telephone) byPhone.set(r.telephone.trim(), r);
     }
+  }
 
-    const payload = { ...parsed, normalizedGender: normalizeGender(parsed.genre) };
-    const participantId = await resolveParticipantId(client, payload);
-    if (!participantId) continue;
+  // 3. Classify: already exists vs. needs insert
+  const toInsert = [];   // items needing a new participant row
+  const toInsertIdx = []; // their index in items[]
 
-    const linkResult = await client.query(
-      `INSERT INTO activity_participants (activity_id, participant_id)
-       VALUES ($1,$2) ON CONFLICT DO NOTHING RETURNING participant_id`,
-      [activityId, participantId]
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    let ex = it.email ? byEmail.get(it.email.trim().toLowerCase()) : null;
+    if (!ex && it.telephone) ex = byPhone.get(it.telephone.trim());
+
+    if (ex && samePersonByName(ex, it.nom, it.prenom)) {
+      items[i].resolvedId = ex.id;
+    } else {
+      // Drop any contact field that belongs to a different person to avoid conflict
+      let email = it.email;
+      let telephone = it.telephone;
+      if (email) {
+        const clash = byEmail.get(email.trim().toLowerCase());
+        if (clash && !samePersonByName(clash, it.nom, it.prenom)) email = null;
+      }
+      if (telephone) {
+        const clash = byPhone.get(telephone.trim());
+        if (clash && !samePersonByName(clash, it.nom, it.prenom)) telephone = null;
+      }
+      toInsert.push({ ...it, email, telephone });
+      toInsertIdx.push(i);
+    }
+  }
+
+  // 4a. Bulk INSERT participants that have email or phone (1 unnest query)
+  const withContact = toInsert.map((p, j) => ({ p, j })).filter(({ p }) => p.email || p.telephone);
+  if (withContact.length > 0) {
+    await client.query(
+      `INSERT INTO participants (nom, prenom, genre, age_range, email, telephone, statut, structure)
+       SELECT unnest($1::text[]), unnest($2::text[]), unnest($3::text[]), unnest($4::text[]),
+              unnest($5::text[]), unnest($6::text[]), unnest($7::text[]), unnest($8::text[])
+       ON CONFLICT DO NOTHING`,
+      [
+        withContact.map(({ p }) => p.nom),
+        withContact.map(({ p }) => p.prenom),
+        withContact.map(({ p }) => p.normalizedGender || null),
+        withContact.map(({ p }) => p.ageRange || null),
+        withContact.map(({ p }) => p.email || null),
+        withContact.map(({ p }) => p.telephone || null),
+        withContact.map(({ p }) => p.statut || null),
+        withContact.map(({ p }) => p.structure || null),
+      ]
     );
 
-    if (linkResult.rowCount > 0) imported++;
-    else duplicatesInActivity++;
+    // Re-fetch to get IDs (both newly inserted + conflicted rows already existed) (1 query)
+    const newEmails = [...new Set(withContact.filter(({ p }) => p.email).map(({ p }) => p.email.trim().toLowerCase()))];
+    const newPhones = [...new Set(withContact.filter(({ p }) => p.telephone).map(({ p }) => p.telephone.trim()))];
+    if (newEmails.length > 0 || newPhones.length > 0) {
+      const parts2 = [], params2 = [];
+      if (newEmails.length > 0) { params2.push(newEmails); parts2.push(`LOWER(email) = ANY($${params2.length})`); }
+      if (newPhones.length > 0) { params2.push(newPhones); parts2.push(`telephone = ANY($${params2.length})`); }
+      const { rows: refetched } = await client.query(
+        `SELECT id, email, telephone FROM participants WHERE ${parts2.join(' OR ')}`,
+        params2
+      );
+      for (const r of refetched) {
+        if (r.email) byEmail.set(r.email.trim().toLowerCase(), r);
+        if (r.telephone) byPhone.set(r.telephone.trim(), r);
+      }
+    }
+    // Map IDs back to items
+    for (const { p, j } of withContact) {
+      let found = p.email ? byEmail.get(p.email.trim().toLowerCase()) : null;
+      if (!found && p.telephone) found = byPhone.get(p.telephone.trim());
+      if (found) items[toInsertIdx[j]].resolvedId = found.id;
+    }
+  }
+
+  // 4b. Name-only participants: individual inserts (no unique key, rare)
+  const noContact = toInsert.map((p, j) => ({ p, j })).filter(({ p }) => !p.email && !p.telephone);
+  for (const { p, j } of noContact) {
+    const id = await insertParticipant(client, p);
+    if (id) items[toInsertIdx[j]].resolvedId = id;
+  }
+
+  // 5. Bulk INSERT activity_participants (1 unnest query)
+  const validIds = items.filter(it => it.resolvedId).map(it => it.resolvedId);
+  let imported = 0, duplicatesInActivity = 0;
+  if (validIds.length > 0) {
+    const linkRes = await client.query(
+      `INSERT INTO activity_participants (activity_id, participant_id)
+       SELECT unnest($1::int[]), unnest($2::int[])
+       ON CONFLICT DO NOTHING`,
+      [validIds.map(() => activityId), validIds]
+    );
+    imported = linkRes.rowCount;
+    duplicatesInActivity = validIds.length - imported;
   }
 
   return { imported, skippedMissingName, duplicatesInActivity };
@@ -477,7 +575,7 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
     );
 
     const activity = activityResult.rows[0];
-    const stats = await importParticipantsRows(client, rows, activity.id);
+    const stats = await importParticipantsRowsBatch(client, rows, activity.id);
 
     await client.query("COMMIT");
     inTransaction = false;
@@ -533,7 +631,7 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
     await client.query("BEGIN");
     inTransaction = true;
 
-    const stats = await importParticipantsRows(client, rows, activityId);
+    const stats = await importParticipantsRowsBatch(client, rows, activityId);
 
     await client.query("COMMIT");
     inTransaction = false;
@@ -590,7 +688,7 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
     await client.query("BEGIN");
     inTransaction = true;
 
-    const stats = await importParticipantsRows(client, rows, activityId);
+    const stats = await importParticipantsRowsBatch(client, rows, activityId);
 
     await client.query(
       "UPDATE activities SET participants_manual = NULL WHERE id = $1",
