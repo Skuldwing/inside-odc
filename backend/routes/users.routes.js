@@ -34,6 +34,7 @@ router.get("/", async (req, res) => {
     const result = await pool.query(
       `SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
               u.objective_beneficiaries,
+              u.last_seen_at,
               p.name AS partner,
               ${statusExpr} AS status
        FROM users u

@@ -278,6 +278,10 @@ pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS objective_beneficiaries I
   .then(() => console.log("Migration OK: users.objective_beneficiaries"))
   .catch(e => console.warn("Migration users.objective_beneficiaries:", e.message));
 
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`)
+  .then(() => console.log("Migration OK: users.last_seen_at"))
+  .catch(e => console.warn("Migration users.last_seen_at:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS audit_logs (
     id             BIGSERIAL PRIMARY KEY,

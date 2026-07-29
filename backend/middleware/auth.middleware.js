@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const pool = require("../db");
 
 function extractCookieToken(req) {
   const cookieHeader = req.headers.cookie;
@@ -29,6 +30,7 @@ function authMiddleware(req, res, next) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { id, role, partner_id }
+    pool.query("UPDATE users SET last_seen_at = NOW() WHERE id = $1", [decoded.id]).catch(() => {});
     next();
   } catch (err) {
     return res.status(401).json({ error: "Token invalide" });

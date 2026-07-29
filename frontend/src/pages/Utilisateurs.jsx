@@ -2,8 +2,25 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus, User, Mail, Shield, Building2, Link2, Pencil, Trash2,
-  Search, UsersRound, Copy, Check, X, AlertCircle, Loader2, Target,
+  Search, UsersRound, Copy, Check, X, AlertCircle, Loader2, Target, Wifi,
 } from "lucide-react";
+
+/* Un utilisateur est "en ligne" si last_seen_at < ONLINE_THRESHOLD ms */
+const ONLINE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+
+function isOnline(lastSeenAt) {
+  if (!lastSeenAt) return false;
+  return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
+}
+
+function OnlineDot({ online }) {
+  return (
+    <span
+      title={online ? "En ligne" : "Hors ligne"}
+      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${online ? "bg-emerald-500 ring-2 ring-emerald-200" : "bg-slate-300"}`}
+    />
+  );
+}
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
@@ -24,6 +41,7 @@ export default function Utilisateurs() {
   const [search, setSearch]     = useState(searchParams.get("q") || "");
   const [roleFilter, setRoleFilter]     = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [onlineFilter, setOnlineFilter] = useState(false);
 
   /* modal création / édition */
   const [modalOpen, setModalOpen] = useState(false);
@@ -59,12 +77,13 @@ export default function Utilisateurs() {
     return users.filter(u => {
       if (roleFilter && u.role !== roleFilter) return false;
       if (statusFilter && u.status !== statusFilter) return false;
+      if (onlineFilter && !isOnline(u.last_seen_at)) return false;
       if (!q) return true;
       return (u.full_name || "").toLowerCase().includes(q)
           || (u.email || "").toLowerCase().includes(q)
           || (u.partner || "").toLowerCase().includes(q);
     });
-  }, [users, search, roleFilter, statusFilter]);
+  }, [users, search, roleFilter, statusFilter, onlineFilter]);
 
   /* ── ouvrir modal ── */
   const openCreate = () => {
@@ -162,7 +181,8 @@ export default function Utilisateurs() {
     total:    filteredUsers.length,
     active:   filteredUsers.filter(u => u.status === "active").length,
     inactive: filteredUsers.filter(u => u.status !== "active").length,
-  }), [filteredUsers]);
+    online:   users.filter(u => isOnline(u.last_seen_at)).length,
+  }), [filteredUsers, users]);
 
   return (
     <AdminPinGate>
@@ -183,10 +203,11 @@ export default function Utilisateurs() {
         </section>
 
         {/* Stats */}
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <MiniStat label="Total filtrés" value={stats.total} />
           <MiniStat label="Actifs" value={stats.active} />
           <MiniStat label="Inactifs" value={stats.inactive} />
+          <MiniStat label="En ligne" value={stats.online} online />
         </section>
 
         {/* Filtres */}
@@ -200,11 +221,25 @@ export default function Utilisateurs() {
               <option value="">Tous les rôles</option>
               {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
-            <select className="select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-              <option value="">Tous les statuts</option>
-              <option value="active">Actif</option>
-              <option value="inactive">Inactif</option>
-            </select>
+            <div className="flex gap-2">
+              <select className="select flex-1" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                <option value="">Tous les statuts</option>
+                <option value="active">Actif</option>
+                <option value="inactive">Inactif</option>
+              </select>
+              <button
+                onClick={() => setOnlineFilter(f => !f)}
+                title="Afficher uniquement les utilisateurs en ligne"
+                className={`flex items-center gap-1.5 px-3 rounded-lg border text-sm font-medium transition-colors flex-shrink-0 ${
+                  onlineFilter
+                    ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                <Wifi className="w-4 h-4" />
+                En ligne
+              </button>
+            </div>
           </div>
         </section>
 
@@ -453,13 +488,14 @@ export default function Utilisateurs() {
                 <th className="text-left px-4 py-3">Rôle</th>
                 <th className="text-left px-4 py-3">Partenaire</th>
                 <th className="text-left px-4 py-3">Statut</th>
+                <th className="text-left px-4 py-3">Présence</th>
                 <th className="text-right px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
                     Aucun utilisateur trouvé.
                   </td>
                 </tr>
@@ -504,6 +540,27 @@ export default function Utilisateurs() {
                       </span>
                     </td>
 
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const online = isOnline(u.last_seen_at);
+                        return (
+                          <div className="flex items-center gap-2">
+                            <OnlineDot online={online} />
+                            <div>
+                              <span className={`text-xs font-medium ${online ? "text-emerald-700" : "text-slate-400"}`}>
+                                {online ? "En ligne" : "Hors ligne"}
+                              </span>
+                              {u.last_seen_at && !online && (
+                                <p className="text-[10px] text-slate-400 leading-none mt-0.5">
+                                  {formatLastSeen(u.last_seen_at)}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => openEdit(u)} className="text-slate-400 hover:text-orange-500 mr-3 transition-colors" title="Modifier">
                         <Pencil className="w-4 h-4" />
@@ -526,13 +583,26 @@ export default function Utilisateurs() {
   );
 }
 
-function MiniStat({ label, value }) {
+function formatLastSeen(lastSeenAt) {
+  if (!lastSeenAt) return "";
+  const diff = Date.now() - new Date(lastSeenAt).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `il y a ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `il y a ${hrs} h`;
+  const days = Math.floor(hrs / 24);
+  return `il y a ${days} j`;
+}
+
+function MiniStat({ label, value, online }) {
   return (
-    <div className="card p-4">
+    <div className={`card p-4 ${online ? "border-emerald-200 bg-emerald-50/40" : ""}`}>
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <div className="mt-2 flex items-center gap-2">
-        <UsersRound className="h-4 w-4 text-orange-500" />
-        <p className="text-2xl font-semibold text-slate-900">{value}</p>
+        {online
+          ? <><span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200 flex-shrink-0" /><p className="text-2xl font-semibold text-emerald-700">{value}</p></>
+          : <><UsersRound className="h-4 w-4 text-orange-500" /><p className="text-2xl font-semibold text-slate-900">{value}</p></>
+        }
       </div>
     </div>
   );
