@@ -470,10 +470,20 @@ router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
     }
 
     const deletedActivity = existing.rows[0];
-    const result = await pool.query(
-      "DELETE FROM activities WHERE id = $1 RETURNING id",
-      [id]
-    );
+
+    const client = await pool.connect();
+    let result;
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM activity_participants WHERE activity_id = $1", [id]);
+      result = await client.query("DELETE FROM activities WHERE id = $1 RETURNING id", [id]);
+      await client.query("COMMIT");
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     logAudit(req, "DELETE", "activities", id, deletedActivity.title, {
       date: deletedActivity.activity_date,
