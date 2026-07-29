@@ -11,6 +11,7 @@ const ALLOWED_PLATFORMS = new Set([
   "linkedin",
   "x",
   "tiktok",
+  "youtube",
 ]);
 
 function normalizePlatform(value) {

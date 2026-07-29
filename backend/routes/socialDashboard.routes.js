@@ -5,7 +5,7 @@ const requireAdmin = require("../middleware/role.middleware");
 
 const router = express.Router();
 
-const PLATFORMS = ["facebook", "instagram", "linkedin", "x", "tiktok"];
+const PLATFORMS = ["facebook", "instagram", "linkedin", "x", "tiktok", "youtube"];
 
 function growthPct(current, previous) {
   if (!previous) return current > 0 ? 100 : 0;

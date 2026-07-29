@@ -292,6 +292,22 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: audit_logs")).catch(e => console.warn("Migration audit_logs:", e.message));
 
+/* Migration : ajouter youtube dans la contrainte CHECK de social_media_kpis */
+pool.query(`
+  DO $$
+  BEGIN
+    BEGIN
+      ALTER TABLE social_media_kpis DROP CONSTRAINT social_media_kpis_platform_check;
+    EXCEPTION WHEN undefined_object THEN NULL;
+    END;
+    BEGIN
+      ALTER TABLE social_media_kpis ADD CONSTRAINT social_media_kpis_platform_check
+        CHECK (platform IN ('facebook','instagram','linkedin','x','tiktok','youtube'));
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END;
+  END$$;
+`).then(() => console.log("Migration OK: social_media_kpis youtube")).catch(e => console.warn("Migration social youtube:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

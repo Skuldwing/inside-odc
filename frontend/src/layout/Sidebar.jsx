@@ -26,7 +26,7 @@ const navigation = [
     roles: ["admin", "partner", "coach", "viewer"],
   },
   {
-    name: "Dashboard Social",
+    name: "Radar Social",
     icon: BarChart3,
     path: "/social-dashboard",
     roles: ["admin"],
