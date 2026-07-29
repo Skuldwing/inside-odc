@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3, Users, Radio, UserRoundCheck, Target,
-  Plus, Pencil, Trash2, TrendingUp, Eye, X,
+  Plus, Pencil, Trash2, TrendingUp, Eye, X, Download,
 } from "lucide-react";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
@@ -122,6 +122,44 @@ export default function SocialDashboard() {
     month_date: `${currentYear}-01`,
     followers: "", reach: "", engagement: "", unique_users: "", results: "",
   });
+
+  /* -- Rapport PDF -- */
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportType, setReportType] = useState("annual");
+  const [reportYear, setReportYear] = useState(currentYear);
+  const [reportMonth, setReportMonth] = useState(1);
+  const [reportFrom, setReportFrom] = useState(`${currentYear}-01-01`);
+  const [reportTo, setReportTo] = useState(`${currentYear}-12-31`);
+  const [downloading, setDownloading] = useState(false);
+  const [reportError, setReportError] = useState("");
+
+  const handleDownloadReport = async () => {
+    setDownloading(true);
+    setReportError("");
+    try {
+      const params = { type: reportType };
+      if (reportType === "annual")  { params.year = reportYear; }
+      if (reportType === "month")   { params.year = reportYear; params.month = reportMonth; }
+      if (reportType === "period")  { params.date_from = reportFrom; params.date_to = reportTo; }
+
+      const res = await api.get("/social-dashboard/report", {
+        params,
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.headers["content-disposition"]
+        ?.split("filename=")[1]?.replace(/"/g, "") || "radar-social.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      setReportOpen(false);
+    } catch (err) {
+      setReportError("Erreur lors de la génération du rapport.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const years = [currentYear, currentYear - 1, currentYear - 2];
 
@@ -255,13 +293,22 @@ export default function SocialDashboard() {
               {PLATFORMS.map(p => p.label).join(" · ")} — {year}
             </p>
           </div>
-          <select
-            className="select bg-slate-700/80 border-slate-600 text-white max-w-[140px]"
-            value={year}
-            onChange={e => setYear(Number(e.target.value))}
-          >
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              className="select bg-slate-700/80 border-slate-600 text-white max-w-[140px]"
+              value={year}
+              onChange={e => setYear(Number(e.target.value))}
+            >
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button
+              onClick={() => setReportOpen(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 text-white text-sm font-medium transition-colors shadow shadow-orange-500/30"
+            >
+              <Download className="w-4 h-4" />
+              Rapport PDF
+            </button>
+          </div>
         </div>
 
         {/* Onglets */}
@@ -551,6 +598,138 @@ export default function SocialDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL RAPPORT PDF ===== */}
+      {reportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-6 pb-0">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Télécharger un rapport</h2>
+                <p className="text-sm text-slate-500 mt-0.5">Rapport PDF Radar Social</p>
+              </div>
+              <button
+                onClick={() => { setReportOpen(false); setReportError(""); }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              {/* Type de rapport */}
+              <div>
+                <label className="text-sm font-medium text-slate-700 block mb-2">Type de rapport</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: "annual", label: "Annuel" },
+                    { value: "month",  label: "Mensuel" },
+                    { value: "period", label: "Période" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setReportType(opt.value)}
+                      className="py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
+                      style={reportType === opt.value
+                        ? { borderColor: "#F97316", backgroundColor: "#FFF7ED", color: "#EA580C" }
+                        : { borderColor: "#E2E8F0", color: "#94A3B8" }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Sélecteurs selon le type */}
+              {reportType === "annual" && (
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Année</label>
+                  <select
+                    className="select mt-1"
+                    value={reportYear}
+                    onChange={e => setReportYear(Number(e.target.value))}
+                  >
+                    {years.map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {reportType === "month" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Année</label>
+                    <select
+                      className="select mt-1"
+                      value={reportYear}
+                      onChange={e => setReportYear(Number(e.target.value))}
+                    >
+                      {years.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Mois</label>
+                    <select
+                      className="select mt-1"
+                      value={reportMonth}
+                      onChange={e => setReportMonth(Number(e.target.value))}
+                    >
+                      {["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"]
+                        .map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {reportType === "period" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Du</label>
+                    <input
+                      type="date"
+                      className="input mt-1"
+                      value={reportFrom}
+                      onChange={e => setReportFrom(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Au</label>
+                    <input
+                      type="date"
+                      className="input mt-1"
+                      value={reportTo}
+                      onChange={e => setReportTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {reportError && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg border border-red-100">{reportError}</p>
+              )}
+
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  className="btn-ghost border"
+                  onClick={() => { setReportOpen(false); setReportError(""); }}
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary flex items-center gap-2"
+                  onClick={handleDownloadReport}
+                  disabled={downloading}
+                >
+                  <Download className="w-4 h-4" />
+                  {downloading ? "Génération..." : "Télécharger PDF"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
