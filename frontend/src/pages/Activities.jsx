@@ -850,15 +850,18 @@ export default function Activities({
                 </button>
               </div>
             ) : (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 space-y-1">
-                <p className="font-semibold">Import réussi !</p>
-                <p>{importDirectResult.participants_importes} participant(s) importé(s)</p>
-                {importDirectResult.doublons_dans_activite > 0 && (
-                  <p className="text-xs text-emerald-700">{importDirectResult.doublons_dans_activite} doublon(s) ignoré(s)</p>
-                )}
-                {importDirectResult.lignes_ignorees_nom_prenom_manquants > 0 && (
-                  <p className="text-xs text-amber-700">{importDirectResult.lignes_ignorees_nom_prenom_manquants} ligne(s) ignorée(s) (nom/prénom manquant)</p>
-                )}
+              <div className="space-y-2">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 space-y-1">
+                  <p className="font-semibold">Import réussi !</p>
+                  <p>{importDirectResult.participants_importes} participant(s) importé(s) sur {importDirectResult.total_lignes} ligne(s)</p>
+                  {importDirectResult.doublons_dans_activite > 0 && (
+                    <p className="text-xs text-emerald-700">{importDirectResult.doublons_dans_activite} doublon(s) ignoré(s)</p>
+                  )}
+                  {importDirectResult.lignes_ignorees_nom_prenom_manquants > 0 && (
+                    <p className="text-xs text-amber-700">{importDirectResult.lignes_ignorees_nom_prenom_manquants} ligne(s) ignorée(s) (nom/prénom manquant)</p>
+                  )}
+                </div>
+                <ColumnMappingInfo result={importDirectResult} />
               </div>
             )}
           </div>
@@ -925,6 +928,7 @@ function ImportResultSummary({ result }) {
         <SummaryCard label="Ignorées" value={ignored} />
         <SummaryCard label="Doublons" value={duplicates} />
       </div>
+      <ColumnMappingInfo result={result} />
     </div>
   );
 }
@@ -934,6 +938,51 @@ function SummaryCard({ label, value }) {
     <div className="rounded-xl border border-slate-200 bg-white p-3">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-xl font-semibold text-slate-900">{value}</p>
+    </div>
+  );
+}
+
+const FIELD_LABELS = {
+  nom: "Nom", prenom: "Prénom", genre: "Genre", email: "Email",
+  telephone: "Téléphone", structure: "Structure",
+  tranche_age: "Tranche d'âge", statut: "Statut", nom_complet: "Nom complet",
+};
+
+function ColumnMappingInfo({ result }) {
+  const recognized = result?.colonnes_reconnues ?? {};
+  const unrecognized = result?.colonnes_non_reconnues ?? [];
+  const headerRow = result?.ligne_entete_detectee;
+  if (Object.keys(recognized).length === 0 && unrecognized.length === 0) return null;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2 text-xs">
+      {headerRow > 1 && (
+        <p className="text-amber-700 font-medium">En-tête détecté à la ligne {headerRow} (ligne(s) de titre ignorée(s))</p>
+      )}
+      {Object.keys(recognized).length > 0 && (
+        <div>
+          <p className="font-medium text-slate-600 mb-1">Colonnes reconnues :</p>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.entries(recognized).map(([field, original]) => (
+              <span key={field} className="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">
+                <span className="font-medium">{FIELD_LABELS[field] ?? field}</span>
+                {original !== (FIELD_LABELS[field] ?? field) && (
+                  <span className="text-emerald-500">← {original}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {unrecognized.length > 0 && (
+        <div>
+          <p className="font-medium text-slate-500 mb-1">Colonnes ignorées (non reconnues) :</p>
+          <div className="flex flex-wrap gap-1.5">
+            {unrecognized.map((col) => (
+              <span key={col} className="rounded-full bg-slate-200 text-slate-500 px-2 py-0.5">{col}</span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
