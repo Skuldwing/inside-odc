@@ -442,9 +442,12 @@ router.get("/:id/report", authMiddleware, async (req, res) => {
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
     if (!isOwner(req, activity)) return res.status(403).json({ error: "Accès refusé" });
 
-    const filename = activity.report_filename || "rapport.pdf";
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    res.setHeader("Content-Type", "application/octet-stream");
+    const filename = activity.report_filename
+      ? (activity.report_filename.toLowerCase().endsWith(".pdf") ? activity.report_filename : activity.report_filename + ".pdf")
+      : "rapport.pdf";
+    const disposition = req.query.inline === "1" ? "inline" : "attachment";
+    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/pdf");
     res.send(activity.report_data);
   } catch (err) {
     console.error(err);

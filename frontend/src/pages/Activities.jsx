@@ -86,6 +86,7 @@ export default function Activities({
   const [reportUploading, setReportUploading] = useState(false);
   const [reportError, setReportError] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
+  const [reportPreview, setReportPreview] = useState(null); // { activityId, filename, url }
 
   const [createReportFile, setCreateReportFile] = useState(null);
 
@@ -324,18 +325,34 @@ export default function Activities({
     }
   };
 
-  const handleDownloadReport = async (activityId) => {
+  const handlePreviewReport = async (activityId) => {
+    const act = activities.find(a => a.id === activityId);
+    const raw = act?.report_filename || `rapport_activite_${activityId}.pdf`;
+    const filename = raw.toLowerCase().endsWith(".pdf") ? raw : raw + ".pdf";
     try {
-      const res = await api.get(`/activities/${activityId}/report`, { responseType: "blob" });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `rapport_activite_${activityId}`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const res = await api.get(`/activities/${activityId}/report`, {
+        params: { inline: "1" },
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      setReportPreview({ activityId, filename, url });
     } catch {
-      alert("Erreur lors du téléchargement du rapport.");
+      alert("Erreur lors du chargement du rapport.");
     }
+  };
+
+  const closeReportPreview = () => {
+    if (reportPreview?.url) URL.revokeObjectURL(reportPreview.url);
+    setReportPreview(null);
+  };
+
+  const downloadFromPreview = () => {
+    if (!reportPreview) return;
+    const a = document.createElement("a");
+    a.href = reportPreview.url;
+    a.download = reportPreview.filename;
+    a.click();
   };
 
   const handleDirectImport = async () => {
@@ -625,7 +642,7 @@ export default function Activities({
           onDelete={handleDelete}
           onQrCode={setQrActivity}
           onExport={handleExportActivity}
-          onDownloadReport={handleDownloadReport}
+          onDownloadReport={handlePreviewReport}
           showQrCode={role !== "partner" && role !== "coach"}
         />
       ) : (
@@ -643,7 +660,7 @@ export default function Activities({
               onDelete={() => handleDelete(activity.id)}
               onQrCode={() => setQrActivity(activity)}
               onExport={() => handleExportActivity(activity)}
-              onDownloadReport={() => handleDownloadReport(activity.id)}
+              onDownloadReport={() => handlePreviewReport(activity.id)}
               showQrCode={role !== "partner" && role !== "coach"}
             />
           ))}
@@ -866,6 +883,48 @@ export default function Activities({
             )}
           </div>
         </ActivityModal>
+      )}
+
+      {/* ===== MODAL PREVIEW RAPPORT PDF ===== */}
+      {reportPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-4xl" style={{ height: "90vh" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-4 h-4 text-orange-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{reportPreview.filename}</p>
+                  <p className="text-xs text-slate-400">Rapport d'activité</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={downloadFromPreview}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500 hover:bg-orange-400 text-white text-sm font-medium transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Télécharger
+                </button>
+                <button
+                  onClick={closeReportPreview}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            {/* Iframe PDF */}
+            <iframe
+              src={reportPreview.url}
+              className="flex-1 w-full rounded-b-2xl"
+              title="Aperçu du rapport"
+              style={{ border: "none" }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
