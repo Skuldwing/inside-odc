@@ -175,6 +175,12 @@ const RECIPIENT_OPTIONS = [
   { value: "custom",          label: "Emails personnalisés",   desc: "Saisir les adresses manuellement" },
 ];
 
+const SEND_MODE_OPTIONS = [
+  { value: "publipostage", label: "Publipostage",      desc: "Un email individuel par destinataire (personnalisé)" },
+  { value: "bcc",          label: "Cci — copie cachée", desc: "Un seul envoi, destinataires invisibles entre eux" },
+  { value: "cc",           label: "Cc — copie visible", desc: "Un seul envoi, destinataires visibles entre eux" },
+];
+
 function CampaignModal({ campaign, activities, onClose, onSaved }) {
   const [name,           setName]           = useState(campaign?.name || "");
   const [subject,        setSubject]        = useState(campaign?.subject || "");
@@ -183,6 +189,7 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
   const [customEmails,   setCustomEmails]   = useState(() => {
     try { return JSON.parse(campaign?.custom_emails || "[]").join("\n"); } catch { return ""; }
   });
+  const [sendMode,     setSendMode]     = useState(campaign?.send_mode || "publipostage");
   const [saving,       setSaving]       = useState(false);
   const [previewMode,  setPreviewMode]  = useState(false);
   const imgRef = useRef(null);
@@ -246,6 +253,7 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
         recipients_type: recipientsType,
         activity_id: recipientsType === "by_activity" ? (activityId || null) : null,
         custom_emails: customEmailsJSON,
+        send_mode: sendMode,
         status: "brouillon",
       };
       let savedId;
@@ -348,6 +356,32 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
                   </div>
                 )}
               </div>
+
+              {/* Mode d'envoi */}
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+                  Mode d'envoi
+                </label>
+                <div className="space-y-1.5">
+                  {SEND_MODE_OPTIONS.map(opt => (
+                    <label key={opt.value} className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                      sendMode === opt.value
+                        ? "border-orange-300 bg-orange-50"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}>
+                      <input type="radio" name="smode" value={opt.value}
+                        checked={sendMode === opt.value}
+                        onChange={() => setSendMode(opt.value)}
+                        className="accent-orange-500 mt-0.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-800">{opt.label}</p>
+                        <p className="text-[11px] text-slate-400 leading-tight mt-0.5">{opt.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
             </div>
           </div>
 
@@ -829,6 +863,16 @@ const RECIPIENT_LABEL = {
   by_activity:      "Par activité",
   custom:           "Personnalisé",
 };
+const SEND_MODE_LABEL = {
+  publipostage: "Publipostage",
+  bcc:          "Cci",
+  cc:           "Cc",
+};
+const SEND_MODE_STYLE = {
+  publipostage: "bg-blue-50 text-blue-700 border-blue-200",
+  bcc:          "bg-purple-50 text-purple-700 border-purple-200",
+  cc:           "bg-teal-50 text-teal-700 border-teal-200",
+};
 
 export default function Campagnes() {
   const { isAdmin } = useAuth();
@@ -1030,10 +1074,15 @@ export default function Campagnes() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-slate-100 rounded-full px-2.5 py-1">
-                          <Users className="w-3 h-3" />
-                          {RECIPIENT_LABEL[c.recipients_type] || "—"}
-                        </span>
+                        <div className="flex flex-col gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-slate-100 rounded-full px-2.5 py-1 w-fit">
+                            <Users className="w-3 h-3" />
+                            {RECIPIENT_LABEL[c.recipients_type] || "—"}
+                          </span>
+                          <span className={`inline-flex items-center text-xs rounded-full px-2.5 py-0.5 border w-fit font-medium ${SEND_MODE_STYLE[c.send_mode] || "bg-slate-50 text-slate-500 border-slate-200"}`}>
+                            {SEND_MODE_LABEL[c.send_mode] || "Publipostage"}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-slate-500">
                         {c.created_at ? new Date(c.created_at).toLocaleDateString("fr-FR") : "—"}

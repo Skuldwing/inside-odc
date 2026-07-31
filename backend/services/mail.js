@@ -7,7 +7,7 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false") === "true";
 
-async function sendEmail({ toEmail, toName, subject, html, text, attachments = [] }) {
+async function sendEmail({ toEmail, toName, subject, html, text, attachments = [], bcc = [], cc = [] }) {
   if (SMTP_HOST && SMTP_USER && SMTP_PASS && MAIL_FROM) {
     const nodemailer = require("nodemailer");
     const transporter = nodemailer.createTransport({
@@ -20,9 +20,12 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
       },
     });
 
+    const formatAddr = (r) => r.name ? `"${r.name}" <${r.email}>` : r.email;
     await transporter.sendMail({
       from: `"${MAIL_FROM_NAME}" <${MAIL_FROM}>`,
       to: toName ? `"${toName}" <${toEmail}>` : toEmail,
+      bcc: bcc.length ? bcc.map(formatAddr).join(", ") : undefined,
+      cc:  cc.length  ? cc.map(formatAddr).join(", ")  : undefined,
       subject,
       html,
       text,
@@ -43,6 +46,9 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
     htmlContent: html,
     textContent: text,
   };
+
+  if (bcc.length) payload.bcc = bcc.map(r => ({ email: r.email, name: r.name || r.email }));
+  if (cc.length)  payload.cc  = cc.map(r => ({ email: r.email, name: r.name || r.email }));
 
   if (attachments && attachments.length > 0) {
     payload.attachment = attachments.map((a) => ({
