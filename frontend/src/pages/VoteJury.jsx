@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Clock, CheckCircle2, Award, AlertCircle, Send, Timer } from "lucide-react";
+import { Loader2, Clock, CheckCircle2, Award, AlertCircle, Send, Timer, MessageCircleQuestion, Trophy } from "lucide-react";
 import api from "../api";
 
-function PitchTimer({ startedAt, durationMinutes }) {
+function PitchTimer({ startedAt, durationMinutes, label }) {
   const [timeLeft, setTimeLeft] = useState(null);
 
   useEffect(() => {
@@ -22,26 +22,27 @@ function PitchTimer({ startedAt, durationMinutes }) {
   const secs = Math.abs(timeLeft) % 60;
   const display = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   const pct = Math.max(0, Math.min(100, (timeLeft / (durationMinutes * 60)) * 100));
+  const isQa = !!label;
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 mb-4 ${elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+    <div className={`rounded-2xl border px-4 py-3 mb-4 ${elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : isQa ? "border-purple-200 bg-purple-50" : "border-slate-200 bg-slate-50"}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-          <Timer className="w-3.5 h-3.5" />
-          Temps du pitch
+          {isQa ? <MessageCircleQuestion className="w-3.5 h-3.5 text-purple-500" /> : <Timer className="w-3.5 h-3.5" />}
+          {label || "Temps du pitch"}
         </div>
-        <span className={`font-mono font-bold text-lg tabular-nums ${elapsed ? "text-red-600" : timeLeft < 30 ? "text-amber-600" : "text-slate-800"}`}>
+        <span className={`font-mono font-bold text-lg tabular-nums ${elapsed ? "text-red-600" : timeLeft < 30 ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"}`}>
           {elapsed ? "+" : ""}{display}
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : "bg-orange-400"}`}
+          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : isQa ? "bg-purple-400" : "bg-orange-400"}`}
           style={{ width: elapsed ? "100%" : `${pct}%` }}
         />
       </div>
       {elapsed && (
-        <p className="text-xs text-red-600 mt-1.5 font-medium">Temps écoulé — le jury délibère</p>
+        <p className={`text-xs mt-1.5 font-medium ${elapsed ? "text-red-600" : ""}`}>Temps écoulé</p>
       )}
     </div>
   );
@@ -61,6 +62,7 @@ export default function VoteJury() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [juryResults, setJuryResults] = useState(null);
 
   const intervalRef = useRef(null);
   const currentProjectIdRef = useRef(null);
@@ -166,13 +168,46 @@ export default function VoteJury() {
     );
   }
 
+  useEffect(() => {
+    if (status?.session_status === "closed" && juryInfo?.token && !juryResults) {
+      api.get(`/vote/sessions/${sessionId}/jury-results`, { headers: { "X-Jury-Token": juryInfo.token } })
+        .then(r => setJuryResults(r.data))
+        .catch(() => {});
+    }
+  }, [status?.session_status, juryInfo, sessionId, juryResults]);
+
   if (status?.session_status === "closed") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-green-50 to-white px-4 text-center">
-        <CheckCircle2 className="w-16 h-16 text-green-400 mb-4" />
-        <p className="text-2xl font-bold text-slate-900 mb-2">Session terminée</p>
-        <p className="text-slate-500 text-sm">Merci pour votre participation, {juryInfo?.pseudo} !</p>
-        <p className="mt-8 text-xs text-slate-400">Orange Digital Center Senegal</p>
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-white px-4 py-8">
+        <div className="max-w-md mx-auto">
+          <div className="text-center mb-6">
+            <CheckCircle2 className="w-14 h-14 text-green-400 mx-auto mb-3" />
+            <p className="text-2xl font-bold text-slate-900 mb-1">Session terminée</p>
+            <p className="text-slate-500 text-sm">Merci {juryInfo?.pseudo} ! Voici le classement final.</p>
+          </div>
+          {juryResults ? (
+            <div className="space-y-3">
+              {juryResults.ranking.map((p, i) => (
+                <div key={p.id} className={`flex items-center gap-3 rounded-2xl p-4 border ${i === 0 ? "bg-orange-50 border-orange-200" : "bg-white border-slate-200"} shadow-sm`}>
+                  <span className="text-2xl">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-900">{p.name}</p>
+                    {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-orange-600">{p.weighted_avg}</p>
+                    <p className="text-xs text-slate-400">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-400" />
+            </div>
+          )}
+          <p className="text-center text-xs text-slate-400 mt-8">Orange Digital Center Senegal</p>
+        </div>
       </div>
     );
   }
@@ -212,6 +247,9 @@ export default function VoteJury() {
         </div>
 
         <PitchTimer startedAt={proj.started_at} durationMinutes={status.pitch_duration_minutes} />
+        {proj.qa_started_at && (
+          <PitchTimer startedAt={proj.qa_started_at} durationMinutes={status.qa_duration_minutes} label="Q & R" />
+        )}
 
         {submitted ? (
           /* Already voted — show summary */

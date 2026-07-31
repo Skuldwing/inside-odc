@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy, Timer,
+  MessageCircleQuestion, Download, X,
 } from "lucide-react";
 import api from "../api";
 
-function PitchTimer({ startedAt, durationMinutes }) {
+function PitchTimer({ startedAt, durationMinutes, label }) {
   const [timeLeft, setTimeLeft] = useState(null);
 
   useEffect(() => {
@@ -24,21 +25,26 @@ function PitchTimer({ startedAt, durationMinutes }) {
   const secs = Math.abs(timeLeft) % 60;
   const display = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   const pct = Math.max(0, Math.min(100, (timeLeft / (durationMinutes * 60)) * 100));
+  const isQa = !!label;
+  const activeColor = isQa ? "bg-purple-400" : "bg-orange-400";
+  const activeBorder = isQa
+    ? (elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-purple-200 bg-purple-50")
+    : (elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50");
 
   return (
-    <div className={`rounded-xl border px-4 py-3 mb-4 ${elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+    <div className={`rounded-xl border px-4 py-3 mb-4 ${activeBorder}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-          <Timer className="w-3.5 h-3.5" />
-          Durée pitch ({durationMinutes} min)
+          {isQa ? <MessageCircleQuestion className="w-3.5 h-3.5 text-purple-500" /> : <Timer className="w-3.5 h-3.5" />}
+          {label || `Durée pitch`} ({durationMinutes} min)
         </div>
-        <span className={`font-mono font-bold text-xl tabular-nums ${elapsed ? "text-red-600" : timeLeft < 30 ? "text-amber-600" : "text-slate-800"}`}>
+        <span className={`font-mono font-bold text-xl tabular-nums ${elapsed ? "text-red-600" : timeLeft < 30 ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"}`}>
           {elapsed ? "+" : ""}{display}
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : "bg-orange-400"}`}
+          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : activeColor}`}
           style={{ width: elapsed ? "100%" : `${pct}%` }}
         />
       </div>
@@ -61,8 +67,11 @@ export default function VoteManage() {
   const [error, setError] = useState("");
   const [closing, setClosing] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [startingQa, setStartingQa] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [results, setResults] = useState(null);
+  const [resultsTab, setResultsTab] = useState("ranking");
+  const [exportingPdf, setExportingPdf] = useState(false);
   const intervalRef = useRef(null);
 
   const fetchLive = useCallback(async () => {
@@ -110,12 +119,36 @@ export default function VoteManage() {
     } catch { setError("Erreur."); }
   };
 
+  const startQa = async () => {
+    setStartingQa(true);
+    try {
+      await api.post(`/vote/sessions/${id}/start-qa`);
+      await fetchLive();
+    } catch { setError("Erreur lors du lancement du Q&R."); }
+    setStartingQa(false);
+  };
+
   const loadResults = async () => {
     try {
       const r = await api.get(`/vote/sessions/${id}/results`);
       setResults(r.data);
+      setResultsTab("ranking");
       setShowResults(true);
     } catch { setError("Erreur chargement résultats."); }
+  };
+
+  const exportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const r = await api.get(`/vote/sessions/${id}/results/pdf`, { responseType: "blob" });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `resultats-${session?.name || id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { setError("Erreur export PDF."); }
+    setExportingPdf(false);
   };
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-orange-400" /></div>;
@@ -128,6 +161,7 @@ export default function VoteManage() {
   const votedCount = data?.voted_count || 0;
   const juryTotal = data?.jury_total || 0;
   const pitchDuration = data?.pitch_duration_minutes ?? session?.pitch_duration_minutes ?? 5;
+  const qaDuration = data?.qa_duration_minutes ?? session?.qa_duration_minutes ?? 5;
 
   return (
     <div>
@@ -156,29 +190,151 @@ export default function VoteManage() {
 
       {/* Results modal */}
       {showResults && results && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2"><Trophy className="w-5 h-5 text-orange-500" /> Résultats</h3>
-              <button onClick={() => setShowResults(false)} className="text-slate-400 hover:text-slate-700">✕</button>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: "88vh" }}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <Trophy className="w-5 h-5 text-orange-500" /> Résultats — {session?.name}
+              </h3>
+              <div className="flex items-center gap-2">
+                <button onClick={exportPdf} disabled={exportingPdf}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors">
+                  {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                  PDF
+                </button>
+                <button onClick={() => setShowResults(false)} className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="p-5 space-y-3">
-              {results.ranking.map((p, i) => (
-                <div key={p.id} className={`flex items-center gap-3 rounded-xl p-3 ${i === 0 ? "bg-orange-50 border border-orange-200" : "bg-slate-50 border border-slate-100"}`}>
-                  <span className={`text-lg font-bold w-6 text-center ${i === 0 ? "text-orange-500" : "text-slate-400"}`}>
-                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}
-                  </span>
-                  <div className="flex-1">
-                    <p className="font-semibold text-sm text-slate-900">{p.name}</p>
-                    {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-slate-900">{p.weighted_avg}</p>
-                    <p className="text-xs text-slate-400">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
-                  </div>
-                </div>
+            {/* Tabs */}
+            <div className="flex gap-1 px-5 pt-3 border-b border-slate-100 flex-shrink-0">
+              {[
+                { key: "ranking",  label: "Classement" },
+                { key: "criteria", label: "Par critère" },
+                { key: "jury",     label: "Par juré" },
+              ].map(t => (
+                <button key={t.key} onClick={() => setResultsTab(t.key)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${resultsTab === t.key ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+                  {t.label}
+                </button>
               ))}
-              {results.ranking.length === 0 && <p className="text-sm text-slate-400 text-center py-4">Aucun vote enregistré</p>}
+            </div>
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5">
+
+              {/* ── Onglet Classement ── */}
+              {resultsTab === "ranking" && (
+                <div className="space-y-3">
+                  {results.ranking.map((p, i) => (
+                    <div key={p.id} className={`flex items-center gap-3 rounded-xl p-4 border ${i === 0 ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-100"}`}>
+                      <span className="text-2xl w-8 text-center">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 truncate">{p.name}</p>
+                        {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-xl font-bold text-orange-600">{p.weighted_avg}</p>
+                        <p className="text-xs text-slate-400">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {results.ranking.length === 0 && <p className="text-sm text-slate-400 text-center py-6">Aucun vote enregistré</p>}
+                </div>
+              )}
+
+              {/* ── Onglet Par critère ── */}
+              {resultsTab === "criteria" && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200">
+                        <th className="text-left py-2 pr-4 font-semibold text-slate-700 min-w-[140px]">Projet</th>
+                        {results.criteria.map(c => (
+                          <th key={c.id} className="text-center py-2 px-3 font-semibold text-slate-700 min-w-[90px]">
+                            {c.name}
+                            <span className="block text-xs font-normal text-slate-400">/ {c.scale}</span>
+                          </th>
+                        ))}
+                        <th className="text-center py-2 px-3 font-semibold text-orange-600 min-w-[80px]">Moy. pond.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.ranking.map((p, i) => (
+                        <tr key={p.id} className={`border-b border-slate-100 ${i === 0 ? "bg-orange-50" : ""}`}>
+                          <td className="py-3 pr-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-base">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : ""}</span>
+                              <div>
+                                <p className="font-medium text-slate-800 text-sm">{p.name}</p>
+                                {p.porteur && <p className="text-xs text-slate-400">{p.porteur}</p>}
+                              </div>
+                            </div>
+                          </td>
+                          {p.criteria_scores.map(cs => (
+                            <td key={cs.criteria_id} className="text-center py-3 px-3">
+                              {cs.avg_score != null
+                                ? <span className="font-semibold text-slate-800">{cs.avg_score.toFixed(1)}</span>
+                                : <span className="text-slate-300">—</span>}
+                            </td>
+                          ))}
+                          <td className="text-center py-3 px-3 font-bold text-orange-600">{p.weighted_avg}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── Onglet Par juré ── */}
+              {resultsTab === "jury" && (
+                <div className="space-y-6">
+                  {results.ranking.map((p, i) => (
+                    <div key={p.id}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
+                        <h4 className="font-semibold text-slate-800">{p.name}</h4>
+                        {p.porteur && <span className="text-xs text-slate-400">{p.porteur}</span>}
+                      </div>
+                      {p.jury_scores.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic pl-2">Aucun vote</p>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs border border-slate-100 rounded-xl overflow-hidden">
+                            <thead>
+                              <tr className="bg-slate-50">
+                                <th className="text-left py-2 px-3 font-semibold text-slate-600">Juré</th>
+                                {results.criteria.map(c => (
+                                  <th key={c.id} className="text-center py-2 px-2 font-semibold text-slate-600">{c.name}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {p.jury_scores.map(js => (
+                                <tr key={js.jury_id} className="border-t border-slate-100">
+                                  <td className="py-2 px-3 font-medium text-slate-800">
+                                    <span className="mr-1">{js.avatar}</span>{js.pseudo}
+                                  </td>
+                                  {js.scores.map(s => (
+                                    <td key={s.criteria_id} className="text-center py-2 px-2 text-slate-700">
+                                      {s.score}
+                                      {s.comment && (
+                                        <span className="ml-1 text-[10px] text-slate-400" title={s.comment}>💬</span>
+                                      )}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
             </div>
           </div>
         </div>
@@ -246,6 +402,19 @@ export default function VoteManage() {
               </div>
 
               <PitchTimer startedAt={activeProj.started_at} durationMinutes={pitchDuration} />
+
+              {/* Timer Q&R */}
+              {activeProj.qa_started_at ? (
+                <PitchTimer startedAt={activeProj.qa_started_at} durationMinutes={qaDuration} label="Q & R" />
+              ) : (
+                session?.status === "active" && (
+                  <button onClick={startQa} disabled={startingQa}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-purple-200 text-purple-600 text-xs py-2.5 font-medium hover:bg-purple-50 disabled:opacity-50 transition-colors mb-4">
+                    {startingQa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircleQuestion className="w-3.5 h-3.5" />}
+                    Lancer le timer Q&amp;R ({qaDuration} min)
+                  </button>
+                )
+              )}
 
               {/* Vote progress */}
               <div className="mb-4">

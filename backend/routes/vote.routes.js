@@ -81,10 +81,10 @@ router.get("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
 /* PUT /vote/sessions/:id */
 router.put("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, event_date, pitch_duration_minutes } = req.body;
+    const { name, event_date, pitch_duration_minutes, qa_duration_minutes } = req.body;
     const r = await pool.query(
-      "UPDATE vote_sessions SET name=$1, event_date=$2, pitch_duration_minutes=$3 WHERE id=$4 RETURNING *",
-      [name, event_date || null, pitch_duration_minutes || 5, req.params.id]
+      "UPDATE vote_sessions SET name=$1, event_date=$2, pitch_duration_minutes=$3, qa_duration_minutes=$4 WHERE id=$5 RETURNING *",
+      [name, event_date || null, pitch_duration_minutes || 5, qa_duration_minutes || 5, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Session introuvable" });
     res.json(r.rows[0]);
@@ -140,7 +140,7 @@ router.put("/sessions/:id/active-project", authMiddleware, requireAdmin, async (
   try {
     const { project_id } = req.body;
     await pool.query(
-      "UPDATE vote_projects SET status='pending', started_at=NULL WHERE session_id=$1 AND status='active'",
+      "UPDATE vote_projects SET status='pending', started_at=NULL, qa_started_at=NULL WHERE session_id=$1 AND status='active'",
       [req.params.id]
     );
     if (project_id) {
@@ -168,7 +168,7 @@ router.post("/sessions/:id/close-project", authMiddleware, requireAdmin, async (
     if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
     const { active_project_id } = sessRes.rows[0];
     if (active_project_id) {
-      await pool.query("UPDATE vote_projects SET status='closed' WHERE id=$1", [active_project_id]);
+      await pool.query("UPDATE vote_projects SET status='closed', qa_started_at=NULL WHERE id=$1", [active_project_id]);
     }
     await pool.query("UPDATE vote_sessions SET active_project_id=NULL WHERE id=$1", [id]);
     res.json({ success: true });
@@ -221,14 +221,29 @@ router.get("/sessions/:id/live", authMiddleware, requireAdmin, async (req, res) 
       criteria = critRes.rows.map(c => ({ ...c, ...avgMap[c.id] }));
     }
 
-    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5 });
+    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5, qa_duration_minutes: session.qa_duration_minutes ?? 5 });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
-/* GET /vote/sessions/:id/results */
+/* POST /vote/sessions/:id/start-qa — démarre le timer Q&R sur le projet actif */
+router.post("/sessions/:id/start-qa", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const sessRes = await pool.query("SELECT active_project_id FROM vote_sessions WHERE id=$1", [req.params.id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const { active_project_id } = sessRes.rows[0];
+    if (!active_project_id) return res.status(400).json({ error: "Aucun projet actif" });
+    await pool.query("UPDATE vote_projects SET qa_started_at = NOW() WHERE id=$1", [active_project_id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* GET /vote/sessions/:id/results — classement complet avec détail par critère et par juré */
 router.get("/sessions/:id/results", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -236,25 +251,205 @@ router.get("/sessions/:id/results", authMiddleware, requireAdmin, async (req, re
       pool.query("SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num", [id]),
       pool.query("SELECT * FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [id]),
     ]);
-    const scoresRes = await pool.query(`
-      SELECT vs.project_id,
-             SUM(vs.score * vc.weight) / NULLIF(SUM(vc.weight), 0) AS weighted_avg,
-             COUNT(DISTINCT vs.jury_id)::int AS voter_count
-      FROM vote_scores vs
-      JOIN vote_criteria vc ON vc.id = vs.criteria_id
-      WHERE vs.session_id = $1
-      GROUP BY vs.project_id
-    `, [id]);
 
-    const avgMap = {};
-    scoresRes.rows.forEach(r => {
-      avgMap[r.project_id] = { weighted_avg: parseFloat(r.weighted_avg || 0).toFixed(2), voter_count: r.voter_count };
+    const [wAvgRes, critAvgRes, juryScoresRes] = await Promise.all([
+      pool.query(`
+        SELECT vs.project_id,
+               SUM(vs.score * vc.weight) / NULLIF(SUM(vc.weight), 0) AS weighted_avg,
+               COUNT(DISTINCT vs.jury_id)::int AS voter_count
+        FROM vote_scores vs
+        JOIN vote_criteria vc ON vc.id = vs.criteria_id
+        WHERE vs.session_id = $1
+        GROUP BY vs.project_id
+      `, [id]),
+      pool.query(`
+        SELECT vs.project_id, vs.criteria_id,
+               AVG(vs.score)::numeric(4,2) AS avg_score
+        FROM vote_scores vs
+        WHERE vs.session_id = $1
+        GROUP BY vs.project_id, vs.criteria_id
+      `, [id]),
+      pool.query(`
+        SELECT vs.project_id, vj.id AS jury_id, vj.pseudo, vj.avatar,
+               json_agg(
+                 json_build_object('criteria_id', vs.criteria_id, 'score', vs.score, 'comment', vs.comment)
+                 ORDER BY vc.order_num
+               ) AS scores
+        FROM vote_scores vs
+        JOIN vote_jury vj ON vj.id = vs.jury_id
+        JOIN vote_criteria vc ON vc.id = vs.criteria_id
+        WHERE vs.session_id = $1
+        GROUP BY vs.project_id, vj.id, vj.pseudo, vj.avatar
+        ORDER BY vj.pseudo
+      `, [id]),
+    ]);
+
+    const wAvgMap = {};
+    wAvgRes.rows.forEach(r => {
+      wAvgMap[r.project_id] = { weighted_avg: parseFloat(r.weighted_avg || 0).toFixed(2), voter_count: r.voter_count };
     });
+
+    const critAvgMap = {};
+    critAvgRes.rows.forEach(r => {
+      if (!critAvgMap[r.project_id]) critAvgMap[r.project_id] = {};
+      critAvgMap[r.project_id][r.criteria_id] = parseFloat(r.avg_score);
+    });
+
+    const juryMap = {};
+    juryScoresRes.rows.forEach(r => {
+      if (!juryMap[r.project_id]) juryMap[r.project_id] = [];
+      juryMap[r.project_id].push({ jury_id: r.jury_id, pseudo: r.pseudo, avatar: r.avatar, scores: r.scores });
+    });
+
     const ranking = projRes.rows
-      .map(p => ({ ...p, ...(avgMap[p.id] || { weighted_avg: "0.00", voter_count: 0 }) }))
+      .map(p => ({
+        ...p,
+        ...(wAvgMap[p.id] || { weighted_avg: "0.00", voter_count: 0 }),
+        criteria_scores: critRes.rows.map(c => ({
+          criteria_id: c.id,
+          name: c.name,
+          scale: c.scale,
+          avg_score: critAvgMap[p.id]?.[c.id] ?? null,
+        })),
+        jury_scores: juryMap[p.id] || [],
+      }))
       .sort((a, b) => parseFloat(b.weighted_avg) - parseFloat(a.weighted_avg));
 
     res.json({ criteria: critRes.rows, ranking });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* GET /vote/sessions/:id/results/pdf — export PDF du classement */
+router.get("/sessions/:id/results/pdf", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const PDFDocument = require("pdfkit");
+
+    const sessRes = await pool.query("SELECT * FROM vote_sessions WHERE id=$1", [id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const session = sessRes.rows[0];
+
+    const [critRes, projRes] = await Promise.all([
+      pool.query("SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num", [id]),
+      pool.query("SELECT * FROM vote_projects WHERE session_id=$1 ORDER BY order_num", [id]),
+    ]);
+    const [wAvgRes, critAvgRes] = await Promise.all([
+      pool.query(`
+        SELECT vs.project_id,
+               SUM(vs.score * vc.weight) / NULLIF(SUM(vc.weight), 0) AS weighted_avg,
+               COUNT(DISTINCT vs.jury_id)::int AS voter_count
+        FROM vote_scores vs
+        JOIN vote_criteria vc ON vc.id = vs.criteria_id
+        WHERE vs.session_id = $1
+        GROUP BY vs.project_id
+      `, [id]),
+      pool.query(`
+        SELECT vs.project_id, vs.criteria_id, AVG(vs.score)::numeric(4,2) AS avg_score
+        FROM vote_scores vs WHERE vs.session_id = $1
+        GROUP BY vs.project_id, vs.criteria_id
+      `, [id]),
+    ]);
+
+    const wAvgMap = {};
+    wAvgRes.rows.forEach(r => { wAvgMap[r.project_id] = { weighted_avg: parseFloat(r.weighted_avg || 0).toFixed(2), voter_count: r.voter_count }; });
+    const critAvgMap = {};
+    critAvgRes.rows.forEach(r => { if (!critAvgMap[r.project_id]) critAvgMap[r.project_id] = {}; critAvgMap[r.project_id][r.criteria_id] = parseFloat(r.avg_score); });
+
+    const ranking = projRes.rows
+      .map(p => ({ ...p, ...(wAvgMap[p.id] || { weighted_avg: "0.00", voter_count: 0 }) }))
+      .sort((a, b) => parseFloat(b.weighted_avg) - parseFloat(a.weighted_avg));
+
+    const doc = new PDFDocument({ margin: 45, size: "A4" });
+    const filename = `resultats-${session.name.replace(/[^a-zA-Z0-9]/g, "-")}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    doc.pipe(res);
+
+    /* Header */
+    doc.rect(0, 0, doc.page.width, 70).fill("#FF7900");
+    doc.fillColor("#fff").fontSize(18).font("Helvetica-Bold")
+       .text("Resultats de vote", 45, 22);
+    doc.fontSize(11).font("Helvetica")
+       .text(session.name, 45, 46);
+    doc.moveDown(3).fillColor("#0F172A");
+
+    /* Classement */
+    doc.fontSize(13).font("Helvetica-Bold").text("Classement general", { underline: false });
+    doc.moveDown(0.4);
+    const medals = ["1er", "2eme", "3eme"];
+    ranking.forEach((p, i) => {
+      const medal = medals[i] || `#${i + 1}`;
+      doc.fontSize(11).font("Helvetica-Bold")
+         .text(`${medal}  ${p.name}`, { continued: true })
+         .font("Helvetica").fillColor("#FF7900")
+         .text(`  ${p.weighted_avg} / ${critRes.rows[0]?.scale || 10}  `, { continued: true })
+         .fillColor("#64748B")
+         .text(`(${p.voter_count} vote${p.voter_count !== 1 ? "s" : ""})`);
+      if (p.porteur) doc.fontSize(9).fillColor("#64748B").text(`   Equipe : ${p.porteur}`);
+      doc.fillColor("#0F172A").moveDown(0.3);
+    });
+
+    /* Detail par critere */
+    doc.addPage();
+    doc.rect(0, 0, doc.page.width, 70).fill("#FF7900");
+    doc.fillColor("#fff").fontSize(18).font("Helvetica-Bold").text("Detail par critere", 45, 22);
+    doc.fontSize(11).font("Helvetica").text(session.name, 45, 46);
+    doc.moveDown(3).fillColor("#0F172A");
+
+    ranking.forEach((p, i) => {
+      const medal = medals[i] || `#${i + 1}`;
+      doc.fontSize(12).font("Helvetica-Bold").text(`${medal}  ${p.name}`);
+      critRes.rows.forEach(c => {
+        const avg = critAvgMap[p.id]?.[c.id];
+        const bar = avg != null ? `${avg.toFixed(2)} / ${c.scale}` : "—";
+        doc.fontSize(10).font("Helvetica")
+           .text(`  • ${c.name} : `, { continued: true })
+           .fillColor("#FF7900").text(bar)
+           .fillColor("#0F172A");
+      });
+      doc.moveDown(0.5);
+    });
+
+    doc.end();
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: "Erreur génération PDF" });
+  }
+});
+
+/* GET /vote/sessions/:id/jury-results — classement public pour le jury (après clôture) */
+router.get("/sessions/:id/jury-results", juryAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.jury.session_id !== id) return res.status(403).json({ error: "Acces non autorise" });
+    const sessRes = await pool.query("SELECT status, name FROM vote_sessions WHERE id=$1", [id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    if (sessRes.rows[0].status !== "closed") return res.status(403).json({ error: "Resultats non disponibles" });
+
+    const [projRes, wAvgRes] = await Promise.all([
+      pool.query("SELECT id, name, porteur FROM vote_projects WHERE session_id=$1 ORDER BY order_num", [id]),
+      pool.query(`
+        SELECT vs.project_id,
+               SUM(vs.score * vc.weight) / NULLIF(SUM(vc.weight), 0) AS weighted_avg,
+               COUNT(DISTINCT vs.jury_id)::int AS voter_count
+        FROM vote_scores vs
+        JOIN vote_criteria vc ON vc.id = vs.criteria_id
+        WHERE vs.session_id = $1
+        GROUP BY vs.project_id
+      `, [id]),
+    ]);
+
+    const wAvgMap = {};
+    wAvgRes.rows.forEach(r => { wAvgMap[r.project_id] = { weighted_avg: parseFloat(r.weighted_avg || 0).toFixed(2), voter_count: r.voter_count }; });
+
+    const ranking = projRes.rows
+      .map(p => ({ ...p, ...(wAvgMap[p.id] || { weighted_avg: "0.00", voter_count: 0 }) }))
+      .sort((a, b) => parseFloat(b.weighted_avg) - parseFloat(a.weighted_avg));
+
+    res.json({ session_name: sessRes.rows[0].name, ranking });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -414,6 +609,7 @@ router.get("/jury/status", juryAuth, async (req, res) => {
     res.json({
       session_status: session.status,
       pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
+      qa_duration_minutes: session.qa_duration_minutes ?? 5,
       active_project,
       criteria: critRes.rows,
       my_scores,

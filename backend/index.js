@@ -223,8 +223,12 @@ pool.query(`
 /* Colonnes timer (ajout safe sur tables existantes) */
 pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS pitch_duration_minutes INT DEFAULT 5`)
   .then(() => console.log("Migration OK: vote_sessions.pitch_duration_minutes")).catch(e => console.warn("Migration pitch_duration_minutes:", e.message));
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS qa_duration_minutes INT DEFAULT 5`)
+  .then(() => console.log("Migration OK: vote_sessions.qa_duration_minutes")).catch(e => console.warn("Migration qa_duration_minutes:", e.message));
 pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ`)
   .then(() => console.log("Migration OK: vote_projects.started_at")).catch(e => console.warn("Migration started_at:", e.message));
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS qa_started_at TIMESTAMPTZ`)
+  .then(() => console.log("Migration OK: vote_projects.qa_started_at")).catch(e => console.warn("Migration qa_started_at:", e.message));
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS partner_devices (
