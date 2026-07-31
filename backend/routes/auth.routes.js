@@ -18,7 +18,7 @@ function cookieOptions() {
     secure: isProd,
     sameSite,
     path: "/",
-    maxAge: 30 * 60 * 1000,
+    maxAge: 8 * 60 * 60 * 1000, // 8h, renouvelé à chaque requête (session glissante)
   };
 }
 
@@ -53,7 +53,7 @@ router.post("/login", async (req, res) => {
         partner_id: user.partner_id,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "2h" }
+      { expiresIn: "8h" }
     );
 
     res.cookie("token", token, cookieOptions());
