@@ -298,6 +298,19 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: audit_logs")).catch(e => console.warn("Migration audit_logs:", e.message));
 
+/* Migration : colonnes campagnes emailing */
+pool.query(`
+  ALTER TABLE campagnes
+  ADD COLUMN IF NOT EXISTS subject TEXT,
+  ADD COLUMN IF NOT EXISTS html_body TEXT,
+  ADD COLUMN IF NOT EXISTS recipients_type TEXT DEFAULT 'all_participants',
+  ADD COLUMN IF NOT EXISTS activity_id INTEGER,
+  ADD COLUMN IF NOT EXISTS custom_emails TEXT DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS sent_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS failed_count INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ
+`).then(() => console.log("Migration OK: campagnes emailing columns")).catch(e => console.warn("Migration campagnes columns:", e.message));
+
 /* Migration : ajouter youtube dans la contrainte CHECK de social_media_kpis */
 pool.query(`
   DO $$

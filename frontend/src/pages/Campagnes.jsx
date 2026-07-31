@@ -24,6 +24,7 @@ import {
   Undo2, Redo2, RemoveFormatting, Minus, Quote,
   Superscript as SuperscriptIcon, Subscript as SubscriptIcon,
   Table as TableIcon, Columns2, Rows3, Trash2, LayoutGrid,
+  Send, Eye, X, Loader2, Pencil, Users,
 } from "lucide-react";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
@@ -162,6 +163,314 @@ function BlocsDropdown({ onInsert }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── CampaignModal ──────────────────────────────────────────── */
+const RECIPIENT_OPTIONS = [
+  { value: "all_participants", label: "Tous les participants", desc: "Participants avec email enregistré" },
+  { value: "all_partners",    label: "Tous les partenaires",  desc: "Partenaires avec email enregistré" },
+  { value: "by_activity",     label: "Par activité",           desc: "Participants d'une activité spécifique" },
+  { value: "custom",          label: "Emails personnalisés",   desc: "Saisir les adresses manuellement" },
+];
+
+function CampaignModal({ campaign, activities, onClose, onSaved }) {
+  const [name,           setName]           = useState(campaign?.name || "");
+  const [subject,        setSubject]        = useState(campaign?.subject || "");
+  const [recipientsType, setRecipientsType] = useState(campaign?.recipients_type || "all_participants");
+  const [activityId,     setActivityId]     = useState(campaign?.activity_id ? String(campaign.activity_id) : "");
+  const [customEmails,   setCustomEmails]   = useState(() => {
+    try { return JSON.parse(campaign?.custom_emails || "[]").join("\n"); } catch { return ""; }
+  });
+  const [saving,       setSaving]       = useState(false);
+  const [previewMode,  setPreviewMode]  = useState(false);
+  const imgRef = useRef(null);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit, Underline, RichTextStyle, Color,
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      Link.configure({ openOnClick: false }),
+      Image.configure({ inline: false, allowBase64: true }),
+      Subscript, Superscript,
+      Table.configure({ resizable: true }),
+      TableRow, TableHeader, TableCell,
+    ],
+    content: campaign?.html_body || "",
+  });
+
+  function setLink() {
+    const prev = editor?.getAttributes("link").href || "";
+    const url = window.prompt("URL du lien :", prev || "https://");
+    if (url === null) return;
+    if (!url) { editor?.chain().focus().extendMarkRange("link").unsetLink().run(); return; }
+    editor?.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+  }
+  function handleImageUpload(e) {
+    const file = e.target.files?.[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => editor?.chain().focus().setImage({ src: reader.result }).run();
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+  function insertBlock(html) { editor?.chain().focus().insertContent(html).run(); }
+  function setFontFamily(val) {
+    if (!val) { editor?.chain().focus().setMark("textStyle", { fontFamily: null }).run(); return; }
+    editor?.chain().focus().setMark("textStyle", { fontFamily: val }).run();
+  }
+  function setFontSize(val) {
+    if (!val) { editor?.chain().focus().setMark("textStyle", { fontSize: null }).run(); return; }
+    editor?.chain().focus().setMark("textStyle", { fontSize: val }).run();
+  }
+
+  const inTable = editor?.isActive("table");
+  const curFont = editor?.getAttributes("textStyle")?.fontFamily || "";
+  const curSize = editor?.getAttributes("textStyle")?.fontSize || "";
+
+  const validEmails = customEmails.split(/[\n,;]+/).filter(e => e.trim().includes("@")).length;
+
+  async function save(andSend = false) {
+    if (!name.trim())    { alert("Le nom de la campagne est requis."); return; }
+    if (!subject.trim()) { alert("L'objet de l'email est requis."); return; }
+    setSaving(true);
+    try {
+      const customEmailsJSON = JSON.stringify(
+        customEmails.split(/[\n,;]+/).map(e => e.trim()).filter(e => e.includes("@"))
+      );
+      const body = {
+        name: name.trim(), type: "email", message: "",
+        subject: subject.trim(),
+        html_body: editor?.getHTML() || "",
+        recipients_type: recipientsType,
+        activity_id: recipientsType === "by_activity" ? (activityId || null) : null,
+        custom_emails: customEmailsJSON,
+        status: "brouillon",
+      };
+      let savedId;
+      if (campaign?.id) {
+        await api.put(`/campagnes/${campaign.id}`, body);
+        savedId = campaign.id;
+      } else {
+        const res = await api.post("/campagnes", body);
+        savedId = res.data.id;
+      }
+      onSaved(savedId, andSend, name.trim());
+    } catch (err) {
+      alert(err?.response?.data?.error || "Erreur lors de la sauvegarde.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3">
+      <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-6xl" style={{ height: "94vh" }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100 flex-shrink-0">
+          <div>
+            <h2 className="font-semibold text-slate-900">
+              {campaign?.id ? "Modifier la campagne" : "Nouvelle campagne email"}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Envoi via Brevo · Emailing</p>
+          </div>
+          <button onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Body : 2 panneaux */}
+        <div className="flex-1 flex overflow-hidden">
+
+          {/* ── Panneau gauche : paramètres ── */}
+          <div className="w-72 border-r border-slate-100 flex flex-col flex-shrink-0">
+            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nom de la campagne</label>
+                <input className="input mt-1.5 text-sm" placeholder="Ex: Newsletter Juillet 2025"
+                  value={name} onChange={e => setName(e.target.value)} />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Objet de l'email</label>
+                <input className="input mt-1.5 text-sm" placeholder="Ex: Nos actualités du mois"
+                  value={subject} onChange={e => setSubject(e.target.value)} />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 block">
+                  Destinataires
+                </label>
+                <div className="space-y-1.5">
+                  {RECIPIENT_OPTIONS.map(opt => (
+                    <label key={opt.value} className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                      recipientsType === opt.value
+                        ? "border-orange-300 bg-orange-50"
+                        : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    }`}>
+                      <input type="radio" name="rtype" value={opt.value}
+                        checked={recipientsType === opt.value}
+                        onChange={() => setRecipientsType(opt.value)}
+                        className="accent-orange-500 mt-0.5 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-800">{opt.label}</p>
+                        <p className="text-[11px] text-slate-400 leading-tight mt-0.5">{opt.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                {recipientsType === "by_activity" && (
+                  <select className="select mt-2 text-sm" value={activityId}
+                    onChange={e => setActivityId(e.target.value)}>
+                    <option value="">— Sélectionner une activité —</option>
+                    {activities.map(a => <option key={a.id} value={a.id}>{a.title}</option>)}
+                  </select>
+                )}
+
+                {recipientsType === "custom" && (
+                  <div className="mt-2">
+                    <label className="text-[11px] text-slate-400">Un email par ligne (ou séparés par virgule)</label>
+                    <textarea
+                      className="input mt-1 text-xs font-mono resize-none"
+                      rows="5"
+                      placeholder={"email1@exemple.com\nemail2@exemple.com"}
+                      value={customEmails}
+                      onChange={e => setCustomEmails(e.target.value)}
+                    />
+                    <p className="text-[11px] text-emerald-600 mt-1 font-medium">
+                      {validEmails} adresse{validEmails !== 1 ? "s" : ""} valide{validEmails !== 1 ? "s" : ""}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Panneau droit : éditeur ── */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+              <p className="text-xs text-slate-400">Corps de l'email (HTML)</p>
+              <button onClick={() => setPreviewMode(v => !v)}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-colors ${
+                  previewMode ? "bg-slate-100 border-slate-200 text-slate-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}>
+                <Eye className="w-3.5 h-3.5" /> {previewMode ? "Éditeur" : "Aperçu"}
+              </button>
+            </div>
+
+            {previewMode ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="bg-slate-50 px-4 py-1.5 text-xs text-slate-500 border-b border-slate-100 flex-shrink-0">
+                  Objet : <strong>{subject || "(vide)"}</strong>
+                </div>
+                <iframe srcDoc={editor?.getHTML() || ""} sandbox="allow-same-origin"
+                  title="Aperçu" className="flex-1 w-full" style={{ border: "none" }} />
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Barre d'outils */}
+                <div className="bg-slate-50 border-b border-slate-100 divide-y divide-slate-100 flex-shrink-0">
+                  {/* Ligne 1 */}
+                  <div className="px-2 py-1.5 flex items-center gap-0.5 flex-wrap">
+                    <TBtn onClick={() => editor?.chain().focus().undo().run()} title="Annuler"><Undo2 className="w-4 h-4" /></TBtn>
+                    <TBtn onClick={() => editor?.chain().focus().redo().run()} title="Rétablir"><Redo2 className="w-4 h-4" /></TBtn>
+                    <Sep />
+                    <select className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 max-w-[130px]"
+                      value={curFont} onChange={e => setFontFamily(e.target.value)}>
+                      {FONTS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    </select>
+                    <select className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 ml-1"
+                      value={editor?.isActive("heading",{level:1})?"h1":editor?.isActive("heading",{level:2})?"h2":editor?.isActive("heading",{level:3})?"h3":"p"}
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (v==="p") editor?.chain().focus().setParagraph().run();
+                        else editor?.chain().focus().setHeading({ level: parseInt(v.slice(1)) }).run();
+                      }}>
+                      <option value="p">Paragraphe</option>
+                      <option value="h1">Titre 1</option>
+                      <option value="h2">Titre 2</option>
+                      <option value="h3">Titre 3</option>
+                    </select>
+                    <select className="text-xs border border-slate-200 rounded px-2 py-1 bg-white text-slate-700 ml-1"
+                      value={curSize} onChange={e => setFontSize(e.target.value||null)}>
+                      <option value="">Taille</option>
+                      {FONT_SIZES.map(s => <option key={s} value={s}>{s.replace("px","pt")}</option>)}
+                    </select>
+                    <Sep />
+                    <TBtn active={editor?.isActive("bold")}      onClick={() => editor?.chain().focus().toggleBold().run()}      title="Gras"><Bold className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive("italic")}    onClick={() => editor?.chain().focus().toggleItalic().run()}    title="Italique"><Italic className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive("underline")} onClick={() => editor?.chain().focus().toggleUnderline().run()} title="Souligné"><UnderlineIcon className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive("strike")}    onClick={() => editor?.chain().focus().toggleStrike().run()}    title="Barré"><Strikethrough className="w-4 h-4" /></TBtn>
+                    <Sep />
+                    <label className="relative p-1.5 rounded hover:bg-slate-100 cursor-pointer" title="Couleur texte">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <Palette className="w-4 h-4 text-slate-600" />
+                        <div className="w-4 h-1 rounded-sm" style={{ background: editor?.getAttributes("textStyle")?.color || "#000" }} />
+                      </div>
+                      <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                        onInput={e => editor?.chain().focus().setColor(e.target.value).run()} />
+                    </label>
+                    <TBtn onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()} title="Effacer mise en forme"><RemoveFormatting className="w-4 h-4" /></TBtn>
+                  </div>
+                  {/* Ligne 2 */}
+                  <div className="px-2 py-1.5 flex items-center gap-0.5 flex-wrap">
+                    <TBtn active={editor?.isActive({textAlign:"left"})}    onClick={() => editor?.chain().focus().setTextAlign("left").run()}    title="Gauche"><AlignLeft className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive({textAlign:"center"})}  onClick={() => editor?.chain().focus().setTextAlign("center").run()}  title="Centrer"><AlignCenter className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive({textAlign:"right"})}   onClick={() => editor?.chain().focus().setTextAlign("right").run()}   title="Droite"><AlignRight className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive({textAlign:"justify"})} onClick={() => editor?.chain().focus().setTextAlign("justify").run()} title="Justifier"><AlignJustify className="w-4 h-4" /></TBtn>
+                    <Sep />
+                    <TBtn active={editor?.isActive("bulletList")}  onClick={() => editor?.chain().focus().toggleBulletList().run()}  title="Liste à puces"><List className="w-4 h-4" /></TBtn>
+                    <TBtn active={editor?.isActive("orderedList")} onClick={() => editor?.chain().focus().toggleOrderedList().run()} title="Liste numérotée"><ListOrdered className="w-4 h-4" /></TBtn>
+                    <TBtn onClick={() => editor?.chain().focus().setHorizontalRule().run()} title="Séparateur"><Minus className="w-4 h-4" /></TBtn>
+                    <Sep />
+                    <TBtn active={editor?.isActive("link")} onClick={setLink} title="Lien"><LinkIcon className="w-4 h-4" /></TBtn>
+                    <label className="p-1.5 rounded text-slate-600 hover:bg-slate-100 cursor-pointer" title="Image (fichier)">
+                      <Upload className="w-4 h-4" />
+                      <input ref={imgRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </label>
+                    <TBtn onClick={() => { const u=window.prompt("URL image :"); if(u) editor?.chain().focus().setImage({src:u}).run(); }} title="Image (URL)"><ImageIcon className="w-4 h-4" /></TBtn>
+                    <BlocsDropdown onInsert={insertBlock} />
+                    {inTable && (
+                      <>
+                        <Sep />
+                        <TBtn onClick={() => editor?.chain().focus().addColumnAfter().run()} title="Ajouter colonne"><Columns2 className="w-4 h-4" /></TBtn>
+                        <TBtn onClick={() => editor?.chain().focus().addRowAfter().run()}    title="Ajouter ligne"><Rows3 className="w-4 h-4" /></TBtn>
+                        <TBtn onClick={() => editor?.chain().focus().deleteTable().run()}    title="Supprimer tableau"><Trash2 className="w-4 h-4 text-red-400" /></TBtn>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {/* Zone d'édition */}
+                <div className="flex-1 overflow-y-auto rich-editor bg-white">
+                  <EditorContent editor={editor} className="h-full" />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-slate-100 flex-shrink-0">
+          <button onClick={onClose} className="btn-ghost border">Annuler</button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => save(false)} disabled={saving}
+              className="btn-ghost border flex items-center gap-2 disabled:opacity-50">
+              <Save className="w-4 h-4" />
+              {saving ? "Sauvegarde..." : "Sauvegarder brouillon"}
+            </button>
+            <button onClick={() => save(true)} disabled={saving}
+              className="btn-primary flex items-center gap-2 disabled:opacity-50">
+              <Send className="w-4 h-4" />
+              Sauvegarder & Envoyer
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -504,12 +813,32 @@ function TemplatesTab() {
 }
 
 /* ── Page principale ─────────────────────────────────────────── */
+const STATUS_STYLE = {
+  brouillon:  "bg-slate-100 text-slate-600 border-slate-200",
+  en_cours:   "bg-blue-100 text-blue-700 border-blue-200",
+  envoyee:    "bg-green-100 text-green-700 border-green-200",
+  programmee: "bg-orange-100 text-orange-700 border-orange-200",
+};
+const STATUS_LABEL = {
+  brouillon: "Brouillon", en_cours: "En cours...",
+  envoyee: "Envoyée", programmee: "Programmée",
+};
+const RECIPIENT_LABEL = {
+  all_participants: "Tous participants",
+  all_partners:     "Tous partenaires",
+  by_activity:      "Par activité",
+  custom:           "Personnalisé",
+};
+
 export default function Campagnes() {
   const { isAdmin } = useAuth();
-  const [tab, setTab] = useState("campagnes");
-  const [isOpen, setIsOpen] = useState(false);
-  const [campagnes, setCampagnes] = useState([]);
-  const [form, setForm] = useState({ name: "", type: "email", message: "" });
+  const [tab,             setTab]             = useState("campagnes");
+  const [campagnes,       setCampagnes]       = useState([]);
+  const [activities,      setActivities]      = useState([]);
+  const [editingCampaign, setEditingCampaign] = useState(null); // null=fermé | {}=nouveau | {id,...}=édition
+  const [sendingId,       setSendingId]       = useState(null);
+  const [confirmSend,     setConfirmSend]     = useState(null); // { id, name }
+  const [sendResult,      setSendResult]      = useState(null); // { sent, failed, total, name }
 
   if (!isAdmin) {
     return (
@@ -528,16 +857,36 @@ export default function Campagnes() {
     catch (err) { console.error("Erreur chargement campagnes", err); }
   };
 
-  useEffect(() => { fetchCampagnes(); }, []);
+  useEffect(() => {
+    fetchCampagnes();
+    api.get("/activities").then(r => setActivities(r.data || [])).catch(() => {});
+  }, []);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSaved = (savedId, andSend, savedName) => {
+    fetchCampagnes();
+    setEditingCampaign(null);
+    if (andSend) setConfirmSend({ id: savedId, name: savedName || "la campagne" });
+  };
+
+  const handleSend = async (id) => {
+    setSendingId(id);
+    setConfirmSend(null);
     try {
-      await api.post("/campagnes", form);
+      const res = await api.post(`/campagnes/${id}/send`);
+      const camp = campagnes.find(c => c.id === id);
+      setSendResult({ ...res.data, name: camp?.name || "la campagne" });
       fetchCampagnes();
-      setForm({ name: "", type: "email", message: "" });
-      setIsOpen(false);
-    } catch (err) { console.error("Erreur création campagne", err); }
+    } catch (err) {
+      alert(err?.response?.data?.error || "Erreur lors de l'envoi");
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("Supprimer définitivement cette campagne ?")) return;
+    try { await api.delete(`/campagnes/${id}`); fetchCampagnes(); }
+    catch { alert("Erreur lors de la suppression."); }
   };
 
   return (
@@ -548,7 +897,7 @@ export default function Campagnes() {
           <p className="page-subtitle">Campagnes de communication et templates d'emails automatiques</p>
         </div>
         {tab === "campagnes" && (
-          <button onClick={() => setIsOpen(true)} className="btn-primary">
+          <button onClick={() => setEditingCampaign({})} className="btn-primary">
             <Plus className="w-4 h-4" /> Nouvelle campagne
           </button>
         )}
@@ -557,7 +906,7 @@ export default function Campagnes() {
       <div className="flex gap-1 border-b border-slate-200">
         {[
           { key: "campagnes", icon: <Mail className="w-4 h-4" />, label: "Campagnes" },
-          { key: "templates", icon: <Zap className="w-4 h-4" />, label: "Templates automatiques" },
+          { key: "templates", icon: <Zap className="w-4 h-4" />,  label: "Templates automatiques" },
         ].map(({ key, icon, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -570,71 +919,175 @@ export default function Campagnes() {
 
       {tab === "templates" ? <TemplatesTab /> : (
         <>
-          {isOpen && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-              <div className="card-solid w-full max-w-lg p-6">
-                <h2 className="text-xl font-semibold mb-4">Nouvelle campagne</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium">Nom de la campagne</label>
-                    <input required className="input mt-1" value={form.name}
-                      onChange={e => setForm({ ...form, name: e.target.value })} />
+          {/* Modal éditeur campagne */}
+          {editingCampaign !== null && (
+            <CampaignModal
+              campaign={editingCampaign?.id ? editingCampaign : null}
+              activities={activities}
+              onClose={() => setEditingCampaign(null)}
+              onSaved={handleSaved}
+            />
+          )}
+
+          {/* Modal confirmation envoi */}
+          {confirmSend && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center">
+                    <Send className="w-5 h-5 text-orange-600" />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Type de campagne</label>
-                    <select className="select mt-1" value={form.type}
-                      onChange={e => setForm({ ...form, type: e.target.value })}>
-                      <option value="email">Email</option>
-                      <option value="sms">SMS</option>
-                    </select>
+                    <h3 className="font-semibold text-slate-900">Envoyer la campagne</h3>
+                    <p className="text-sm text-slate-500">{confirmSend.name}</p>
                   </div>
-                  <div>
-                    <label className="text-sm font-medium">Message</label>
-                    <textarea required rows="4" className="input mt-1" value={form.message}
-                      onChange={e => setForm({ ...form, message: e.target.value })} />
-                  </div>
-                  <div className="flex justify-end gap-3 pt-4">
-                    <button type="button" onClick={() => setIsOpen(false)} className="btn-ghost border">Annuler</button>
-                    <button type="submit" className="btn-primary">Créer</button>
-                  </div>
-                </form>
+                </div>
+                <p className="text-sm text-slate-600 mb-5">
+                  Les emails vont être envoyés via <strong>Brevo</strong> à tous les destinataires sélectionnés.
+                  Cette action est <strong>irréversible</strong>.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setConfirmSend(null)} className="btn-ghost border">Annuler</button>
+                  <button
+                    onClick={() => handleSend(confirmSend.id)}
+                    disabled={sendingId === confirmSend.id}
+                    className="btn-primary flex items-center gap-2 disabled:opacity-60"
+                  >
+                    {sendingId === confirmSend.id
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> Envoi en cours...</>
+                      : <><Send className="w-4 h-4" /> Confirmer l'envoi</>}
+                  </button>
+                </div>
               </div>
             </div>
           )}
-          <div className="card overflow-x-auto">
-            <table className="table">
-              <thead className="table-head">
-                <tr>
-                  <th className="text-left px-4 py-3">Campagne</th>
-                  <th className="text-left px-4 py-3">Type</th>
-                  <th className="text-left px-4 py-3">Message</th>
-                  <th className="text-left px-4 py-3">Date</th>
-                  <th className="text-left px-4 py-3">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {campagnes.map(c => (
-                  <tr key={c.id} className="table-row">
-                    <td className="px-4 py-3 font-medium">{c.name}</td>
-                    <td className="px-4 py-3">
-                      {c.type === "email"
-                        ? <span className="flex items-center gap-1 text-blue-600"><Mail className="w-4 h-4" /> Email</span>
-                        : <span className="flex items-center gap-1 text-green-600"><MessageSquare className="w-4 h-4" /> SMS</span>}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 truncate max-w-xs">{c.message}</td>
-                    <td className="px-4 py-3 text-slate-600">
-                      <span className="flex items-center gap-1"><Calendar className="w-4 h-4" />{c.created_at || c.date}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${c.status === "envoyee" ? "bg-green-100 text-green-700" : c.status === "programmee" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-700"}`}>
-                        {c.status}
-                      </span>
-                    </td>
+
+          {/* Modal résultat envoi */}
+          {sendResult && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
+                    <Check className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-slate-900">Campagne envoyée</h3>
+                    <p className="text-sm text-slate-500">{sendResult.name}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3 mb-5">
+                  <div className="rounded-xl border border-slate-200 p-3 text-center">
+                    <p className="text-xl font-semibold text-slate-900">{sendResult.total}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Total</p>
+                  </div>
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-center">
+                    <p className="text-xl font-semibold text-green-700">{sendResult.sent}</p>
+                    <p className="text-xs text-green-600 mt-0.5">Envoyés ✓</p>
+                  </div>
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
+                    <p className="text-xl font-semibold text-red-700">{sendResult.failed}</p>
+                    <p className="text-xs text-red-600 mt-0.5">Échecs ✗</p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={() => setSendResult(null)} className="btn-primary">Fermer</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Liste des campagnes */}
+          {campagnes.length === 0 ? (
+            <div className="card p-12 text-center">
+              <Mail className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+              <p className="text-sm text-slate-400">Aucune campagne. Créez votre première campagne emailing.</p>
+            </div>
+          ) : (
+            <div className="card overflow-x-auto">
+              <table className="table">
+                <thead className="table-head">
+                  <tr>
+                    <th className="text-left px-4 py-3">Campagne</th>
+                    <th className="text-left px-4 py-3">Destinataires</th>
+                    <th className="text-left px-4 py-3">Créée le</th>
+                    <th className="text-left px-4 py-3">Statut</th>
+                    <th className="text-left px-4 py-3">Résultats</th>
+                    <th className="text-right px-4 py-3">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {campagnes.map(c => (
+                    <tr key={c.id} className="table-row">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900 flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-orange-500 flex-shrink-0" />
+                          {c.name}
+                        </div>
+                        {c.subject && (
+                          <p className="text-xs text-slate-500 mt-0.5 pl-6 truncate max-w-xs">
+                            Objet : {c.subject}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-600 bg-slate-100 rounded-full px-2.5 py-1">
+                          <Users className="w-3 h-3" />
+                          {RECIPIENT_LABEL[c.recipients_type] || "—"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500">
+                        {c.created_at ? new Date(c.created_at).toLocaleDateString("fr-FR") : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`badge ${STATUS_STYLE[c.status] || "bg-slate-100 text-slate-600"}`}>
+                          {STATUS_LABEL[c.status] || c.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {(c.sent_count > 0 || c.failed_count > 0) ? (
+                          <div className="text-xs flex items-center gap-2">
+                            <span className="text-green-600 font-medium">{c.sent_count} ✓</span>
+                            {c.failed_count > 0 && <span className="text-red-500">{c.failed_count} ✗</span>}
+                          </div>
+                        ) : <span className="text-slate-300 text-xs">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {c.status !== "envoyee" && (
+                            <button
+                              onClick={() => setConfirmSend({ id: c.id, name: c.name })}
+                              disabled={!!sendingId}
+                              title="Envoyer"
+                              className="inline-flex h-8 items-center gap-1.5 px-3 rounded-lg border border-orange-200 text-orange-600 hover:bg-orange-50 text-xs font-medium transition-colors disabled:opacity-40"
+                            >
+                              {sendingId === c.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Send className="w-3.5 h-3.5" />}
+                              Envoyer
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setEditingCampaign(c)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50 transition-colors"
+                            title="Modifier"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(c.id)}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>
