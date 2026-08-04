@@ -701,6 +701,26 @@ router.post("/chat", async (req, res) => {
       { role: "user", content: message },
     ];
 
+    async function callGemini(msgs) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          return await client.chat.completions.create({
+            model,
+            messages: msgs,
+            tools: TOOLS,
+            tool_choice: "auto",
+            max_tokens: Number(process.env.AI_MAX_TOKENS || 2048),
+          });
+        } catch (err) {
+          if (err?.status === 429 && attempt < 2) {
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            continue;
+          }
+          throw err;
+        }
+      }
+    }
+
     let reply = "";
     let iterations = 0;
 
@@ -708,14 +728,7 @@ router.post("/chat", async (req, res) => {
     while (iterations < 6) {
       iterations++;
 
-      const response = await client.chat.completions.create({
-        model,
-        messages,
-        tools: TOOLS,
-        tool_choice: "auto",
-        max_tokens: Number(process.env.AI_MAX_TOKENS || 2048),
-      });
-
+      const response = await callGemini(messages);
       const choice = response.choices[0];
 
       if (choice.finish_reason === "stop") {
@@ -762,7 +775,9 @@ router.post("/chat", async (req, res) => {
   } catch (err) {
     console.error("Pobarr error:", err);
     const status = err?.status >= 400 && err?.status < 600 ? err.status : 500;
-    const msg    = err?.message?.includes("API key") ? "Cle API Gemini invalide." : "Erreur serveur IA";
+    const msg    = err?.status === 429 ? "Limite de requetes atteinte. Reessayez dans quelques secondes."
+                 : err?.message?.includes("API key") ? "Cle API Gemini invalide."
+                 : "Erreur serveur IA";
     res.status(status).json({ error: msg });
   }
 });
