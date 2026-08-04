@@ -674,9 +674,9 @@ router.post("/chat", async (req, res) => {
       return res.status(503).json({ error: "Assistant IA desactive" });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: "GEMINI_API_KEY manquante dans la configuration." });
+      return res.status(503).json({ error: "GROQ_API_KEY manquante dans la configuration." });
     }
 
     const message = sanitizeText(req.body?.message, 2500);
@@ -689,10 +689,10 @@ router.post("/chat", async (req, res) => {
       .map((m) => ({ role: m.role, content: sanitizeText(m.content, 2000) }))
       .filter((m) => m.content);
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
     const client = new OpenAI({
       apiKey,
-      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+      baseURL: "https://api.groq.com/openai/v1",
     });
 
     const messages = [
@@ -776,7 +776,7 @@ router.post("/chat", async (req, res) => {
     console.error("Pobarr error:", err);
     const status = err?.status >= 400 && err?.status < 600 ? err.status : 500;
     const msg    = err?.status === 429 ? "Limite de requetes atteinte. Reessayez dans quelques secondes."
-                 : err?.message?.includes("API key") ? "Cle API Gemini invalide."
+                 : err?.status === 401 ? "Cle API Groq invalide."
                  : "Erreur serveur IA";
     res.status(status).json({ error: msg });
   }
