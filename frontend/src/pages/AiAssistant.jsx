@@ -17,6 +17,7 @@ export default function AiAssistant() {
       role: "assistant",
       content:
         "Bonjour ! Je suis Pobarr, votre assistant ODC. Je peux interroger vos données en temps réel — activités, participants, KPI sociaux, partenaires. Posez-moi une question.",
+      isWelcome: true,
     },
   ]);
   const [input, setInput] = useState("");
@@ -25,7 +26,7 @@ export default function AiAssistant() {
   const bottomRef = useRef(null);
 
   const history = useMemo(
-    () => messages.filter((m) => m.role === "user" || m.role === "assistant"),
+    () => messages.filter((m) => !m.isWelcome && (m.role === "user" || m.role === "assistant")),
     [messages]
   );
 

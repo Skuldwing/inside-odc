@@ -713,10 +713,8 @@ router.post("/chat", async (req, res) => {
     });
 
     /* Convertir l'historique texte au format Gemini */
-    /* Gemini exige que le premier message soit role 'user' — on supprime les messages 'model' en tête */
     const geminiHistory = history
       .map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] }))
-      .filter((_, i, arr) => i >= arr.findIndex(m => m.role === "user"))
       .filter(m => m.parts[0].text);
 
     const chat = geminiModel.startChat({ history: geminiHistory });
