@@ -1,6 +1,6 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
-const OpenAI = require("openai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
@@ -668,8 +668,15 @@ function buildSystemPrompt() {
   ].join("\n");
 }
 
+/* Déclarations de fonctions au format natif Gemini (dérivées de TOOLS) */
+const FUNCTION_DECLARATIONS = TOOLS.map(t => ({
+  name:        t.function.name,
+  description: t.function.description,
+  parameters:  t.function.parameters,
+}));
+
 /* ============================================================
-   ROUTE /chat — boucle tool use (format OpenAI / Gemini)
+   ROUTE /chat — SDK natif Gemini (function calling fiable)
    ============================================================ */
 
 router.post("/chat", async (req, res) => {
@@ -678,9 +685,9 @@ router.post("/chat", async (req, res) => {
       return res.status(503).json({ error: "Assistant IA desactive" });
     }
 
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: "GROQ_API_KEY manquante dans la configuration." });
+      return res.status(503).json({ error: "GEMINI_API_KEY manquante dans la configuration." });
     }
 
     const message = sanitizeText(req.body?.message, 2500);
@@ -693,95 +700,67 @@ router.post("/chat", async (req, res) => {
       .map((m) => ({ role: m.role, content: sanitizeText(m.content, 2000) }))
       .filter((m) => m.content);
 
-    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-    const client = new OpenAI({
-      apiKey,
-      baseURL: "https://api.groq.com/openai/v1",
+    const modelName = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const geminiModel = genAI.getGenerativeModel({
+      model: modelName,
+      tools: [{ functionDeclarations: FUNCTION_DECLARATIONS }],
+      systemInstruction: buildSystemPrompt(),
+      generationConfig: {
+        maxOutputTokens: Number(process.env.AI_MAX_TOKENS || 2048),
+      },
     });
 
-    const messages = [
-      { role: "system", content: buildSystemPrompt() },
-      ...history,
-      { role: "user", content: message },
-    ];
+    /* Convertir l'historique texte au format Gemini */
+    const geminiHistory = history.map(m => ({
+      role:  m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    }));
 
-    async function callGemini(msgs) {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          return await client.chat.completions.create({
-            model,
-            messages: msgs,
-            tools: TOOLS,
-            tool_choice: "auto",
-            parallel_tool_calls: false,
-            max_tokens: Number(process.env.AI_MAX_TOKENS || 2048),
-          });
-        } catch (err) {
-          if (err?.status === 429 && attempt < 2) {
-            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
-            continue;
-          }
-          throw err;
-        }
-      }
-    }
+    const chat = geminiModel.startChat({ history: geminiHistory });
 
-    let reply = "";
+    let result   = await chat.sendMessage(message);
+    let response = result.response;
     let iterations = 0;
 
     /* Boucle tool use — max 6 tours */
-    while (iterations < 6) {
+    while (response.functionCalls()?.length > 0 && iterations < 6) {
       iterations++;
+      const calls = response.functionCalls();
 
-      const response = await callGemini(messages);
-      const choice = response.choices[0];
-
-      if (choice.finish_reason === "stop") {
-        reply = choice.message.content?.trim() || "";
-        break;
-      }
-
-      if (choice.finish_reason === "tool_calls") {
-        messages.push(choice.message);
-
-        const toolResults = [];
-        for (const toolCall of choice.message.tool_calls || []) {
-          let result;
-          try {
-            const args = JSON.parse(toolCall.function.arguments || "{}");
-            result = await executeTool(toolCall.function.name, args, req.user.id);
-          } catch (err) {
-            result = { error: `Erreur lors de l'execution de ${toolCall.function.name}: ${err.message}` };
-          }
-          toolResults.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            content: JSON.stringify(result),
-          });
+      const functionResponseParts = [];
+      for (const call of calls) {
+        let toolResult;
+        try {
+          toolResult = await executeTool(call.name, call.args || {}, req.user.id);
+        } catch (err) {
+          toolResult = { error: `Erreur: ${err.message}` };
         }
-        messages.push(...toolResults);
-        continue;
+        functionResponseParts.push({
+          functionResponse: { name: call.name, response: toolResult },
+        });
       }
 
-      reply = choice.message?.content?.trim() || "Je n'ai pas pu generer de reponse.";
-      break;
+      result   = await chat.sendMessage(functionResponseParts);
+      response = result.response;
     }
 
-    if (!reply) reply = "Je n'ai pas pu generer de reponse apres plusieurs tentatives.";
+    const reply = response.text()?.trim() || "Je n'ai pas pu generer de reponse.";
 
     await pool.query(
       `INSERT INTO ai_chat_logs (user_id, prompt, response, model_name, prompt_tokens, completion_tokens, total_tokens)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [req.user.id, message, reply, model, 0, 0, 0]
+      [req.user.id, message, reply, modelName, 0, 0, 0]
     ).catch(() => {});
 
-    res.json({ reply, meta: { model } });
+    res.json({ reply, meta: { model: modelName } });
 
   } catch (err) {
     console.error("Pobarr error:", err);
     const status = err?.status >= 400 && err?.status < 600 ? err.status : 500;
     const msg    = err?.status === 429 ? "Limite de requetes atteinte. Reessayez dans quelques secondes."
-                 : err?.status === 401 ? "Cle API Groq invalide."
+                 : err?.status === 401 ? "Cle API Gemini invalide."
                  : "Erreur serveur IA";
     res.status(status).json({ error: msg });
   }
