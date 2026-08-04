@@ -689,7 +689,7 @@ router.post("/chat", async (req, res) => {
       .map((m) => ({ role: m.role, content: sanitizeText(m.content, 2000) }))
       .filter((m) => m.content);
 
-    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    const model = process.env.GROQ_MODEL || "llama3-groq-70b-8192-tool-use-preview";
     const client = new OpenAI({
       apiKey,
       baseURL: "https://api.groq.com/openai/v1",
