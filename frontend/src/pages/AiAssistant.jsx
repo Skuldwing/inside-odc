@@ -3,11 +3,12 @@ import { Send, Sparkles, Zap } from "lucide-react";
 import api from "../api";
 
 const starterPrompts = [
-  "Résume les KPI de cette année.",
-  "Quelles sont les 5 activités avec le plus de participants ?",
-  "Donne-moi la répartition hommes/femmes des bénéficiaires.",
-  "Quels partenaires ont le plus de bénéficiaires ce mois-ci ?",
-  "Liste les activités des 30 derniers jours.",
+  "Projette nos bénéficiaires en fin d'année.",
+  "Compare cette année avec l'année dernière.",
+  "Quels partenaires sont en retard sur leurs objectifs ?",
+  "Top 5 des activités les plus fréquentées.",
+  "Analyse le profil démographique de nos participants.",
+  "Rédige un brouillon de campagne bilan trimestriel.",
 ];
 
 export default function AiAssistant() {
@@ -77,7 +78,7 @@ export default function AiAssistant() {
           <div>
             <h1 className="text-xl font-bold">Pobarr</h1>
             <p className="text-orange-100 text-xs">
-              Assistant ODC · accès temps réel aux activités, participants et KPI
+              Assistant ODC · prédictions, analyses, brouillons campagnes
             </p>
           </div>
           <div className="ml-auto flex items-center gap-1.5 text-xs bg-white/20 rounded-full px-3 py-1">

@@ -25,6 +25,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.0.2",
     "nodemailer": "^6.10.1",
+    "openai": "^4.104.0",
     "pdfkit": "^0.19.1",
     "pg": "^8.18.0",
     "xlsx": "^0.18.5"

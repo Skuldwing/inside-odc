@@ -1,6 +1,6 @@
 const express = require("express");
 const rateLimit = require("express-rate-limit");
-const Anthropic = require("@anthropic-ai/sdk");
+const OpenAI = require("openai");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
@@ -9,7 +9,7 @@ const router = express.Router();
 
 const aiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.AI_RATE_LIMIT_MAX || 30),
+  max: Number(process.env.AI_RATE_LIMIT_MAX || 50),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Trop de requetes IA. Reessayez plus tard." },
@@ -22,66 +22,202 @@ function sanitizeText(value, max = 2000) {
 }
 
 /* ============================================================
-   OUTILS — fonctions que Pobarr peut appeler
+   OUTILS — format OpenAI function calling (Gemini compatible)
    ============================================================ */
 
 const TOOLS = [
+  /* ── Lecture données ── */
   {
-    name: "get_kpis",
-    description: "Retourne les KPI globaux ODC pour une période donnée : nombre d'activités, participants/bénéficiaires, heures de formation, KPI sociaux (followers, engagement, reach), partenaires actifs.",
-    input_schema: {
-      type: "object",
-      properties: {
-        year:  { type: "integer", description: "Année (ex: 2025). Défaut: année en cours." },
-        month: { type: "integer", description: "Mois 1-12 pour filtrer un mois précis. Optionnel." },
+    type: "function",
+    function: {
+      name: "get_kpis",
+      description: "Retourne les KPI globaux ODC pour une période : activités, participants, heures de formation, KPI sociaux (followers, engagement, reach), partenaires actifs.",
+      parameters: {
+        type: "object",
+        properties: {
+          year:  { type: "integer", description: "Année (ex: 2025). Défaut: année en cours." },
+          month: { type: "integer", description: "Mois 1-12 pour un mois précis. Optionnel." },
+        },
       },
     },
   },
   {
-    name: "get_activities",
-    description: "Liste les activités avec leurs détails : titre, date, partenaire, dispositif, nombre de participants, heures. Permet de filtrer par période, partenaire ou dispositif.",
-    input_schema: {
-      type: "object",
-      properties: {
-        year:       { type: "integer", description: "Année. Défaut: année en cours." },
-        month:      { type: "integer", description: "Mois 1-12. Optionnel." },
-        partner_id: { type: "string",  description: "UUID du partenaire pour filtrer. Optionnel." },
-        limit:      { type: "integer", description: "Nombre max de résultats (défaut: 20, max: 50)." },
+    type: "function",
+    function: {
+      name: "get_activities",
+      description: "Liste les activités avec détails (titre, date, partenaire, dispositif, participants, heures). Filtre par période ou partenaire.",
+      parameters: {
+        type: "object",
+        properties: {
+          year:       { type: "integer", description: "Année. Défaut: en cours." },
+          month:      { type: "integer", description: "Mois 1-12. Optionnel." },
+          partner_id: { type: "string",  description: "UUID partenaire. Optionnel." },
+          limit:      { type: "integer", description: "Max résultats (défaut 20, max 50)." },
+        },
       },
     },
   },
   {
-    name: "get_participants",
-    description: "Liste les participants/bénéficiaires avec leur profil (nom, genre, structure, tranche d'âge) et l'activité associée. Peut filtrer par activité, partenaire ou genre.",
-    input_schema: {
-      type: "object",
-      properties: {
-        activity_id: { type: "string",  description: "UUID d'une activité précise. Optionnel." },
-        partner_id:  { type: "string",  description: "UUID d'un partenaire. Optionnel." },
-        genre:       { type: "string",  description: "'H' pour hommes, 'F' pour femmes. Optionnel." },
-        year:        { type: "integer", description: "Année. Optionnel." },
-        month:       { type: "integer", description: "Mois 1-12. Optionnel." },
-        limit:       { type: "integer", description: "Nombre max (défaut: 30, max: 100)." },
+    type: "function",
+    function: {
+      name: "get_participants",
+      description: "Liste les participants avec profil (nom, genre, structure, tranche d'âge) et activité associée. Filtre par activité, partenaire ou genre.",
+      parameters: {
+        type: "object",
+        properties: {
+          activity_id: { type: "string",  description: "UUID activité. Optionnel." },
+          partner_id:  { type: "string",  description: "UUID partenaire. Optionnel." },
+          genre:       { type: "string",  description: "'H' pour hommes, 'F' pour femmes. Optionnel." },
+          year:        { type: "integer", description: "Année. Optionnel." },
+          month:       { type: "integer", description: "Mois 1-12. Optionnel." },
+          limit:       { type: "integer", description: "Max résultats (défaut 30, max 100)." },
+        },
       },
     },
   },
   {
-    name: "get_trends",
-    description: "Retourne l'évolution mensuelle des activités et bénéficiaires sur une année, mois par mois.",
-    input_schema: {
-      type: "object",
-      properties: {
-        year: { type: "integer", description: "Année. Défaut: année en cours." },
+    type: "function",
+    function: {
+      name: "get_trends",
+      description: "Évolution mensuelle des activités et bénéficiaires sur une année entière, mois par mois.",
+      parameters: {
+        type: "object",
+        properties: {
+          year: { type: "integer", description: "Année. Défaut: en cours." },
+        },
       },
     },
   },
   {
-    name: "get_partners",
-    description: "Liste les partenaires actifs avec leur objectif de bénéficiaires et le nombre réalisé.",
-    input_schema: {
-      type: "object",
-      properties: {
-        year: { type: "integer", description: "Année pour le calcul des réalisés. Défaut: année en cours." },
+    type: "function",
+    function: {
+      name: "get_partners",
+      description: "Liste les partenaires actifs avec leur objectif annuel de bénéficiaires et le nombre réalisé.",
+      parameters: {
+        type: "object",
+        properties: {
+          year: { type: "integer", description: "Année. Défaut: en cours." },
+        },
+      },
+    },
+  },
+  /* ── Prédiction & analyse ── */
+  {
+    type: "function",
+    function: {
+      name: "predict_year_end",
+      description: "Projette les totaux de fin d'année (participants, activités) basé sur la moyenne des mois déjà écoulés. Permet de savoir si l'ODC est en bonne voie pour atteindre ses objectifs.",
+      parameters: {
+        type: "object",
+        properties: {
+          year: { type: "integer", description: "Année à projeter. Défaut: en cours." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "compare_periods",
+      description: "Compare deux périodes (ex: cette année vs l'an dernier, ce mois vs le précédent). Retourne valeurs et évolutions en pourcentage.",
+      parameters: {
+        type: "object",
+        properties: {
+          year1:  { type: "integer", description: "Première année." },
+          month1: { type: "integer", description: "Mois pour la période 1. Optionnel (= toute l'année)." },
+          year2:  { type: "integer", description: "Deuxième année." },
+          month2: { type: "integer", description: "Mois pour la période 2. Optionnel." },
+        },
+        required: ["year1", "year2"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_objectives_status",
+      description: "Suivi détaillé des objectifs annuels de chaque partenaire : réalisé, pourcentage d'atteinte, statut (en retard / en bonne voie / atteint) et projection fin d'année.",
+      parameters: {
+        type: "object",
+        properties: {
+          year: { type: "integer", description: "Année. Défaut: en cours." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_top_activities",
+      description: "Top des activités les plus fréquentées sur une période, classées par nombre de participants.",
+      parameters: {
+        type: "object",
+        properties: {
+          year:  { type: "integer", description: "Année. Défaut: en cours." },
+          month: { type: "integer", description: "Mois 1-12. Optionnel." },
+          limit: { type: "integer", description: "Nombre de résultats (défaut 5, max 20)." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_demographics",
+      description: "Analyse démographique des participants : répartition par tranche d'âge, statut (étudiant, entrepreneur, salarié...) et genre.",
+      parameters: {
+        type: "object",
+        properties: {
+          year:  { type: "integer", description: "Année. Défaut: en cours." },
+          month: { type: "integer", description: "Mois 1-12. Optionnel." },
+        },
+      },
+    },
+  },
+  /* ── Actions ── */
+  {
+    type: "function",
+    function: {
+      name: "draft_campaign",
+      description: "Crée un brouillon de campagne email dans le système. L'utilisateur le retrouve dans la page Campagnes pour le réviser et l'envoyer.",
+      parameters: {
+        type: "object",
+        properties: {
+          name:            { type: "string", description: "Nom de la campagne (ex: 'Bilan T2 2025')." },
+          subject:         { type: "string", description: "Sujet de l'email." },
+          html_body:       { type: "string", description: "Corps HTML de l'email. Rédige un HTML propre et professionnel." },
+          recipients_type: { type: "string", description: "'all_participants' pour tous les participants. Défaut: 'all_participants'." },
+        },
+        required: ["name", "subject", "html_body"],
+      },
+    },
+  },
+  /* ── Mémoire inter-sessions ── */
+  {
+    type: "function",
+    function: {
+      name: "save_insight",
+      description: "Mémorise une analyse, observation ou alerte importante pour la retrouver lors de futures conversations. Utilise cet outil quand tu détectes quelque chose de significatif.",
+      parameters: {
+        type: "object",
+        properties: {
+          content:  { type: "string", description: "Contenu de l'analyse à mémoriser." },
+          category: { type: "string", description: "Catégorie : 'performance', 'alerte', 'prediction', ou 'observation'." },
+        },
+        required: ["content"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_insights",
+      description: "Récupère les analyses et observations mémorisées lors de sessions précédentes.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: { type: "integer", description: "Nombre d'analyses à récupérer (défaut 5, max 20)." },
+        },
       },
     },
   },
@@ -91,27 +227,30 @@ const TOOLS = [
    EXÉCUTION DES OUTILS
    ============================================================ */
 
-async function executeTool(name, input) {
+async function executeTool(name, args, userId) {
   const now = new Date();
-  const year  = input.year  || now.getFullYear();
-  const month = input.month || null;
-  const limit = Math.min(input.limit || 20, 100);
+  const year  = args.year  || now.getFullYear();
+  const month = args.month || null;
+  const limit = Math.min(args.limit || 20, 100);
 
-  let from, to;
-  if (month) {
-    const lastDay = new Date(year, month, 0).getDate();
-    from = `${year}-${String(month).padStart(2, "0")}-01`;
-    to   = `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-  } else {
-    from = `${year}-01-01`;
-    to   = `${year}-12-31`;
+  function dateRange(y, m) {
+    if (m) {
+      const lastDay = new Date(y, m, 0).getDate();
+      return {
+        from: `${y}-${String(m).padStart(2, "0")}-01`,
+        to:   `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+      };
+    }
+    return { from: `${y}-01-01`, to: `${y}-12-31` };
   }
 
+  const { from, to } = dateRange(year, month);
+
+  /* ── get_kpis ── */
   if (name === "get_kpis") {
     const [actRes, partRes, socialRes, partnersRes] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*)::int AS activities,
-                COALESCE(SUM(duration_hours),0)::int AS hours
+        `SELECT COUNT(*)::int AS activities, COALESCE(SUM(duration_hours),0)::int AS hours
          FROM activities WHERE activity_date BETWEEN $1 AND $2`, [from, to]
       ),
       pool.query(
@@ -127,8 +266,7 @@ async function executeTool(name, input) {
         `SELECT COALESCE(SUM(followers),0)::bigint AS followers,
                 COALESCE(SUM(engagement),0)::bigint AS engagement,
                 COALESCE(SUM(reach),0)::bigint AS reach
-         FROM social_media_kpis
-         WHERE EXTRACT(YEAR FROM month_date) = $1`, [year]
+         FROM social_media_kpis WHERE EXTRACT(YEAR FROM month_date) = $1`, [year]
       ),
       pool.query(`SELECT COUNT(*)::int AS count FROM partners WHERE status='active'`),
     ]);
@@ -148,16 +286,16 @@ async function executeTool(name, input) {
     };
   }
 
+  /* ── get_activities ── */
   if (name === "get_activities") {
     const params = [from, to];
     let where = "a.activity_date BETWEEN $1 AND $2";
-    if (input.partner_id) { where += ` AND a.partner_id = $${params.length + 1}`; params.push(input.partner_id); }
+    if (args.partner_id) { where += ` AND a.partner_id = $${params.length + 1}`; params.push(args.partner_id); }
 
     const res = await pool.query(`
-      SELECT a.id, a.title, a.activity_date, a.location,
-             a.duration_hours,
-             COALESCE(p.name, 'Non renseigné') AS partenaire,
-             COALESCE(d.name, 'Non renseigné') AS dispositif,
+      SELECT a.id, a.title, a.activity_date, a.location, a.duration_hours,
+             COALESCE(p.name, 'Non renseigne') AS partenaire,
+             COALESCE(d.name, 'Non renseigne') AS dispositif,
              COUNT(ap.participant_id)::int AS nb_participants
       FROM activities a
       LEFT JOIN partners p ON p.id = a.partner_id
@@ -171,23 +309,22 @@ async function executeTool(name, input) {
     return { total: res.rowCount, activites: res.rows };
   }
 
+  /* ── get_participants ── */
   if (name === "get_participants") {
     const params = [];
     const conditions = [];
-
-    if (input.year || input.month) {
+    if (args.year || args.month) {
       conditions.push(`a.activity_date BETWEEN $${params.length+1} AND $${params.length+2}`);
       params.push(from, to);
     }
-    if (input.activity_id) { conditions.push(`a.id = $${params.length+1}`); params.push(input.activity_id); }
-    if (input.partner_id)  { conditions.push(`a.partner_id = $${params.length+1}`); params.push(input.partner_id); }
-    if (input.genre)       { conditions.push(`p.genre = $${params.length+1}`); params.push(input.genre); }
+    if (args.activity_id) { conditions.push(`a.id = $${params.length+1}`); params.push(args.activity_id); }
+    if (args.partner_id)  { conditions.push(`a.partner_id = $${params.length+1}`); params.push(args.partner_id); }
+    if (args.genre)       { conditions.push(`p.genre = $${params.length+1}`); params.push(args.genre); }
 
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const res = await pool.query(`
       SELECT p.nom, p.prenom, p.genre, p.age_range, p.structure, p.statut,
-             a.title AS activite, a.activity_date,
-             pr.name AS partenaire
+             a.title AS activite, a.activity_date, pr.name AS partenaire
       FROM participants p
       JOIN activity_participants ap ON ap.participant_id = p.id
       JOIN activities a ON a.id = ap.activity_id
@@ -199,14 +336,11 @@ async function executeTool(name, input) {
     return { total: res.rowCount, participants: res.rows };
   }
 
+  /* ── get_trends ── */
   if (name === "get_trends") {
     const res = await pool.query(`
       WITH months AS (
-        SELECT generate_series(
-          date_trunc('month', $1::date),
-          date_trunc('month', $2::date),
-          '1 month'
-        ) AS m
+        SELECT generate_series(date_trunc('month', $1::date), date_trunc('month', $2::date), '1 month') AS m
       ),
       agg AS (
         SELECT date_trunc('month', a.activity_date) AS m,
@@ -227,20 +361,274 @@ async function executeTool(name, input) {
     return { annee: year, tendances: res.rows };
   }
 
+  /* ── get_partners ── */
   if (name === "get_partners") {
     const res = await pool.query(`
       SELECT pr.name, pr.objective_beneficiaries,
              COUNT(DISTINCT a.id)::int AS nb_activites,
              COUNT(ap.participant_id)::int AS nb_participants
       FROM partners pr
-      LEFT JOIN activities a ON a.partner_id = pr.id
-        AND a.activity_date BETWEEN $1 AND $2
+      LEFT JOIN activities a ON a.partner_id = pr.id AND a.activity_date BETWEEN $1 AND $2
       LEFT JOIN activity_participants ap ON ap.activity_id = a.id
       WHERE pr.status = 'active'
       GROUP BY pr.id, pr.name, pr.objective_beneficiaries
       ORDER BY nb_participants DESC
     `, [from, to]);
     return { annee: year, partenaires: res.rows };
+  }
+
+  /* ── predict_year_end ── */
+  if (name === "predict_year_end") {
+    const res = await pool.query(`
+      WITH monthly AS (
+        SELECT
+          EXTRACT(MONTH FROM a.activity_date)::int AS m,
+          COUNT(DISTINCT a.id) AS activites,
+          COUNT(ap.participant_id) AS participants
+        FROM activities a
+        LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+        WHERE EXTRACT(YEAR FROM a.activity_date) = $1
+          AND a.activity_date < date_trunc('month', CURRENT_DATE)
+        GROUP BY 1
+      )
+      SELECT
+        COUNT(*)::int AS mois_complets,
+        ROUND(AVG(activites)::numeric, 1) AS moy_activites,
+        ROUND(AVG(participants)::numeric, 0)::int AS moy_participants,
+        COALESCE(SUM(activites), 0)::int AS activites_ytd,
+        COALESCE(SUM(participants), 0)::int AS participants_ytd
+      FROM monthly
+    `, [year]);
+
+    const row = res.rows[0];
+    const mois_complets  = row.mois_complets || 0;
+    const mois_restants  = 12 - mois_complets;
+    const moy_participants = Number(row.moy_participants) || 0;
+    const moy_activites    = Number(row.moy_activites)    || 0;
+
+    return {
+      annee: year,
+      mois_complets,
+      mois_restants,
+      realise: {
+        activites:    row.activites_ytd,
+        participants: row.participants_ytd,
+      },
+      moyenne_mensuelle: {
+        activites:    Number(row.moy_activites),
+        participants: moy_participants,
+      },
+      projection_fin_annee: {
+        activites:    row.activites_ytd + Math.round(moy_activites * mois_restants),
+        participants: row.participants_ytd + Math.round(moy_participants * mois_restants),
+      },
+    };
+  }
+
+  /* ── compare_periods ── */
+  if (name === "compare_periods") {
+    const { year1, month1 = null, year2, month2 = null } = args;
+    const r1 = dateRange(year1, month1);
+    const r2 = dateRange(year2, month2);
+
+    async function fetchKpis(r) {
+      const [actRes, partRes] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS activites, COALESCE(SUM(duration_hours),0)::int AS heures
+           FROM activities WHERE activity_date BETWEEN $1 AND $2`, [r.from, r.to]
+        ),
+        pool.query(
+          `SELECT COUNT(*)::int AS participants,
+                  COUNT(*) FILTER (WHERE p.genre='H')::int AS hommes,
+                  COUNT(*) FILTER (WHERE p.genre='F')::int AS femmes
+           FROM activity_participants ap
+           JOIN activities a ON a.id = ap.activity_id
+           JOIN participants p ON p.id = ap.participant_id
+           WHERE a.activity_date BETWEEN $1 AND $2`, [r.from, r.to]
+        ),
+      ]);
+      return {
+        activites:    actRes.rows[0].activites,
+        heures:       actRes.rows[0].heures,
+        participants: partRes.rows[0].participants,
+        hommes:       partRes.rows[0].hommes,
+        femmes:       partRes.rows[0].femmes,
+      };
+    }
+
+    const [k1, k2] = await Promise.all([fetchKpis(r1), fetchKpis(r2)]);
+
+    function pct(a, b) {
+      if (!b) return null;
+      return Math.round((a - b) / b * 100);
+    }
+
+    return {
+      periode1: {
+        label: month1 ? `${String(month1).padStart(2, "0")}/${year1}` : `${year1}`,
+        ...k1,
+      },
+      periode2: {
+        label: month2 ? `${String(month2).padStart(2, "0")}/${year2}` : `${year2}`,
+        ...k2,
+      },
+      evolution: {
+        activites:    { valeur: k1.activites    - k2.activites,    pct: pct(k1.activites,    k2.activites)    },
+        participants: { valeur: k1.participants  - k2.participants, pct: pct(k1.participants, k2.participants) },
+        heures:       { valeur: k1.heures        - k2.heures,       pct: pct(k1.heures,       k2.heures)       },
+      },
+    };
+  }
+
+  /* ── get_objectives_status ── */
+  if (name === "get_objectives_status") {
+    const currentMonth = new Date().getMonth() + 1;
+    const moisEcoules  = year === now.getFullYear() ? Math.max(currentMonth - 1, 1) : 12;
+    const moisRestants = 12 - moisEcoules;
+
+    const res = await pool.query(`
+      SELECT
+        pr.name AS partenaire,
+        COALESCE(pr.objective_beneficiaries, 0) AS objectif,
+        COUNT(DISTINCT ap.participant_id)::int AS realise,
+        COUNT(DISTINCT a.id)::int AS nb_activites
+      FROM partners pr
+      LEFT JOIN activities a ON a.partner_id = pr.id AND a.activity_date BETWEEN $1 AND $2
+      LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+      WHERE pr.status = 'active'
+      GROUP BY pr.id, pr.name, pr.objective_beneficiaries
+      ORDER BY realise DESC
+    `, [from, to]);
+
+    const partenaires = res.rows.map(p => {
+      const objectif = Number(p.objectif);
+      const realise  = Number(p.realise);
+      const pct_atteint = objectif > 0 ? Math.round(realise / objectif * 100) : null;
+      const moy_mensuelle = realise / moisEcoules;
+      const projection = Math.round(realise + moy_mensuelle * moisRestants);
+
+      let statut = "pas d'objectif defini";
+      if (pct_atteint !== null) {
+        statut = pct_atteint >= 100 ? "objectif atteint" : pct_atteint >= 75 ? "en bonne voie" : pct_atteint >= 50 ? "a surveiller" : "en retard";
+      }
+
+      return {
+        partenaire:           p.partenaire,
+        nb_activites:         p.nb_activites,
+        objectif,
+        realise,
+        pct_atteint,
+        projection_fin_annee: objectif > 0 ? projection : null,
+        statut,
+      };
+    });
+
+    return { annee: year, mois_ecoules: moisEcoules, partenaires };
+  }
+
+  /* ── get_top_activities ── */
+  if (name === "get_top_activities") {
+    const topLimit = Math.min(args.limit || 5, 20);
+    const res = await pool.query(`
+      SELECT a.title, a.activity_date, a.location,
+             COALESCE(p.name, 'Non renseigne') AS partenaire,
+             COALESCE(d.name, 'Non renseigne') AS dispositif,
+             COUNT(ap.participant_id)::int AS nb_participants
+      FROM activities a
+      LEFT JOIN partners p ON p.id = a.partner_id
+      LEFT JOIN devices d ON d.id = a.device_id
+      LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+      WHERE a.activity_date BETWEEN $1 AND $2
+      GROUP BY a.id, a.title, a.activity_date, a.location, p.name, d.name
+      ORDER BY nb_participants DESC
+      LIMIT $3
+    `, [from, to, topLimit]);
+    return {
+      periode: month ? `${String(month).padStart(2, "0")}/${year}` : `${year}`,
+      activites: res.rows,
+    };
+  }
+
+  /* ── get_demographics ── */
+  if (name === "get_demographics") {
+    const [ageRes, statutRes] = await Promise.all([
+      pool.query(`
+        SELECT COALESCE(p.age_range, 'Non renseigne') AS tranche_age,
+               p.genre,
+               COUNT(*)::int AS nb
+        FROM participants p
+        JOIN activity_participants ap ON ap.participant_id = p.id
+        JOIN activities a ON a.id = ap.activity_id
+        WHERE a.activity_date BETWEEN $1 AND $2
+        GROUP BY p.age_range, p.genre
+        ORDER BY nb DESC
+      `, [from, to]),
+      pool.query(`
+        SELECT COALESCE(p.statut, 'Non renseigne') AS statut,
+               COUNT(*)::int AS nb
+        FROM participants p
+        JOIN activity_participants ap ON ap.participant_id = p.id
+        JOIN activities a ON a.id = ap.activity_id
+        WHERE a.activity_date BETWEEN $1 AND $2
+        GROUP BY p.statut
+        ORDER BY nb DESC
+        LIMIT 10
+      `, [from, to]),
+    ]);
+    return {
+      periode:         month ? `${String(month).padStart(2, "0")}/${year}` : `${year}`,
+      par_tranche_age: ageRes.rows,
+      par_statut:      statutRes.rows,
+    };
+  }
+
+  /* ── draft_campaign ── */
+  if (name === "draft_campaign") {
+    const { name: campName, subject, html_body, recipients_type = "all_participants" } = args;
+    if (!campName || !subject || !html_body) {
+      return { error: "name, subject et html_body sont requis." };
+    }
+    const res = await pool.query(`
+      INSERT INTO campagnes (name, subject, html_body, recipients_type, send_mode)
+      VALUES ($1, $2, $3, $4, 'publipostage')
+      RETURNING id, name
+    `, [
+      campName.slice(0, 255),
+      subject.slice(0, 500),
+      html_body.slice(0, 50000),
+      recipients_type,
+    ]);
+    return {
+      success: true,
+      message: `Brouillon "${res.rows[0].name}" cree avec succes. Retrouvez-le dans la page Campagnes pour le reviser et l'envoyer.`,
+      campaign_id: res.rows[0].id,
+    };
+  }
+
+  /* ── save_insight ── */
+  if (name === "save_insight") {
+    const { content, category = "observation" } = args;
+    if (!content) return { error: "Le contenu est requis." };
+    const validCats = ["performance", "alerte", "prediction", "observation"];
+    const cat = validCats.includes(category) ? category : "observation";
+    await pool.query(
+      `INSERT INTO ai_insights (user_id, content, category) VALUES ($1, $2, $3)`,
+      [userId, content.slice(0, 5000), cat]
+    );
+    return { success: true, message: "Analyse memorisee." };
+  }
+
+  /* ── get_insights ── */
+  if (name === "get_insights") {
+    const insightLimit = Math.min(args.limit || 5, 20);
+    const res = await pool.query(
+      `SELECT content, category, to_char(created_at, 'DD/MM/YYYY') AS date
+       FROM ai_insights
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [insightLimit]
+    );
+    return { insights: res.rows };
   }
 
   return { error: `Outil inconnu: ${name}` };
@@ -251,33 +639,44 @@ async function executeTool(name, input) {
    ============================================================ */
 
 function buildSystemPrompt() {
-  const year = new Date().getFullYear();
+  const now   = new Date();
+  const year  = now.getFullYear();
+  const month = now.toLocaleString("fr-FR", { month: "long" });
   return [
-    "Tu es Pobarr, l'assistant interne de l'Orange Digital Center (ODC) Sénégal.",
-    "Tu aides l'équipe de gestion dans leurs opérations quotidiennes.",
-    "Tu réponds toujours en français, de façon concise, claire et actionnable.",
-    "Tu as accès à des outils pour interroger les données en temps réel : activités, participants, KPI, tendances, partenaires.",
-    "Utilise TOUJOURS les outils disponibles pour répondre aux questions sur les données — ne jamais inventer ou estimer des chiffres.",
-    "Si une information n'est pas disponible via les outils, dis-le clairement.",
-    "Quand c'est utile, formate les résultats sous forme de liste ou tableau en texte.",
-    "Sois proactif : si l'utilisateur demande un résumé, utilise les outils nécessaires et synthétise les résultats.",
-    `Année en cours : ${year}.`,
+    "Tu es Pobarr, l'assistant interne intelligent de l'Orange Digital Center (ODC) Senegal.",
+    "Tu aides l'equipe de gestion dans leurs operations quotidiennes et la prise de decision.",
+    "Tu reponds toujours en francais, de facon concise, claire et actionnable.",
+    "",
+    "Tes capacites :",
+    "- Lecture donnees en temps reel : activites, participants, KPI, tendances, partenaires",
+    "- Predictions et projections : projection fin d'annee, suivi objectifs, comparaison periodes",
+    "- Analyse demographique : tranches d'age, statuts, genres",
+    "- Actions concretes : creer des brouillons de campagne email directement dans le systeme",
+    "- Memoire : memoriser tes analyses importantes entre les sessions avec save_insight",
+    "",
+    "Regles importantes :",
+    "- Utilise TOUJOURS les outils pour repondre aux questions sur les donnees — ne jamais inventer des chiffres.",
+    "- Pour les analyses importantes ou alertes, utilise save_insight pour les memoriser automatiquement.",
+    "- Quand tu crees un brouillon de campagne, redige un HTML propre et professionnel.",
+    "- Sois proactif : si tu detectes une anomalie ou une opportunite, signale-le.",
+    "- Formate les resultats en listes ou tableaux quand c'est utile.",
+    `Aujourd'hui : ${month} ${year}.`,
   ].join("\n");
 }
 
 /* ============================================================
-   ROUTE /chat avec boucle tool use
+   ROUTE /chat — boucle tool use (format OpenAI / Gemini)
    ============================================================ */
 
 router.post("/chat", async (req, res) => {
   try {
     if (String(process.env.AI_ENABLED || "true") !== "true") {
-      return res.status(503).json({ error: "Assistant IA désactivé" });
+      return res.status(503).json({ error: "Assistant IA desactive" });
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(503).json({ error: "ANTHROPIC_API_KEY manquante dans la configuration." });
+      return res.status(503).json({ error: "GEMINI_API_KEY manquante dans la configuration." });
     }
 
     const message = sanitizeText(req.body?.message, 2500);
@@ -290,89 +689,80 @@ router.post("/chat", async (req, res) => {
       .map((m) => ({ role: m.role, content: sanitizeText(m.content, 2000) }))
       .filter((m) => m.content);
 
-    const model = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
-    const client = new Anthropic({ apiKey });
+    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const client = new OpenAI({
+      apiKey,
+      baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    });
 
-    const messages = [...history, { role: "user", content: message }];
+    const messages = [
+      { role: "system", content: buildSystemPrompt() },
+      ...history,
+      { role: "user", content: message },
+    ];
 
     let reply = "";
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
     let iterations = 0;
 
-    /* Boucle tool use — max 5 tours */
-    while (iterations < 5) {
+    /* Boucle tool use — max 6 tours */
+    while (iterations < 6) {
       iterations++;
-      const response = await client.messages.create({
+
+      const response = await client.chat.completions.create({
         model,
-        max_tokens: Number(process.env.AI_MAX_TOKENS || 2048),
-        system: buildSystemPrompt(),
-        tools: TOOLS,
         messages,
+        tools: TOOLS,
+        tool_choice: "auto",
+        max_tokens: Number(process.env.AI_MAX_TOKENS || 2048),
       });
 
-      totalInputTokens  += response.usage?.input_tokens  || 0;
-      totalOutputTokens += response.usage?.output_tokens || 0;
+      const choice = response.choices[0];
 
-      if (response.stop_reason === "end_turn") {
-        reply = response.content
-          .filter((b) => b.type === "text")
-          .map((b) => b.text)
-          .join("\n")
-          .trim();
+      if (choice.finish_reason === "stop") {
+        reply = choice.message.content?.trim() || "";
         break;
       }
 
-      if (response.stop_reason === "tool_use") {
-        /* Ajouter la réponse assistant avec les tool_use blocks */
-        messages.push({ role: "assistant", content: response.content });
+      if (choice.finish_reason === "tool_calls") {
+        messages.push(choice.message);
 
-        /* Exécuter tous les outils demandés */
         const toolResults = [];
-        for (const block of response.content) {
-          if (block.type !== "tool_use") continue;
+        for (const toolCall of choice.message.tool_calls || []) {
           let result;
           try {
-            result = await executeTool(block.name, block.input || {});
+            const args = JSON.parse(toolCall.function.arguments || "{}");
+            result = await executeTool(toolCall.function.name, args, req.user.id);
           } catch (err) {
-            result = { error: `Erreur lors de l'exécution de ${block.name}: ${err.message}` };
+            result = { error: `Erreur lors de l'execution de ${toolCall.function.name}: ${err.message}` };
           }
           toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
+            role: "tool",
+            tool_call_id: toolCall.id,
             content: JSON.stringify(result),
           });
         }
-
-        messages.push({ role: "user", content: toolResults });
+        messages.push(...toolResults);
         continue;
       }
 
-      /* stop_reason inattendu */
-      reply = response.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text)
-        .join("\n")
-        .trim() || "Je n'ai pas pu générer de réponse.";
+      reply = choice.message?.content?.trim() || "Je n'ai pas pu generer de reponse.";
       break;
     }
 
-    if (!reply) reply = "Je n'ai pas pu générer de réponse après plusieurs tentatives.";
+    if (!reply) reply = "Je n'ai pas pu generer de reponse apres plusieurs tentatives.";
 
-    /* Log */
     await pool.query(
-      `INSERT INTO ai_chat_logs
-       (user_id, prompt, response, model_name, prompt_tokens, completion_tokens, total_tokens)
+      `INSERT INTO ai_chat_logs (user_id, prompt, response, model_name, prompt_tokens, completion_tokens, total_tokens)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [req.user.id, message, reply, model, totalInputTokens, totalOutputTokens, totalInputTokens + totalOutputTokens]
+      [req.user.id, message, reply, model, 0, 0, 0]
     ).catch(() => {});
 
-    res.json({ reply, meta: { model, usage: { input_tokens: totalInputTokens, output_tokens: totalOutputTokens } } });
+    res.json({ reply, meta: { model } });
 
   } catch (err) {
     console.error("Pobarr error:", err);
     const status = err?.status >= 400 && err?.status < 600 ? err.status : 500;
-    const msg = err?.message?.includes("API key") ? "Clé API Anthropic invalide." : "Erreur serveur IA";
+    const msg    = err?.message?.includes("API key") ? "Cle API Gemini invalide." : "Erreur serveur IA";
     res.status(status).json({ error: msg });
   }
 });

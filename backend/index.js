@@ -332,6 +332,17 @@ pool.query(`
   END$$;
 `).then(() => console.log("Migration OK: social_media_kpis youtube")).catch(e => console.warn("Migration social youtube:", e.message));
 
+/* Migration : mémoire Pobarr */
+pool.query(`
+  CREATE TABLE IF NOT EXISTS ai_insights (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    content    TEXT NOT NULL,
+    category   VARCHAR(50) DEFAULT 'observation',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: ai_insights")).catch(e => console.warn("Migration ai_insights:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
