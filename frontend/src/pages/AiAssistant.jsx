@@ -12,14 +12,7 @@ const starterPrompts = [
 ];
 
 export default function AiAssistant() {
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content:
-        "Bonjour ! Je suis Pobarr, votre assistant ODC. Je peux interroger vos données en temps réel — activités, participants, KPI sociaux, partenaires. Posez-moi une question.",
-      isWelcome: true,
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
