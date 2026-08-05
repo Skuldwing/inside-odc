@@ -158,6 +158,15 @@ export default function VoteJury() {
     setSubmitting(false);
   };
 
+  /* Load results when session closes — must be before any conditional return */
+  useEffect(() => {
+    if (status?.session_status === "closed" && juryInfo?.token && !juryResults) {
+      api.get(`/vote/sessions/${sessionId}/jury-results`, { headers: { "X-Jury-Token": juryInfo.token } })
+        .then(r => setJuryResults(r.data))
+        .catch(() => {});
+    }
+  }, [status?.session_status, juryInfo, sessionId, juryResults]);
+
   /* ── Render states ── */
 
   if (loading) {
@@ -167,14 +176,6 @@ export default function VoteJury() {
       </div>
     );
   }
-
-  useEffect(() => {
-    if (status?.session_status === "closed" && juryInfo?.token && !juryResults) {
-      api.get(`/vote/sessions/${sessionId}/jury-results`, { headers: { "X-Jury-Token": juryInfo.token } })
-        .then(r => setJuryResults(r.data))
-        .catch(() => {});
-    }
-  }, [status?.session_status, juryInfo, sessionId, juryResults]);
 
   if (status?.session_status === "closed") {
     return (
