@@ -5,13 +5,21 @@ import Header from "./Header";
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebar_collapsed") === "true"
+  );
   const location = useLocation();
 
   const currentPageName = location.pathname.replace("/", "") || "Dashboard";
 
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("sidebar_collapsed", String(next));
+  };
+
   return (
     <div className="min-h-screen">
-      {/* overlay mobile */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -22,16 +30,20 @@ export default function Layout() {
       <Sidebar
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
-        currentPageName={currentPageName}
+        collapsed={collapsed}
+        onToggle={toggleCollapsed}
       />
 
-      <div className="lg:pl-72">
+      <div
+        className={collapsed ? "lg:pl-16" : "lg:pl-64"}
+        style={{ transition: "padding-left 0.3s" }}
+      >
         <Header
           currentPageName={currentPageName}
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <main className="p-6 lg:p-8">
+        <main className="p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

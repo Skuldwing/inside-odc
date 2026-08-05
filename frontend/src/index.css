@@ -56,11 +56,11 @@ body {
 
 @layer components {
   .page-title {
-    @apply text-3xl font-semibold text-slate-900;
+    @apply text-xl font-semibold text-slate-900;
   }
 
   .page-subtitle {
-    @apply mt-1 text-sm text-slate-500;
+    @apply mt-0.5 text-sm text-slate-500;
   }
 
   .card {
@@ -116,7 +116,7 @@ body {
   }
 
   .nav-pill {
-    @apply flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium text-slate-300 transition;
+    @apply flex items-center gap-3 rounded-xl px-3.5 py-2 text-sm font-medium text-slate-300 transition;
   }
 
   .nav-pill:hover {
