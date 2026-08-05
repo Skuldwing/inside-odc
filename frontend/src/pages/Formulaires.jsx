@@ -65,92 +65,97 @@ function TabBar({ tabs, active, onChange, submissionsCount }) {
 /* ── FormCard ── */
 function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplicate }) {
   const isActive = form.status === "active";
+  const responses = Number(form.submissions_count || 0);
 
   return (
-    <div className="card p-4 space-y-3 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-slate-900 truncate">{form.title}</p>
-          <p className="text-xs text-slate-400 mt-0.5 truncate">/{form.slug}</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onToggleStatus(form)}
-          title={isActive ? "Désactiver" : "Activer"}
-          className="flex-shrink-0"
-        >
-          {isActive ? (
-            <ToggleRight className="w-8 h-8 text-orange-500" />
-          ) : (
-            <ToggleLeft className="w-8 h-8 text-slate-300" />
-          )}
-        </button>
-      </div>
+    <div className="card flex flex-col hover:shadow-md transition-shadow group">
+      {/* Top accent */}
+      <div className={`h-1 rounded-t-2xl ${isActive ? "bg-gradient-to-r from-emerald-400 to-emerald-500" : "bg-slate-200"}`} />
 
-      {form.description && (
-        <p className="text-sm text-slate-500 line-clamp-2">{form.description}</p>
-      )}
-
-      <div className="flex items-center gap-3 text-xs text-slate-500">
-        <span className="inline-flex items-center gap-1">
-          <Users className="w-3.5 h-3.5" />
-          {Number(form.submissions_count || 0)} réponse{Number(form.submissions_count || 0) !== 1 ? "s" : ""}
-        </span>
-        <span
-          className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-            isActive
-              ? "bg-emerald-100 text-emerald-700"
-              : "bg-slate-100 text-slate-500"
-          }`}
-        >
-          {isActive ? "Actif" : "Brouillon"}
-        </span>
-      </div>
-
-      <div className="flex items-center gap-1.5 pt-0.5">
-        <button
-          type="button"
-          className="btn-ghost border flex-1 text-sm"
-          onClick={() => onEdit(form.id)}
-        >
-          <Pencil className="w-3.5 h-3.5" />
-          Modifier
-        </button>
-        <button
-          type="button"
-          className="btn-ghost border p-2"
-          onClick={() => onCopyLink(form.slug)}
-          title="Copier le lien public"
-        >
-          <Link2 className="w-4 h-4" />
-        </button>
-        {isActive && (
-          <a
-            href={`${window.location.origin}/f/${form.slug}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-ghost border p-2"
-            title="Ouvrir le formulaire"
+      <div className="p-4 flex flex-col flex-1 gap-3">
+        {/* Header */}
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-slate-900 truncate leading-tight">{form.title}</p>
+            <p className="text-[11px] text-slate-400 mt-0.5 font-mono truncate">/f/{form.slug}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToggleStatus(form)}
+            title={isActive ? "Désactiver" : "Activer"}
+            className="flex-shrink-0 mt-0.5 transition-transform hover:scale-105"
           >
-            <ExternalLink className="w-4 h-4" />
-          </a>
+            {isActive
+              ? <ToggleRight className="w-8 h-8 text-emerald-500" />
+              : <ToggleLeft className="w-8 h-8 text-slate-300" />
+            }
+          </button>
+        </div>
+
+        {/* Description */}
+        {form.description && (
+          <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{form.description}</p>
         )}
-        <button
-          type="button"
-          className="btn-ghost border p-2"
-          onClick={() => onDuplicate(form.id)}
-          title="Dupliquer"
-        >
-          <Copy className="w-4 h-4" />
-        </button>
-        <button
-          type="button"
-          className="btn-ghost border p-2 text-red-500 hover:bg-red-50"
-          onClick={() => onDelete(form.id)}
-          title="Supprimer"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+
+        {/* Stats */}
+        <div className="flex items-center gap-2 mt-auto">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+            isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-500"
+          }`}>
+            {isActive ? "Actif" : "Brouillon"}
+          </span>
+          <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+            <Users className="w-3.5 h-3.5" />
+            {responses} réponse{responses !== 1 ? "s" : ""}
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            className="btn-primary flex-1 text-xs py-1.5"
+            onClick={() => onEdit(form.id)}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Modifier
+          </button>
+          <button
+            type="button"
+            className="btn-ghost border p-2"
+            onClick={() => onCopyLink(form.slug)}
+            title="Copier le lien public"
+          >
+            <Link2 className="w-4 h-4" />
+          </button>
+          {isActive && (
+            <a
+              href={`${window.location.origin}/f/${form.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost border p-2"
+              title="Ouvrir le formulaire"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+          )}
+          <button
+            type="button"
+            className="btn-ghost border p-2"
+            onClick={() => onDuplicate(form.id)}
+            title="Dupliquer"
+          >
+            <Copy className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            className="btn-ghost border p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+            onClick={() => onDelete(form.id)}
+            title="Supprimer"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -209,6 +214,7 @@ export default function Formulaires() {
 
   const [forms, setForms] = useState([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -244,16 +250,24 @@ export default function Formulaires() {
   useEffect(() => { setSearch(querySearch); }, [querySearch]);
   useEffect(() => { if (queryAction === "new") openCreate(); }, [queryAction]);
 
+  const stats = useMemo(() => ({
+    total: forms.length,
+    active: forms.filter((f) => f.status === "active").length,
+    responses: forms.reduce((sum, f) => sum + Number(f.submissions_count || 0), 0),
+  }), [forms]);
+
   const filteredForms = useMemo(() => {
     const q = search.trim().toLowerCase();
     return forms.filter((f) => {
+      if (statusFilter === "active" && f.status !== "active") return false;
+      if (statusFilter === "draft" && f.status !== "draft") return false;
       if (!q) return true;
       return (
         String(f.title || "").toLowerCase().includes(q) ||
         String(f.slug || "").toLowerCase().includes(q)
       );
     });
-  }, [forms, search]);
+  }, [forms, search, statusFilter]);
 
   /* ── Open editor ── */
   const openCreate = () => {
@@ -648,11 +662,74 @@ export default function Formulaires() {
           onAdd={openCreate}
         />
 
-        <AdminSearchCard
-          placeholder="Rechercher un formulaire..."
-          value={search}
-          onChange={setSearch}
-        />
+        {/* Stats */}
+        {forms.length > 0 && (
+          <div className="grid grid-cols-3 gap-3">
+            <div className="card p-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-orange-500" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-slate-900 leading-none">{stats.total}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Formulaire{stats.total !== 1 ? "s" : ""}</p>
+              </div>
+            </div>
+            <div className="card p-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+                <ToggleRight className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-slate-900 leading-none">{stats.active}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Actif{stats.active !== 1 ? "s" : ""}</p>
+              </div>
+            </div>
+            <div className="card p-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Users className="w-4 h-4 text-blue-500" />
+              </div>
+              <div>
+                <p className="text-xl font-bold text-slate-900 leading-none">{stats.responses}</p>
+                <p className="text-xs text-slate-500 mt-0.5">Réponse{stats.responses !== 1 ? "s" : ""}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Search + filter */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1">
+            <AdminSearchCard
+              placeholder="Rechercher un formulaire..."
+              value={search}
+              onChange={setSearch}
+            />
+          </div>
+          <div className="flex rounded-xl border border-slate-200 bg-white overflow-hidden text-sm font-medium h-[42px]">
+            {[
+              { id: "all", label: "Tous", count: stats.total },
+              { id: "active", label: "Actifs", count: stats.active },
+              { id: "draft", label: "Brouillons", count: stats.total - stats.active },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setStatusFilter(f.id)}
+                className={`px-3 py-1.5 flex items-center gap-1.5 transition-colors ${
+                  statusFilter === f.id
+                    ? "bg-orange-500 text-white"
+                    : "text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                {f.label}
+                <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-semibold ${
+                  statusFilter === f.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {f.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         {error && (
           <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">
@@ -663,9 +740,17 @@ export default function Formulaires() {
         {loading ? (
           <div className="card p-6 text-center text-slate-500 text-sm">Chargement...</div>
         ) : filteredForms.length === 0 ? (
-          <div className="card p-8 text-center text-slate-400">
-            <FileText className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-            <p className="text-sm">Aucun formulaire trouvé.</p>
+          <div className="card p-10 text-center text-slate-400">
+            <FileText className="w-10 h-10 mx-auto mb-3 text-slate-200" />
+            <p className="font-medium text-slate-500 mb-1">Aucun formulaire trouvé</p>
+            <p className="text-sm mb-4">
+              {search ? "Essaie un autre mot-clé." : "Crée ton premier formulaire."}
+            </p>
+            {!search && (
+              <button type="button" className="btn-primary mx-auto" onClick={openCreate}>
+                <Plus className="w-4 h-4" /> Nouveau formulaire
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
