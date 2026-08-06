@@ -561,19 +561,42 @@ router.get("/join/:sessionId", async (req, res) => {
 /* POST /vote/join/:sessionId — rejoindre comme juré */
 router.post("/join/:sessionId", async (req, res) => {
   try {
-    const { pseudo, avatar } = req.body;
+    const { pseudo, avatar, email } = req.body;
     if (!pseudo?.trim()) return res.status(400).json({ error: "Pseudo requis" });
     const sessRes = await pool.query("SELECT id, status FROM vote_sessions WHERE id=$1", [req.params.sessionId]);
     if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
     if (sessRes.rows[0].status === "draft") return res.status(403).json({ error: "Session pas encore ouverte" });
     if (sessRes.rows[0].status === "closed") return res.status(403).json({ error: "Session terminee" });
+
+    const normalizedEmail = email?.trim().toLowerCase() || null;
     const r = await pool.query(
-      `INSERT INTO vote_jury (session_id, pseudo, avatar) VALUES ($1,$2,$3)
-       ON CONFLICT (session_id, pseudo) DO UPDATE SET avatar = EXCLUDED.avatar
+      `INSERT INTO vote_jury (session_id, pseudo, avatar, email) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (session_id, pseudo) DO UPDATE SET avatar = EXCLUDED.avatar, email = COALESCE(EXCLUDED.email, vote_jury.email)
        RETURNING *`,
-      [req.params.sessionId, pseudo.trim(), avatar || "🧑"]
+      [req.params.sessionId, pseudo.trim(), avatar || "🧑", normalizedEmail]
     );
     res.json({ token: r.rows[0].token, jury_id: r.rows[0].id, pseudo: r.rows[0].pseudo, avatar: r.rows[0].avatar });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* POST /vote/recover/:sessionId — retrouver sa session par email */
+router.post("/recover/:sessionId", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email?.trim()) return res.status(400).json({ error: "Email requis" });
+    const sessRes = await pool.query("SELECT id, status FROM vote_sessions WHERE id=$1", [req.params.sessionId]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    if (sessRes.rows[0].status === "draft") return res.status(403).json({ error: "Session pas encore ouverte" });
+    const r = await pool.query(
+      "SELECT * FROM vote_jury WHERE session_id=$1 AND email=$2",
+      [req.params.sessionId, email.trim().toLowerCase()]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Aucune session trouvée pour cet email." });
+    const row = r.rows[0];
+    res.json({ token: row.token, jury_id: row.id, pseudo: row.pseudo, avatar: row.avatar });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

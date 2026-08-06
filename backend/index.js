@@ -219,6 +219,27 @@ pool.query(`
   $$
 `).then(() => console.log("Migration OK: vote_jury_unique")).catch(e => console.warn("Migration vote_jury_unique:", e.message));
 
+/* Colonne email pour récupération de session */
+pool.query(`
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name='vote_jury' AND column_name='email'
+    ) THEN
+      ALTER TABLE vote_jury ADD COLUMN email VARCHAR(255);
+    END IF;
+  END;
+  $$
+`).then(() => console.log("Migration OK: vote_jury_email")).catch(e => console.warn("Migration vote_jury_email:", e.message));
+
+/* Index unique partiel : un email par session (NULL exclus) */
+pool.query(`
+  CREATE UNIQUE INDEX IF NOT EXISTS vote_jury_session_email_idx
+  ON vote_jury (session_id, email)
+  WHERE email IS NOT NULL
+`).then(() => console.log("Migration OK: vote_jury_email_idx")).catch(e => console.warn("Migration vote_jury_email_idx:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS vote_scores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
