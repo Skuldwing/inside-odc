@@ -568,7 +568,9 @@ router.post("/join/:sessionId", async (req, res) => {
     if (sessRes.rows[0].status === "draft") return res.status(403).json({ error: "Session pas encore ouverte" });
     if (sessRes.rows[0].status === "closed") return res.status(403).json({ error: "Session terminee" });
     const r = await pool.query(
-      "INSERT INTO vote_jury (session_id, pseudo, avatar) VALUES ($1,$2,$3) RETURNING *",
+      `INSERT INTO vote_jury (session_id, pseudo, avatar) VALUES ($1,$2,$3)
+       ON CONFLICT (session_id, pseudo) DO UPDATE SET avatar = EXCLUDED.avatar
+       RETURNING *`,
       [req.params.sessionId, pseudo.trim(), avatar || "🧑"]
     );
     res.json({ token: r.rows[0].token, jury_id: r.rows[0].id, pseudo: r.rows[0].pseudo, avatar: r.rows[0].avatar });

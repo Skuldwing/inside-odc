@@ -206,6 +206,19 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: vote_jury")).catch(e => console.warn("Migration vote_jury:", e.message));
 
+/* Contrainte unicité pseudo par session (migration idempotente) */
+pool.query(`
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint WHERE conname = 'vote_jury_session_pseudo_unique'
+    ) THEN
+      ALTER TABLE vote_jury ADD CONSTRAINT vote_jury_session_pseudo_unique UNIQUE (session_id, pseudo);
+    END IF;
+  END;
+  $$
+`).then(() => console.log("Migration OK: vote_jury_unique")).catch(e => console.warn("Migration vote_jury_unique:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS vote_scores (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
