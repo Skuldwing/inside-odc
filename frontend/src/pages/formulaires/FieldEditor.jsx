@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   ChevronDown, ChevronUp, Trash2, Copy, ArrowUp, ArrowDown,
   GripVertical, Plus, X, Minus, GitBranch, Filter,
@@ -282,6 +282,9 @@ export default function FieldEditor({
   onDrop,
   onDragEnd,
 }) {
+  const [localKey, setLocalKey] = useState(field.key);
+  useEffect(() => { setLocalKey(field.key); }, [field.key]);
+
   const isSeparator  = field.type === "separator";
   const isChoiceField = field.type === "select" || field.type === "radio" || field.type === "checkbox";
   const canJump       = field.type === "select" || field.type === "radio" || field.type === "yes_no";
@@ -403,8 +406,13 @@ export default function FieldEditor({
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Clé unique</label>
-              <input className="input mt-1 text-sm font-mono" value={field.key} placeholder="nom_complet"
-                onChange={e => onUpdate({ key: e.target.value })} />
+              <input
+                className="input mt-1 text-sm font-mono"
+                value={localKey}
+                placeholder="nom_complet"
+                onChange={e => setLocalKey(e.target.value)}
+                onBlur={e => onUpdate({ key: e.target.value })}
+              />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Page</label>
