@@ -233,6 +233,7 @@ export default function VoteConfig() {
   const badge = STATUS_CLS[session.status] || STATUS_CLS.draft;
 
   return (
+    <>
     <div className="max-w-3xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
@@ -609,5 +610,6 @@ export default function VoteConfig() {
         <p className="text-xs text-slate-200 mt-10">Appuyez sur Échap ou cliquez pour fermer</p>
       </div>
     )}
+    </>
   );
 }
