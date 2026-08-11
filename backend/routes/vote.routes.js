@@ -569,15 +569,48 @@ router.post("/join/:sessionId", async (req, res) => {
     if (sessRes.rows[0].status === "closed") return res.status(403).json({ error: "Session terminee" });
 
     const normalizedEmail = email?.trim().toLowerCase() || null;
-    const r = await pool.query(
-      `INSERT INTO vote_jury (session_id, pseudo, avatar, email) VALUES ($1,$2,$3,$4)
-       ON CONFLICT (session_id, pseudo) DO UPDATE SET avatar = EXCLUDED.avatar, email = COALESCE(EXCLUDED.email, vote_jury.email)
-       RETURNING *`,
-      [req.params.sessionId, pseudo.trim(), avatar || "🧑", normalizedEmail]
+    /* Avatar : URL DiceBear ou emoji de secours */
+    const avatarVal = (avatar && avatar.length > 0) ? avatar : "🧑";
+
+    /* Stratégie SELECT-then-INSERT/UPDATE — compatible même sans contrainte unique */
+    const existing = await pool.query(
+      "SELECT * FROM vote_jury WHERE session_id=$1 AND pseudo=$2",
+      [req.params.sessionId, pseudo.trim()]
     );
-    res.json({ token: r.rows[0].token, jury_id: r.rows[0].id, pseudo: r.rows[0].pseudo, avatar: r.rows[0].avatar });
+
+    let row;
+    if (existing.rows.length) {
+      /* Juré déjà inscrit : met à jour avatar et email */
+      const upd = await pool.query(
+        "UPDATE vote_jury SET avatar=$1, email=COALESCE($2, email) WHERE id=$3 RETURNING *",
+        [avatarVal, normalizedEmail, existing.rows[0].id]
+      );
+      row = upd.rows[0];
+    } else {
+      /* Nouveau juré : INSERT avec fallback emoji si colonne pas encore TEXT */
+      try {
+        const ins = await pool.query(
+          "INSERT INTO vote_jury (session_id, pseudo, avatar, email) VALUES ($1,$2,$3,$4) RETURNING *",
+          [req.params.sessionId, pseudo.trim(), avatarVal, normalizedEmail]
+        );
+        row = ins.rows[0];
+      } catch (insErr) {
+        if (insErr.code === "22001") {
+          /* Avatar trop long pour VARCHAR(20) — migration pas encore appliquée */
+          const ins2 = await pool.query(
+            "INSERT INTO vote_jury (session_id, pseudo, avatar, email) VALUES ($1,$2,$3,$4) RETURNING *",
+            [req.params.sessionId, pseudo.trim(), "🧑", normalizedEmail]
+          );
+          row = ins2.rows[0];
+        } else {
+          throw insErr;
+        }
+      }
+    }
+
+    res.json({ token: row.token, jury_id: row.id, pseudo: row.pseudo, avatar: row.avatar });
   } catch (err) {
-    console.error(err);
+    console.error("JOIN ERROR:", err.message, err.code);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
