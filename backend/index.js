@@ -210,6 +210,13 @@ pool.query(`
 pool.query(`
   DO $$
   BEGIN
+    -- Supprimer les doublons en gardant la ligne la plus récente (joined_at DESC)
+    DELETE FROM vote_jury
+    WHERE id NOT IN (
+      SELECT DISTINCT ON (session_id, pseudo) id
+      FROM vote_jury
+      ORDER BY session_id, pseudo, joined_at DESC NULLS LAST
+    );
     IF NOT EXISTS (
       SELECT 1 FROM pg_constraint WHERE conname = 'vote_jury_session_pseudo_unique'
     ) THEN
