@@ -18,6 +18,7 @@ const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
 const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
+const FormulaireEditor = lazy(() => import("./pages/FormulaireEditor"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
 const CheckinPage = lazy(() => import("./pages/CheckinPage"));
 const VoteJoin = lazy(() => import("./pages/VoteJoin"));
@@ -167,6 +168,26 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <Formulaires />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="formulaires/new"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <FormulaireEditor />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="formulaires/:id/edit"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <FormulaireEditor />
               </Suspense>
             </AdminRoute>
           }
