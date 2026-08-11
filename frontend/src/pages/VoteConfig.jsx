@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Plus, Trash2, Edit2, Check, X, Loader2, QrCode, Copy, ExternalLink,
+  Download, Maximize2, Share2,
 } from "lucide-react";
 import api from "../api";
 
@@ -37,6 +38,8 @@ export default function VoteConfig() {
   const [editingCrit, setEditingCrit] = useState(null);
 
   const [activating, setActivating] = useState(false);
+  const [projecting, setProjecting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const fetch = async () => {
     try {
@@ -57,10 +60,21 @@ export default function VoteConfig() {
     try {
       const QRCode = await import("qrcode");
       const url = `${window.location.origin}/vote/join/${sid}`;
-      const dataUrl = await QRCode.default.toDataURL(url, { width: 300, margin: 2 });
+      const dataUrl = await QRCode.default.toDataURL(url, {
+        width: 512, margin: 2,
+        color: { dark: "#1e293b", light: "#ffffff" },
+      });
       setQrDataUrl(dataUrl);
     } catch {}
   };
+
+  /* Escape ferme le mode projection */
+  useEffect(() => {
+    if (!projecting) return;
+    const handleKey = (e) => { if (e.key === "Escape") setProjecting(false); };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [projecting]);
 
   /* ---- Session info ---- */
   const saveInfo = async () => {
@@ -155,14 +169,67 @@ export default function VoteConfig() {
   };
 
   const copyJoinLink = () => {
-    const url = `${window.location.origin}/vote/join/${id}`;
-    navigator.clipboard.writeText(url).catch(() => {});
+    navigator.clipboard.writeText(joinUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
+
+  const downloadQr = () => {
+    if (!qrDataUrl) return;
+    const canvas = document.createElement("canvas");
+    const qrSize = 512;
+    const padding = 32;
+    const dateText = session.event_date
+      ? new Date(session.event_date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })
+      : null;
+    const headerH = dateText ? 76 : 50;
+    const footerH = 52;
+    canvas.width = qrSize + padding * 2;
+    canvas.height = headerH + qrSize + footerH;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#f97316";
+    ctx.font = "bold 22px system-ui, sans-serif";
+    ctx.fillText(session.name, canvas.width / 2, 34);
+    if (dateText) {
+      ctx.fillStyle = "#64748b";
+      ctx.font = "15px system-ui, sans-serif";
+      ctx.fillText(dateText, canvas.width / 2, 58);
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, padding, headerH, qrSize, qrSize);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "12px monospace, monospace";
+      ctx.fillText(joinUrl, canvas.width / 2, headerH + qrSize + 30);
+
+      const a = document.createElement("a");
+      a.download = `jury-qr-${session.name.replace(/[^a-zA-Z0-9]/g, "-").toLowerCase()}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    };
+    img.src = qrDataUrl;
+  };
+
+  const shareLink = async () => {
+    if (!navigator.share) return;
+    try {
+      await navigator.share({
+        title: `Rejoindre le jury — ${session.name}`,
+        text: `Scannez ou cliquez pour rejoindre le jury de ${session.name}`,
+        url: joinUrl,
+      });
+    } catch {}
+  };
+
+  const joinUrl = `${window.location.origin}/vote/join/${id}`;
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-orange-400" /></div>;
   if (error && !session) return <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">{error}</div>;
-
-  const joinUrl = `${window.location.origin}/vote/join/${id}`;
   const badge = STATUS_CLS[session.status] || STATUS_CLS.draft;
 
   return (
@@ -408,48 +475,139 @@ export default function VoteConfig() {
           </div>
         ) : (
           <div>
-            <h2 className="font-semibold text-slate-800 mb-4">QR Code jury</h2>
-            <div className="flex flex-col sm:flex-row items-start gap-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-semibold text-slate-800">QR Code jury</h2>
+              <a
+                href={joinUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-orange-500 hover:underline"
+              >
+                <ExternalLink className="w-3 h-3" /> Ouvrir
+              </a>
+            </div>
+
+            {/* QR centré */}
+            <div className="flex flex-col items-center gap-4">
               {qrDataUrl ? (
-                <div className="bg-white rounded-2xl border border-slate-200 p-3 shadow-sm">
-                  <img src={qrDataUrl} alt="QR Code jury" className="w-40 h-40" />
-                </div>
+                <button
+                  onClick={() => setProjecting(true)}
+                  title="Projeter en plein écran"
+                  className="group relative bg-white rounded-2xl border-2 border-slate-200 p-4 shadow-sm hover:border-orange-300 transition-colors"
+                >
+                  <img src={qrDataUrl} alt="QR Code jury" className="w-56 h-56" />
+                  <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
+                    <Maximize2 className="w-6 h-6 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                </button>
               ) : (
-                <div className="w-40 h-40 rounded-2xl border border-slate-200 flex items-center justify-center">
-                  <QrCode className="w-8 h-8 text-slate-300" />
+                <div className="w-56 h-56 rounded-2xl border-2 border-slate-200 flex items-center justify-center">
+                  <QrCode className="w-12 h-12 text-slate-200" />
                 </div>
               )}
-              <div className="flex-1">
-                <p className="text-sm text-slate-500 mb-3">Partagez ce lien ou ce QR code avec les jures pour qu&apos;ils puissent rejoindre la session :</p>
-                <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 mb-3">
-                  <span className="text-xs text-slate-600 flex-1 truncate font-mono">{joinUrl}</span>
-                  <button onClick={copyJoinLink} className="flex-shrink-0 text-slate-400 hover:text-orange-500 transition-colors">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                </div>
-                <a
-                  href={joinUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-orange-500 hover:underline"
+
+              {/* Nom + date */}
+              <div className="text-center">
+                <p className="font-semibold text-slate-800">{session.name}</p>
+                {session.event_date && (
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {new Date(session.event_date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}
+                  </p>
+                )}
+              </div>
+
+              {/* URL avec copie */}
+              <div className="w-full flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <span className="text-xs text-slate-500 flex-1 truncate font-mono">{joinUrl}</span>
+                <button
+                  onClick={copyJoinLink}
+                  title="Copier le lien"
+                  className="flex-shrink-0 text-slate-400 hover:text-orange-500 transition-colors"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" /> Ouvrir la page jury
-                </a>
-                <div className="mt-4 pt-4 border-t border-slate-100">
-                  <p className="text-xs text-slate-500 mb-2">Jurés connectés : <span className="font-semibold text-slate-700">{session.jury?.length || 0}</span></p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {session.jury?.map(j => (
-                      <span key={j.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-700">
-                        <span>{j.avatar}</span> {j.pseudo}
-                      </span>
-                    ))}
-                  </div>
-                </div>
+                  {copied
+                    ? <Check className="w-4 h-4 text-green-500" />
+                    : <Copy className="w-4 h-4" />
+                  }
+                </button>
+              </div>
+
+              {/* Boutons d'action */}
+              <div className={`w-full grid gap-2 ${navigator.share ? "grid-cols-3" : "grid-cols-2"}`}>
+                <button
+                  onClick={downloadQr}
+                  disabled={!qrDataUrl}
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 py-3 text-xs font-medium text-slate-600 hover:border-orange-300 hover:text-orange-500 disabled:opacity-40 transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Télécharger
+                </button>
+                <button
+                  onClick={() => setProjecting(true)}
+                  disabled={!qrDataUrl}
+                  className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 py-3 text-xs font-medium text-slate-600 hover:border-orange-300 hover:text-orange-500 disabled:opacity-40 transition-colors"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                  Projeter
+                </button>
+                {navigator.share && (
+                  <button
+                    onClick={shareLink}
+                    className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 py-3 text-xs font-medium text-slate-600 hover:border-orange-300 hover:text-orange-500 transition-colors"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Partager
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Jurés connectés */}
+            {(session.jury?.length || 0) > 0 && (
+              <div className="mt-5 pt-4 border-t border-slate-100">
+                <p className="text-xs text-slate-500 mb-2">
+                  Jurés connectés : <span className="font-semibold text-slate-700">{session.jury.length}</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {session.jury.map(j => (
+                    <div key={j.id} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 pl-1 pr-2.5 py-1">
+                      {j.avatar?.startsWith("https://")
+                        ? <img src={j.avatar} alt="" className="w-5 h-5 rounded-full" />
+                        : <span className="text-sm leading-none">{j.avatar || "🧑"}</span>
+                      }
+                      <span className="text-xs text-slate-700">{j.pseudo}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>
     </div>
+
+    {/* ── Mode projection plein écran ── */}
+    {projecting && (
+      <div
+        className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center cursor-pointer select-none"
+        onClick={() => setProjecting(false)}
+      >
+        <p className="text-sm font-medium text-slate-400 uppercase tracking-widest mb-8">
+          Scannez pour rejoindre le jury
+        </p>
+        <img
+          src={qrDataUrl}
+          alt="QR Code"
+          className="w-[min(80vmin,480px)] h-[min(80vmin,480px)] rounded-2xl shadow-2xl"
+        />
+        <p className="text-3xl font-bold text-slate-900 mt-8">{session.name}</p>
+        {session.event_date && (
+          <p className="text-slate-400 mt-2">
+            {new Date(session.event_date).toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" })}
+          </p>
+        )}
+        <p className="text-sm text-slate-300 font-mono mt-6">{joinUrl}</p>
+        <p className="text-xs text-slate-200 mt-10">Appuyez sur Échap ou cliquez pour fermer</p>
+      </div>
+    )}
   );
 }
