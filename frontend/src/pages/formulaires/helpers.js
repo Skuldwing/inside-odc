@@ -31,8 +31,13 @@ export function localDateTimeToIso(localValue) {
   return date.toISOString();
 }
 
+function stableId() {
+  return `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+}
+
 export function createField(type = "text", idx = 1) {
   return {
+    _id: stableId(),
     key: type === "separator" ? `sep_${idx}` : `champ_${idx}`,
     label: type === "separator" ? `Section ${idx}` : `Champ ${idx}`,
     type,
