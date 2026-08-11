@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
+import PageLoader from "./PageLoader";
 
 export default function AdminPinGate({ children }) {
   const navigate = useNavigate();
@@ -44,25 +45,21 @@ export default function AdminPinGate({ children }) {
   }, []);
 
   if (checking) {
-    return (
-      <div className="min-h-[50vh] flex items-center justify-center text-slate-500">
-        Verification du PIN...
-      </div>
-    );
+    return <PageLoader label="Vérification du PIN..." />;
   }
 
   if (verified) return children;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-      <div className="card-solid w-full max-w-sm p-6">
+      <div className="anim-modal-panel card-solid w-full max-w-sm p-6">
         <h2 className="text-xl font-semibold mb-2">Code PIN requis</h2>
         <p className="text-sm text-slate-500 mb-4">
           Entrez le PIN admin pour acceder a cette page.
         </p>
 
         {error && (
-          <div className="mb-4 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
+          <div className="anim-shake mb-4 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
             {error}
           </div>
         )}

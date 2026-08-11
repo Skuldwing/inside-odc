@@ -113,7 +113,7 @@ export default function Header({ currentPageName, onMenuClick }) {
       <div className="flex items-center justify-between gap-4 px-4 py-3 lg:px-8 lg:py-4">
         <div className="flex min-w-0 items-center gap-3 lg:gap-4">
           <button
-            className="lg:hidden text-slate-600 hover:text-slate-900"
+            className="lg:hidden text-slate-600 transition-transform hover:text-slate-900 active:scale-90"
             onClick={onMenuClick}
             aria-label="Ouvrir le menu"
           >
@@ -136,7 +136,7 @@ export default function Header({ currentPageName, onMenuClick }) {
         <div className="flex items-center justify-end gap-2 lg:gap-3">
           <form
             onSubmit={handleGlobalSearch}
-            className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[320px]"
+            className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[320px] transition focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100"
           >
             <Search className="h-4 w-4 text-slate-400" />
             <input
@@ -170,14 +170,15 @@ export default function Header({ currentPageName, onMenuClick }) {
               Actions
             </button>
             {actionsOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg z-50">
-                {quickActions.map((action) => {
+              <div className="anim-dropdown absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg z-50">
+                {quickActions.map((action, index) => {
                   const Icon = action.icon;
                   return (
                     <button
                       key={action.id}
                       onClick={() => navigate(action.to)}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+                      style={{ animationDelay: `${index * 30}ms` }}
+                      className="anim-fade-in-up flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-orange-50"
                     >
                       <Icon className="h-4 w-4 text-orange-500" />
                       {action.label}
@@ -189,10 +190,10 @@ export default function Header({ currentPageName, onMenuClick }) {
           </div>
 
           <button
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 active:scale-90"
             aria-label="Notifications"
           >
-            <Bell className="w-4 h-4" />
+            <Bell className="w-4 h-4 transition-transform hover:rotate-6" />
           </button>
 
           <button
