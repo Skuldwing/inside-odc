@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Clock, CheckCircle2, Award, AlertCircle, Send, Timer, MessageCircleQuestion, Trophy } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Send, Timer, MessageCircleQuestion } from "lucide-react";
 import api from "../api";
 
 function PitchTimer({ startedAt, durationMinutes, label }) {
@@ -37,13 +37,56 @@ function PitchTimer({ startedAt, durationMinutes, label }) {
       </div>
       <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : isQa ? "bg-purple-400" : "bg-orange-400"}`}
+          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400" : timeLeft < 30 ? "bg-amber-400" : isQa ? "bg-purple-400" : "bg-orange-400"}`}
           style={{ width: elapsed ? "100%" : `${pct}%` }}
         />
       </div>
-      {elapsed && (
-        <p className={`text-xs mt-1.5 font-medium ${elapsed ? "text-red-600" : ""}`}>Temps écoulé</p>
-      )}
+      {elapsed && <p className="text-xs mt-1.5 font-medium text-red-600">Temps écoulé</p>}
+    </div>
+  );
+}
+
+/* Boutons de score — bien meilleurs que les sliders sur mobile */
+function ScoreInput({ value, scale, onChange }) {
+  if (scale <= 10) {
+    return (
+      <div
+        className="grid gap-1.5 mt-3"
+        style={{ gridTemplateColumns: `repeat(${scale}, minmax(0, 1fr))` }}
+      >
+        {Array.from({ length: scale }, (_, i) => i + 1).map(n => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onChange(n)}
+            className={`rounded-xl py-2.5 text-sm font-semibold transition-all active:scale-95 ${
+              value === n
+                ? "bg-orange-500 text-white shadow-sm shadow-orange-200"
+                : "bg-white border border-slate-200 text-slate-600 hover:border-orange-300 hover:text-orange-500"
+            }`}
+          >
+            {n}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <input
+        type="range"
+        min={1}
+        max={scale}
+        step={1}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-full accent-orange-500"
+      />
+      <div className="flex justify-between text-xs text-slate-400 mt-1">
+        <span>1</span>
+        <span>{scale}</span>
+      </div>
     </div>
   );
 }
@@ -52,12 +95,11 @@ export default function VoteJury() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
 
-  const [juryInfo, setJuryInfo] = useState(null);  // { token, pseudo, avatar }
-  const [status, setStatus] = useState(null);       // data from /vote/jury/status
+  const [juryInfo, setJuryInfo] = useState(null);
+  const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  /* local scores: { [criteriaId]: { score, comment } } */
   const [scores, setScores] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -89,7 +131,6 @@ export default function VoteJury() {
       setStatus(d);
       setLoading(false);
 
-      /* Reset scores when project changes (use ref to avoid interval recreation) */
       const newProjId = d.active_project?.id || null;
       if (newProjId !== currentProjectIdRef.current) {
         currentProjectIdRef.current = newProjId;
@@ -105,8 +146,7 @@ export default function VoteJury() {
             }
           });
           setScores(init);
-          const allVoted = d.criteria.every(c => d.my_scores?.[c.id]);
-          setSubmitted(allVoted);
+          setSubmitted(d.criteria.every(c => d.my_scores?.[c.id]));
         } else {
           setScores({});
         }
@@ -116,7 +156,7 @@ export default function VoteJury() {
         localStorage.removeItem(`vote_jury_${sessionId}`);
         navigate(`/vote/join/${sessionId}`, { replace: true });
       } else {
-        setError("Probleme de connexion...");
+        setError("Problème de connexion...");
       }
     }
   }, [juryInfo, sessionId, navigate]);
@@ -128,13 +168,11 @@ export default function VoteJury() {
     return () => clearInterval(intervalRef.current);
   }, [juryInfo, poll]);
 
-  const setScore = (criteriaId, score) => {
+  const setScore = (criteriaId, score) =>
     setScores(s => ({ ...s, [criteriaId]: { ...(s[criteriaId] || {}), score } }));
-  };
 
-  const setComment = (criteriaId, comment) => {
+  const setComment = (criteriaId, comment) =>
     setScores(s => ({ ...s, [criteriaId]: { ...(s[criteriaId] || {}), comment } }));
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -147,18 +185,20 @@ export default function VoteJury() {
         score: scores[c.id]?.score ?? Math.ceil(c.scale / 2),
         comment: scores[c.id]?.comment || "",
       }));
-      await api.post("/vote/jury/scores",
+      await api.post(
+        "/vote/jury/scores",
         { project_id: status.active_project.id, scores: payload },
         { headers: { "X-Jury-Token": juryInfo.token } }
       );
       setSubmitted(true);
+      if (navigator?.vibrate) navigator.vibrate(60);
     } catch (err) {
       setSubmitError(err?.response?.data?.error || "Erreur lors de l'envoi.");
     }
     setSubmitting(false);
   };
 
-  /* Load results when session closes — must be before any conditional return */
+  /* Doit être avant tout return conditionnel — règle React hooks */
   useEffect(() => {
     if (status?.session_status === "closed" && juryInfo?.token && !juryResults) {
       api.get(`/vote/sessions/${sessionId}/jury-results`, { headers: { "X-Jury-Token": juryInfo.token } })
@@ -167,8 +207,7 @@ export default function VoteJury() {
     }
   }, [status?.session_status, juryInfo, sessionId, juryResults]);
 
-  /* ── Render states ── */
-
+  /* ── Loading ── */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -177,9 +216,10 @@ export default function VoteJury() {
     );
   }
 
+  /* ── Session terminée → classement ── */
   if (status?.session_status === "closed") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-white px-4 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
         <div className="max-w-md mx-auto">
           <div className="text-center mb-6">
             <CheckCircle2 className="w-14 h-14 text-green-400 mx-auto mb-3" />
@@ -189,7 +229,7 @@ export default function VoteJury() {
           {juryResults ? (
             <div className="space-y-3">
               {juryResults.ranking.map((p, i) => (
-                <div key={p.id} className={`flex items-center gap-3 rounded-2xl p-4 border ${i === 0 ? "bg-orange-50 border-orange-200" : "bg-white border-slate-200"} shadow-sm`}>
+                <div key={p.id} className={`flex items-center gap-3 rounded-2xl p-4 border shadow-sm ${i === 0 ? "bg-orange-50 border-orange-200" : "bg-white border-slate-200"}`}>
                   <span className="text-2xl">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-slate-900">{p.name}</p>
@@ -213,24 +253,69 @@ export default function VoteJury() {
     );
   }
 
+  /* ── En attente d'un projet ── */
   if (!status?.active_project) {
+    const juryList = status?.jury_list || [];
+    const projectCount = status?.project_count || 0;
+
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-orange-50 to-white px-4 text-center">
-        <div className="text-5xl mb-4">{juryInfo?.avatar || "🧑"}</div>
-        <p className="text-lg font-semibold text-slate-800 mb-1">Bonjour {juryInfo?.pseudo} !</p>
-        <div className="flex items-center gap-2 text-slate-500 text-sm mt-3">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>En attente du prochain projet...</span>
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
+        <div className="max-w-md mx-auto">
+          <div className="text-center mb-6">
+            <div className="text-5xl mb-2">{juryInfo?.avatar || "🧑"}</div>
+            <p className="text-lg font-semibold text-slate-800">{juryInfo?.pseudo}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Membre du jury</p>
+          </div>
+
+          {juryList.length > 0 && (
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 mb-3">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                Jurés connectés ({juryList.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {juryList.map(j => (
+                  <div key={j.id} className="flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-2.5 py-1">
+                    <span className="text-base leading-none">{j.avatar}</span>
+                    <span className="text-xs text-slate-700 font-medium">{j.pseudo}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {projectCount > 0 && (
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 mb-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Projets</p>
+                <span className="text-xs font-semibold text-orange-600">0 / {projectCount}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full bg-orange-400 rounded-full" style={{ width: "0%" }} />
+              </div>
+            </div>
+          )}
+
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 text-slate-500 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>En attente du prochain projet...</span>
+            </div>
+            <p className="text-xs text-slate-400 mt-6">L&apos;administrateur lancera le vote sous peu</p>
+            <p className="mt-2 text-xs text-slate-400">Orange Digital Center Senegal</p>
+          </div>
         </div>
-        <p className="text-xs text-slate-400 mt-8">L&apos;administrateur lancera le vote sous peu</p>
-        <p className="mt-2 text-xs text-slate-400">Orange Digital Center Senegal</p>
       </div>
     );
   }
 
+  /* ── Projet actif ── */
   const proj = status.active_project;
   const criteria = status.criteria || [];
-  const hasAllScores = criteria.every(c => scores[c.id]?.score != null);
+  const projectIndex = status.project_index;
+  const projectCount = status.project_count;
+  const votedCount = status.voted_count || 0;
+  const juryTotal = status.jury_total || 0;
+  const juryList = status.jury_list || [];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
@@ -239,7 +324,11 @@ export default function VoteJury() {
         {/* Header */}
         <div className="text-center mb-6">
           <div className="text-3xl mb-2">{juryInfo?.avatar || "🧑"}</div>
-          <p className="text-xs uppercase tracking-widest text-orange-500 font-semibold mb-1">Notation</p>
+          {projectIndex && projectCount && (
+            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 bg-orange-50 border border-orange-200 rounded-full px-3 py-1 mb-2">
+              Projet {projectIndex} sur {projectCount}
+            </div>
+          )}
           <h1 className="text-xl font-bold text-slate-900">{proj.name}</h1>
           {proj.porteur && <p className="text-sm text-slate-500 mt-0.5">{proj.porteur}</p>}
           {proj.description && (
@@ -253,56 +342,81 @@ export default function VoteJury() {
         )}
 
         {submitted ? (
-          /* Already voted — show summary */
-          <div className="rounded-2xl bg-white border border-green-200 shadow-sm p-5 mb-4">
-            <div className="flex items-center gap-2 text-green-600 mb-3">
-              <CheckCircle2 className="w-5 h-5" />
-              <p className="font-semibold text-sm">Votes enregistrés !</p>
-            </div>
-            <p className="text-xs text-slate-500 mb-4">En attente de la fin des votes pour ce projet.</p>
-            <div className="space-y-2">
-              {criteria.map(c => {
-                const s = scores[c.id];
-                return (
+          <div className="space-y-3">
+            {/* Résumé votes */}
+            <div className="rounded-2xl bg-white border border-green-200 shadow-sm p-5">
+              <div className="flex items-center gap-2 text-green-600 mb-3">
+                <CheckCircle2 className="w-5 h-5" />
+                <p className="font-semibold text-sm">Votes enregistrés !</p>
+              </div>
+              <div className="space-y-2 mb-4">
+                {criteria.map(c => (
                   <div key={c.id} className="flex items-center justify-between text-sm">
                     <span className="text-slate-600 truncate flex-1">{c.name}</span>
-                    <span className="font-bold text-orange-600 ml-3">{s?.score ?? "—"} / {c.scale}</span>
+                    <span className="font-bold text-orange-600 ml-3">{scores[c.id]?.score ?? "—"} / {c.scale}</span>
                   </div>
-                );
-              })}
+                ))}
+              </div>
+              <button
+                onClick={() => setSubmitted(false)}
+                className="w-full rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Modifier mes notes
+              </button>
             </div>
-            <button
-              onClick={() => setSubmitted(false)}
-              className="mt-4 w-full rounded-xl border border-slate-200 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-            >
-              Modifier mes notes
-            </button>
+
+            {/* Progression des votes du jury */}
+            <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Jurés ayant voté</p>
+                <span className="text-xs font-semibold text-slate-800">{votedCount} / {juryTotal}</span>
+              </div>
+              <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden mb-3">
+                <div
+                  className="h-full bg-orange-400 rounded-full transition-all duration-500"
+                  style={{ width: juryTotal > 0 ? `${(votedCount / juryTotal) * 100}%` : "0%" }}
+                />
+              </div>
+              {juryList.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {juryList.map(j => (
+                    <div
+                      key={j.id}
+                      className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-medium transition-colors ${
+                        j.voted
+                          ? "bg-green-50 border-green-200 text-green-700"
+                          : "bg-slate-50 border-slate-100 text-slate-400"
+                      }`}
+                    >
+                      <span className="text-base leading-none">{j.avatar}</span>
+                      <span>{j.pseudo}</span>
+                      {j.voted && <CheckCircle2 className="w-3 h-3" />}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {juryTotal > 0 && votedCount < juryTotal && (
+                <p className="text-xs text-slate-400 mt-2">
+                  En attente de {juryTotal - votedCount} juré{juryTotal - votedCount > 1 ? "s" : ""}...
+                </p>
+              )}
+            </div>
           </div>
         ) : (
-          /* Voting form */
+          /* Formulaire de notation */
           <form onSubmit={handleSubmit} className="space-y-4">
             {criteria.map(c => {
               const val = scores[c.id]?.score ?? Math.ceil(c.scale / 2);
               const comment = scores[c.id]?.comment || "";
               return (
                 <div key={c.id} className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center justify-between">
                     <p className="font-semibold text-sm text-slate-800">{c.name}</p>
-                    <span className="text-xl font-bold text-orange-500">{val}<span className="text-slate-400 text-sm font-normal"> / {c.scale}</span></span>
+                    <span className="text-xl font-bold text-orange-500">
+                      {val}<span className="text-slate-400 text-sm font-normal"> / {c.scale}</span>
+                    </span>
                   </div>
-                  <input
-                    type="range"
-                    min={1}
-                    max={c.scale}
-                    step={1}
-                    value={val}
-                    onChange={e => setScore(c.id, Number(e.target.value))}
-                    className="w-full accent-orange-500"
-                  />
-                  <div className="flex justify-between text-xs text-slate-400 mt-1">
-                    <span>1</span>
-                    <span>{c.scale}</span>
-                  </div>
+                  <ScoreInput value={val} scale={c.scale} onChange={score => setScore(c.id, score)} />
                   <details className="mt-3">
                     <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">
                       + Ajouter un commentaire

@@ -607,28 +607,45 @@ router.post("/recover/:sessionId", async (req, res) => {
 router.get("/jury/status", juryAuth, async (req, res) => {
   try {
     const sessionId = req.jury.session_id;
-    const sessRes = await pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]);
+
+    const [sessRes, critRes, projectsRes, juryRes] = await Promise.all([
+      pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
+      pool.query("SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num", [sessionId]),
+      pool.query("SELECT id FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+      pool.query("SELECT id, pseudo, avatar FROM vote_jury WHERE session_id=$1 ORDER BY joined_at", [sessionId]),
+    ]);
+
     const session = sessRes.rows[0];
-    const critRes = await pool.query(
-      "SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num",
-      [sessionId]
-    );
+    const projects = projectsRes.rows;
+    const juryMembers = juryRes.rows;
 
     let active_project = null;
     let my_scores = {};
+    let voted_count = 0;
+    let project_index = null;
+    let jury_list = juryMembers.map(j => ({ id: j.id, pseudo: j.pseudo, avatar: j.avatar, voted: false }));
 
     if (session.active_project_id) {
-      const [projRes, scoresRes] = await Promise.all([
+      const idx = projects.findIndex(p => p.id === session.active_project_id);
+      project_index = idx >= 0 ? idx + 1 : null;
+
+      const [projRes, scoresRes, votedRes] = await Promise.all([
         pool.query("SELECT * FROM vote_projects WHERE id=$1", [session.active_project_id]),
         pool.query(
           "SELECT criteria_id, score, comment FROM vote_scores WHERE project_id=$1 AND jury_id=$2",
           [session.active_project_id, req.jury.id]
         ),
+        pool.query("SELECT DISTINCT jury_id FROM vote_scores WHERE project_id=$1", [session.active_project_id]),
       ]);
+
       active_project = projRes.rows[0] || null;
       scoresRes.rows.forEach(r => {
         my_scores[r.criteria_id] = { score: parseFloat(r.score), comment: r.comment };
       });
+
+      const votedIds = new Set(votedRes.rows.map(r => r.jury_id));
+      voted_count = votedIds.size;
+      jury_list = juryMembers.map(j => ({ id: j.id, pseudo: j.pseudo, avatar: j.avatar, voted: votedIds.has(j.id) }));
     }
 
     res.json({
@@ -639,6 +656,11 @@ router.get("/jury/status", juryAuth, async (req, res) => {
       criteria: critRes.rows,
       my_scores,
       jury: { pseudo: req.jury.pseudo, avatar: req.jury.avatar },
+      voted_count,
+      jury_total: juryMembers.length,
+      project_index,
+      project_count: projects.length,
+      jury_list,
     });
   } catch (err) {
     console.error(err);
