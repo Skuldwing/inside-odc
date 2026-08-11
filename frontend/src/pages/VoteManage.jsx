@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy, Timer,
+  ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy,
   MessageCircleQuestion, Download, X,
 } from "lucide-react";
 import api from "../api";
 
+/* Timer SVG circulaire — partagé avec VoteJury */
 function PitchTimer({ startedAt, durationMinutes, label }) {
   const [timeLeft, setTimeLeft] = useState(null);
 
@@ -20,35 +21,63 @@ function PitchTimer({ startedAt, durationMinutes, label }) {
 
   if (timeLeft === null) return null;
 
+  const isQa    = !!label;
   const elapsed = timeLeft <= 0;
+  const urgent  = !elapsed && timeLeft <= 10;
+  const warning = !elapsed && timeLeft <= 30;
+
+  const R    = 38;
+  const circ = 2 * Math.PI * R;
+  const pct  = Math.max(0, Math.min(1, timeLeft / (durationMinutes * 60)));
+  const dashOffset = circ * (1 - pct);
+  const stroke = elapsed ? "#ef4444" : warning ? "#f59e0b" : isQa ? "#a855f7" : "#f97316";
+
   const mins = Math.floor(Math.abs(timeLeft) / 60);
   const secs = Math.abs(timeLeft) % 60;
-  const display = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-  const pct = Math.max(0, Math.min(100, (timeLeft / (durationMinutes * 60)) * 100));
-  const isQa = !!label;
-  const activeColor = isQa ? "bg-purple-400" : "bg-orange-400";
-  const activeBorder = isQa
-    ? (elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-purple-200 bg-purple-50")
-    : (elapsed ? "border-red-200 bg-red-50" : timeLeft < 30 ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-slate-50");
+  const fmt  = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 
   return (
-    <div className={`rounded-xl border px-4 py-3 mb-4 ${activeBorder}`}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-          {isQa ? <MessageCircleQuestion className="w-3.5 h-3.5 text-purple-500" /> : <Timer className="w-3.5 h-3.5" />}
-          {label || `Durée pitch`} ({durationMinutes} min)
+    <div className={`flex items-center gap-4 rounded-xl border px-4 py-3 mb-4 ${
+      elapsed ? "border-red-200 bg-red-50"
+      : warning ? "border-amber-200 bg-amber-50"
+      : isQa   ? "border-purple-200 bg-purple-50"
+      : "border-slate-200 bg-slate-50"
+    } ${urgent ? "anim-timer-urgent" : ""}`}>
+      {/* Cercle SVG compact */}
+      <div className="relative flex-shrink-0" style={{ width: 88, height: 88 }}>
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 88 88">
+          <circle cx="44" cy="44" r={R} fill="none" stroke="#e2e8f0" strokeWidth="6" />
+          <circle
+            cx="44" cy="44" r={R}
+            fill="none"
+            stroke={stroke}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={circ}
+            strokeDashoffset={dashOffset}
+            style={{ transition: "stroke-dashoffset 1s linear, stroke 0.5s ease" }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className={`text-base font-bold tabular-nums leading-none ${
+            elapsed ? "text-red-600" : warning ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"
+          }`}>
+            {elapsed ? `+${fmt}` : fmt}
+          </span>
         </div>
-        <span className={`font-mono font-bold text-xl tabular-nums ${elapsed ? "text-red-600" : timeLeft < 30 ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"}`}>
-          {elapsed ? "+" : ""}{display}
-        </span>
       </div>
-      <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all duration-1000 ${elapsed ? "bg-red-400 w-full" : timeLeft < 30 ? "bg-amber-400" : activeColor}`}
-          style={{ width: elapsed ? "100%" : `${pct}%` }}
-        />
+      {/* Info textuelle */}
+      <div>
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          {isQa ? "Q & R" : "Pitch"} · {durationMinutes} min
+        </p>
+        {elapsed
+          ? <p className="text-sm font-bold text-red-600 mt-0.5">Temps écoulé</p>
+          : warning
+          ? <p className="text-sm font-semibold text-amber-600 mt-0.5">Moins de 30 secondes !</p>
+          : <p className="text-sm text-slate-500 mt-0.5">En cours...</p>
+        }
       </div>
-      {elapsed && <p className="text-xs text-red-600 mt-1.5 font-medium">Temps écoulé</p>}
     </div>
   );
 }
