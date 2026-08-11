@@ -33,6 +33,7 @@ import {
   localDateTimeToIso,
   createField,
   createEditor,
+  migrateField,
 } from "./formulaires/helpers";
 
 /* ── TabBar ── */
@@ -323,22 +324,7 @@ export default function Formulaires() {
         slug: form.slug || "",
         fields:
           Array.isArray(form.fields) && form.fields.length
-            ? form.fields.map((f, idx) => ({
-                ...createField("text", idx + 1),
-                ...f,
-                page: Number(f?.page) > 0 ? Number(f.page) : 1,
-                show_if:
-                  f?.show_if &&
-                  typeof f.show_if === "object" &&
-                  f.show_if.key &&
-                  f.show_if.operator
-                    ? {
-                        key: String(f.show_if.key),
-                        operator: String(f.show_if.operator),
-                        value: String(f.show_if.value ?? ""),
-                      }
-                    : null,
-              }))
+            ? form.fields.map((f, idx) => migrateField(f, idx))
             : [createField("text", 1)],
         settings: {
           ...defaultSettings(),
@@ -346,6 +332,7 @@ export default function Formulaires() {
           open_at: isoToLocalDateTime(form?.settings?.open_at),
           close_at: isoToLocalDateTime(form?.settings?.close_at),
         },
+
         submissions_count: Number(form.submissions_count || 0),
       });
       setSubmissions([]);
@@ -444,8 +431,13 @@ export default function Formulaires() {
       if (isChoiceField && options.length === 0) {
         errors.push({ message: `Champ ${idx + 1}: ajoutez au moins une option.`, fieldIndex: idx });
       }
-      if (field?.show_if && !String(field.show_if.key || "").trim()) {
-        errors.push({ message: `Champ ${idx + 1}: sélectionnez un champ pour la condition.`, fieldIndex: idx });
+      if (field?.show_if?.rules) {
+        for (const rule of field.show_if.rules) {
+          if (!String(rule.key || "").trim()) {
+            errors.push({ message: `Champ ${idx + 1}: sélectionnez un champ pour chaque condition.`, fieldIndex: idx });
+            break;
+          }
+        }
       }
     });
 
@@ -487,10 +479,8 @@ export default function Formulaires() {
           ...f,
           page: Number(f.page) > 0 ? Number(f.page) : 1,
           options: Array.isArray(f.options) ? f.options.filter(Boolean) : [],
-          show_if:
-            f.show_if && f.show_if.key
-              ? { key: f.show_if.key, operator: f.show_if.operator || "eq", value: String(f.show_if.value ?? "") }
-              : null,
+          show_if: f.show_if?.rules?.length ? f.show_if : null,
+          jump_rules: Array.isArray(f.jump_rules) ? f.jump_rules : [],
         })),
       };
       if (editor.id) {
@@ -584,20 +574,6 @@ export default function Formulaires() {
       ...prev,
       fields: prev.fields.map((field, idx) => (idx === index ? { ...field, ...patch } : field)),
     }));
-  };
-
-  const toggleFieldCondition = (index, enabled) => {
-    setEditor((prev) => {
-      const fallbackKey = prev.fields.find((_, idx) => idx !== index && prev.fields[idx]?.key)?.key || "";
-      return {
-        ...prev,
-        fields: prev.fields.map((field, idx) => {
-          if (idx !== index) return field;
-          if (!enabled) return { ...field, show_if: null };
-          return { ...field, show_if: { key: fallbackKey, operator: "eq", value: "" } };
-        }),
-      };
-    });
   };
 
   const toggleFieldCollapsed = (index) => {
@@ -891,6 +867,7 @@ export default function Formulaires() {
                           field={field}
                           idx={idx}
                           total={editor.fields.length}
+                          totalPages={totalPages}
                           otherFields={editor.fields.filter((_, i) => i !== idx)}
                           isCollapsed={Boolean(collapsedFields[idx])}
                           isDragging={draggedFieldIndex === idx}
@@ -901,7 +878,6 @@ export default function Formulaires() {
                           onMoveUp={() => moveField(idx, idx - 1)}
                           onMoveDown={() => moveField(idx, idx + 1)}
                           onToggleCollapsed={() => toggleFieldCollapsed(idx)}
-                          onToggleCondition={(enabled) => toggleFieldCondition(idx, enabled)}
                           onDragStart={() => setDraggedFieldIndex(idx)}
                           onDrop={() => {
                             if (draggedFieldIndex !== null) moveField(draggedFieldIndex, idx);
