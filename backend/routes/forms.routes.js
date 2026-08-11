@@ -7,18 +7,15 @@ const requireAdmin = require("../middleware/role.middleware");
 const router = express.Router();
 
 const ALLOWED_FIELD_TYPES = new Set([
-  "text",
-  "email",
-  "phone",
-  "textarea",
-  "number",
-  "date",
-  "select",
-  "checkbox",
-  "rating",
-  "separator",
+  "text", "email", "phone", "url", "textarea",
+  "number", "scale", "date", "time",
+  "select", "radio", "checkbox", "yes_no",
+  "rating", "separator",
 ]);
-const ALLOWED_CONDITION_OPERATORS = new Set(["eq", "neq", "contains"]);
+const ALLOWED_CONDITION_OPERATORS = new Set([
+  "eq", "neq", "contains", "starts_with", "ends_with",
+  "gt", "lt", "gte", "lte", "is_empty", "is_not_empty",
+]);
 const DEFAULT_SETTINGS = {
   primary_color: "#0f766e",
   logo_url: "",
@@ -65,19 +62,39 @@ async function createUniqueSlug(client, title, formIdToIgnore = null) {
   }
 }
 
-function sanitizeShowIf(showIf) {
-  if (!showIf || typeof showIf !== "object" || Array.isArray(showIf)) return null;
-  const key = String(showIf.key || "").trim();
-  const operator = String(showIf.operator || "eq").toLowerCase().trim();
+function sanitizeRule(rule) {
+  if (!rule || typeof rule !== "object") return null;
+  const key = String(rule.key || "").trim();
+  const operator = String(rule.operator || "eq").toLowerCase().trim();
   if (!key || !ALLOWED_CONDITION_OPERATORS.has(operator)) return null;
-
-  let value = showIf.value;
+  const noValue = ["is_empty", "is_not_empty"].includes(operator);
+  let value = noValue ? "" : rule.value;
   if (typeof value === "string") value = value.trim();
   else if (typeof value === "number" || typeof value === "boolean") value = value;
   else if (value === null || value === undefined) value = "";
   else value = String(value);
-
   return { key, operator, value };
+}
+
+function sanitizeShowIf(showIf) {
+  if (!showIf || typeof showIf !== "object") return null;
+
+  // Nouveau format : { logic, rules: [{key, operator, value}] }
+  if (Array.isArray(showIf.rules)) {
+    const rules = showIf.rules.map(sanitizeRule).filter(Boolean);
+    if (!rules.length) return null;
+    const logic = showIf.logic === "OR" ? "OR" : "AND";
+    return { logic, rules };
+  }
+
+  // Ancien format : { key, operator, value }
+  if (showIf.key) {
+    const rule = sanitizeRule(showIf);
+    if (!rule) return null;
+    return { logic: "AND", rules: [rule] };
+  }
+
+  return null;
 }
 
 function sanitizeSettings(input) {
@@ -156,9 +173,28 @@ function sanitizeFields(inputFields) {
       const key = slugify(keyRaw || label).replace(/-/g, "_") || `field_${idx + 1}`;
       const required = Boolean(field?.required);
       const placeholder = String(field?.placeholder || "").trim();
+      const help_text = String(field?.help_text || "").trim();
+      const default_value = String(field?.default_value ?? "").trim();
+      const col_span = ["full", "half", "third", "two-thirds"].includes(field?.col_span)
+        ? field.col_span : "full";
+
       const options = Array.isArray(field?.options)
         ? field.options.map((o) => String(o || "").trim()).filter(Boolean).slice(0, 100)
         : [];
+      const hasOptions = ["select", "radio", "checkbox", "yes_no"].includes(type);
+
+      const minVal = field?.min !== undefined && field?.min !== "" ? String(field.min) : null;
+      const maxVal = field?.max !== undefined && field?.max !== "" ? String(field.max) : null;
+      const minLength = field?.min_length !== undefined && field?.min_length !== "" ? Number(field.min_length) || null : null;
+      const maxLength = field?.max_length !== undefined && field?.max_length !== "" ? Number(field.max_length) || null : null;
+
+      const jump_rules = Array.isArray(field?.jump_rules)
+        ? field.jump_rules
+            .filter(r => r && typeof r === "object")
+            .map(r => ({ value: String(r.value ?? ""), page: Math.max(1, Number(r.page) || 1) }))
+            .slice(0, 20)
+        : [];
+
       const pageValue = Number(field?.page);
       const page = Number.isFinite(pageValue) && pageValue >= 1 ? Math.floor(pageValue) : 1;
       const show_if = sanitizeShowIf(field?.show_if);
@@ -169,7 +205,15 @@ function sanitizeFields(inputFields) {
         type,
         required,
         placeholder: placeholder || null,
-        options: (type === "select" || type === "checkbox") ? options : [],
+        help_text: help_text || null,
+        default_value: default_value || null,
+        col_span,
+        options: hasOptions ? options : [],
+        min: minVal,
+        max: maxVal,
+        min_length: minLength,
+        max_length: maxLength,
+        jump_rules,
         page,
         show_if,
       };
