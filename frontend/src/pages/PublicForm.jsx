@@ -551,7 +551,10 @@ export default function PublicForm() {
             )}
             <h1 className="text-2xl font-semibold text-slate-900 sm:text-3xl">{form?.title || "Formulaire"}</h1>
             {form?.description && (
-              <p className="mt-2 max-w-2xl text-slate-600">{form.description}</p>
+              <div
+                className="mt-2 max-w-2xl text-slate-600 prose prose-sm"
+                dangerouslySetInnerHTML={{ __html: form.description }}
+              />
             )}
             <div className="mt-5">
               <div className="mb-2 flex items-center justify-between text-xs font-medium uppercase tracking-wide text-slate-500">
@@ -578,7 +581,10 @@ export default function PublicForm() {
             }}
           >
             <h2 className="text-xl font-semibold" style={{ color: primaryColor }}>Réponse envoyée ✓</h2>
-            <p className="mt-2 text-slate-700">{settings.success_message}</p>
+            <div
+              className="mt-2 text-slate-700 prose prose-sm"
+              dangerouslySetInnerHTML={{ __html: settings.success_message }}
+            />
           </section>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

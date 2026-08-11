@@ -6,6 +6,7 @@ import {
   BarChart3, ArrowUp, ArrowDown, ChevronDown,
 } from "lucide-react";
 import api from "../api";
+import RichTextEditor from "../components/RichTextEditor";
 import FieldEditor from "./formulaires/FieldEditor";
 import FormBrandingPanel from "./formulaires/FormBrandingPanel";
 import FormSettingsPanel from "./formulaires/FormSettingsPanel";
@@ -526,12 +527,12 @@ export default function FormulaireEditor() {
             {/* Description */}
             <div className="sm:col-span-2 space-y-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Description (introduction)</label>
-                <textarea
-                  className="input mt-1 min-h-[52px] text-sm resize-none"
-                  placeholder="Texte d'introduction affiché en haut du formulaire…"
+                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-1">Description (introduction)</label>
+                <RichTextEditor
                   value={editor.description}
-                  onChange={e => setEditor(prev => ({ ...prev, description: e.target.value }))}
+                  onChange={val => setEditor(prev => ({ ...prev, description: val }))}
+                  placeholder="Texte d'introduction affiché en haut du formulaire…"
+                  minHeight={60}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -545,12 +546,12 @@ export default function FormulaireEditor() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Texte de fin (après envoi)</label>
-                  <textarea
-                    className="input mt-1 min-h-[52px] text-sm resize-none"
-                    placeholder="Merci, votre réponse a été enregistrée."
+                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-1">Texte de fin (après envoi)</label>
+                  <RichTextEditor
                     value={editor.settings?.success_message || ""}
-                    onChange={e => setEditor(prev => ({ ...prev, settings: { ...prev.settings, success_message: e.target.value } }))}
+                    onChange={val => setEditor(prev => ({ ...prev, settings: { ...prev.settings, success_message: val } }))}
+                    placeholder="Merci, votre réponse a été enregistrée."
+                    minHeight={60}
                   />
                 </div>
               </div>
