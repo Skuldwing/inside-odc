@@ -1,92 +1,57 @@
-import { useState, useRef, useEffect } from "react";
-import {
-  ChevronDown, ChevronUp, Trash2, Copy, ArrowUp, ArrowDown,
-  GripVertical, Plus, X, Minus, GitBranch, Filter,
-} from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Plus, ChevronDown, Copy, Trash2, GripVertical, GitBranch } from "lucide-react";
 import { FIELD_TYPES, CONDITION_OPERATORS } from "./constants";
 
-/* ── Type color map ── */
-const TYPE_COLORS = {
-  text:      "bg-blue-50 text-blue-700",
-  textarea:  "bg-blue-50 text-blue-700",
-  email:     "bg-violet-50 text-violet-700",
-  phone:     "bg-violet-50 text-violet-700",
-  url:       "bg-violet-50 text-violet-700",
-  number:    "bg-amber-50 text-amber-700",
-  scale:     "bg-amber-50 text-amber-700",
-  date:      "bg-cyan-50 text-cyan-700",
-  time:      "bg-cyan-50 text-cyan-700",
-  select:    "bg-emerald-50 text-emerald-700",
-  radio:     "bg-emerald-50 text-emerald-700",
-  checkbox:  "bg-emerald-50 text-emerald-700",
-  yes_no:    "bg-emerald-50 text-emerald-700",
-  rating:    "bg-orange-50 text-orange-700",
-  separator: "bg-slate-100 text-slate-500",
-};
-
-function TypeBadge({ type }) {
-  const ft = FIELD_TYPES.find(t => t.value === type);
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold flex-shrink-0 ${TYPE_COLORS[type] || "bg-slate-50 text-slate-600"}`}>
-      <span>{ft?.icon}</span>
-      <span className="hidden sm:inline">{ft?.label || type}</span>
-    </span>
-  );
-}
-
-/* ── Type picker popup ── */
+/* ─────────────────────────────────────────
+   TypePicker — dropdown groupé
+───────────────────────────────────────── */
 function TypePicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
   const current = FIELD_TYPES.find(t => t.value === value);
   const groups = {};
   for (const ft of FIELD_TYPES) {
     if (!groups[ft.group]) groups[ft.group] = [];
     groups[ft.group].push(ft);
   }
-
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
-        className="input mt-1 text-sm flex items-center gap-2 cursor-pointer select-none"
         onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all"
       >
-        <span className="text-base leading-none">{current?.icon}</span>
-        <span className="flex-1 text-left truncate">{current?.label || value}</span>
-        <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+        <span className="flex items-center gap-2">
+          <span className="text-base">{current?.icon}</span>
+          <span className="font-medium text-slate-700">{current?.label || value}</span>
+        </span>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="absolute z-30 top-full left-0 mt-1 w-68 rounded-xl border border-slate-200 bg-white shadow-xl overflow-y-auto max-h-80" style={{ width: "17rem" }}>
+        <div className="absolute z-50 top-full left-0 mt-1 w-64 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-y-auto max-h-72 p-2">
           {Object.entries(groups).map(([group, types]) => (
-            <div key={group}>
-              <p className="px-3 pt-2.5 pb-0.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                {group}
-              </p>
-              <div className="px-1.5 pb-1.5">
-                {types.map(ft => (
-                  <button
-                    key={ft.value}
-                    type="button"
-                    onClick={() => { onChange(ft.value); setOpen(false); }}
-                    className={`w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-left transition-colors ${
-                      value === ft.value
-                        ? "bg-orange-50 text-orange-700 font-semibold"
-                        : "text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    <span className="text-base leading-none w-5 flex-shrink-0">{ft.icon}</span>
-                    {ft.label}
-                  </button>
-                ))}
-              </div>
+            <div key={group} className="mb-1">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-2 py-1">{group}</p>
+              {types.map(ft => (
+                <button
+                  key={ft.value}
+                  type="button"
+                  onClick={() => { onChange(ft.value); setOpen(false); }}
+                  className={`w-full flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-xs text-left transition-colors ${
+                    ft.value === value
+                      ? "bg-orange-50 text-orange-700 font-semibold"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <span className="text-base leading-none w-5 flex-shrink-0">{ft.icon}</span>
+                  {ft.label}
+                </button>
+              ))}
             </div>
           ))}
         </div>
@@ -95,529 +60,413 @@ function TypePicker({ value, onChange }) {
   );
 }
 
-/* ── Multi-rule conditions editor ── */
-function ConditionsEditor({ conditions, otherFields, onUpdate, onRemove }) {
-  const rules = conditions?.rules || [];
-  const logic = conditions?.logic || "AND";
-  const eligible = otherFields.filter(f => f.type !== "separator" && f.key);
+/* ─────────────────────────────────────────
+   OptionList — liste d'options avec état local
+   (évite la fermeture du clavier mobile)
+───────────────────────────────────────── */
+function OptionList({ options, onChange }) {
+  const [local, setLocal] = useState(options || []);
+  useEffect(() => { setLocal(options || []); }, [options]);
 
-  const addRule = () => {
-    onUpdate({ logic, rules: [...rules, { key: eligible[0]?.key || "", operator: "eq", value: "" }] });
+  const update = (i, val) => {
+    const next = [...local];
+    next[i] = val;
+    setLocal(next);
   };
-
-  const updateRule = (idx, patch) => {
-    onUpdate({ logic, rules: rules.map((r, i) => i === idx ? { ...r, ...patch } : r) });
+  const commit = (i, val) => {
+    const next = [...local];
+    next[i] = val;
+    onChange(next.filter(Boolean));
   };
-
-  const removeRule = (idx) => {
-    const next = rules.filter((_, i) => i !== idx);
-    if (!next.length) { onRemove(); return; }
-    onUpdate({ logic, rules: next });
+  const add = () => {
+    const next = [...local, ""];
+    setLocal(next);
+    setTimeout(() => {
+      const inputs = document.querySelectorAll("[data-option-input]");
+      if (inputs[inputs.length - 1]) inputs[inputs.length - 1].focus();
+    }, 50);
+  };
+  const remove = i => {
+    const next = local.filter((_, idx) => idx !== i);
+    setLocal(next);
+    onChange(next.filter(Boolean));
   };
 
   return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50/60 p-3 space-y-2">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-1.5 text-xs text-slate-700">
-          <span className="font-medium">Afficher si</span>
-          <select
-            className="rounded-lg border border-orange-200 bg-white px-2 py-0.5 text-xs font-semibold text-orange-700 focus:outline-none"
-            value={logic}
-            onChange={e => onUpdate({ logic: e.target.value, rules })}
-          >
-            <option value="AND">TOUTES les conditions</option>
-            <option value="OR">AU MOINS UNE condition</option>
-          </select>
-          <span className="text-slate-500">sont remplies</span>
+    <div className="space-y-1.5">
+      {local.map((opt, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <GripVertical className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+          <input
+            data-option-input
+            className="input flex-1 text-sm py-1.5"
+            value={opt}
+            placeholder={`Option ${i + 1}`}
+            onChange={e => update(i, e.target.value)}
+            onBlur={e => commit(i, e.target.value)}
+          />
+          <button type="button" onClick={() => remove(i)}
+            className="flex-shrink-0 p-1 rounded-lg text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
-        <button type="button" onClick={onRemove} className="p-1 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500 transition-colors">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {rules.map((rule, idx) => {
-        const noValue = rule.operator === "is_empty" || rule.operator === "is_not_empty";
-        return (
-          <div key={idx} className="space-y-1">
-            {idx > 0 && (
-              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wide">{logic === "AND" ? "— ET —" : "— OU —"}</p>
-            )}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <select
-                className="select text-xs flex-1 min-w-0"
-                value={rule.key}
-                onChange={e => updateRule(idx, { key: e.target.value })}
-              >
-                <option value="">Champ…</option>
-                {eligible.map(f => (
-                  <option key={f.key} value={f.key}>{f.label} ({f.key})</option>
-                ))}
-              </select>
-              <select
-                className="select text-xs w-36 flex-shrink-0"
-                value={rule.operator}
-                onChange={e => updateRule(idx, { operator: e.target.value })}
-              >
-                {CONDITION_OPERATORS.map(op => (
-                  <option key={op.value} value={op.value}>{op.label}</option>
-                ))}
-              </select>
-              {!noValue && (
-                <input
-                  className="input text-xs w-28 flex-shrink-0"
-                  value={rule.value ?? ""}
-                  placeholder="Valeur…"
-                  onChange={e => updateRule(idx, { value: e.target.value })}
-                />
-              )}
-              <button type="button" onClick={() => removeRule(idx)} className="p-1 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500 flex-shrink-0 transition-colors">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        );
-      })}
-
-      <button
-        type="button"
-        onClick={addRule}
-        className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-800 font-semibold transition-colors"
-      >
-        <Plus className="w-3 h-3" /> Ajouter une condition
+      ))}
+      <button type="button" onClick={add}
+        className="flex items-center gap-1.5 text-xs text-orange-600 hover:text-orange-700 font-medium py-1 transition-colors">
+        <Plus className="w-3.5 h-3.5" /> Ajouter une option
       </button>
     </div>
   );
 }
 
-/* ── Jump rules editor ── */
-function JumpRulesEditor({ jumpRules, totalPages, field, onUpdate }) {
-  const rules = jumpRules || [];
-  const yesNoOptions = ["Oui", "Non"];
-  const options = field.type === "yes_no" ? yesNoOptions : (field.options || []);
+/* ─────────────────────────────────────────
+   ConditionsEditor — logique conditionnelle multi-règles
+───────────────────────────────────────── */
+function ConditionsEditor({ showIf, otherFields, totalPages, onChange }) {
+  const logic = showIf?.logic || "AND";
+  const rules  = showIf?.rules || [];
+  const textFields = otherFields.filter(f => f.type !== "separator");
 
-  const addRule = () => {
-    onUpdate([...rules, { value: options[0] || "", page: 2 }]);
+  const setLogic = v => onChange({ ...(showIf || {}), logic: v, rules });
+  const addRule  = () => onChange({ logic, rules: [...rules, { key: "", operator: "eq", value: "" }] });
+  const removeRule = i => {
+    const next = rules.filter((_, idx) => idx !== i);
+    if (!next.length) { onChange(null); return; }
+    onChange({ logic, rules: next });
+  };
+  const updateRule = (i, patch) => {
+    const next = rules.map((r, idx) => idx === i ? { ...r, ...patch } : r);
+    onChange({ logic, rules: next });
   };
 
-  const updateRule = (idx, patch) => {
-    onUpdate(rules.map((r, i) => i === idx ? { ...r, ...patch } : r));
-  };
-
-  const removeRule = (idx) => {
-    onUpdate(rules.filter((_, i) => i !== idx));
-  };
-
-  const maxPage = Math.max(totalPages, 2);
-  const pageOptions = Array.from({ length: maxPage }, (_, i) => i + 1);
+  if (!showIf || !rules.length) {
+    return (
+      <button type="button" onClick={() => onChange({ logic: "AND", rules: [{ key: "", operator: "eq", value: "" }] })}
+        className="flex items-center gap-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 py-1 transition-colors">
+        <Plus className="w-3.5 h-3.5" /> Ajouter une condition
+      </button>
+    );
+  }
 
   return (
-    <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
-      {rules.length === 0 && (
-        <p className="text-xs text-slate-400">Aucun saut défini — comportement séquentiel par défaut.</p>
-      )}
-      {rules.map((rule, idx) => (
-        <div key={idx} className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-slate-500 flex-shrink-0">Si réponse =</span>
-          {options.length > 0 ? (
-            <select
-              className="select text-xs flex-1 min-w-0"
-              value={rule.value}
-              onChange={e => updateRule(idx, { value: e.target.value })}
-            >
-              <option value="">— Sélectionner —</option>
-              {options.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          ) : (
-            <input
-              className="input text-xs flex-1 min-w-0"
-              value={rule.value || ""}
-              placeholder="Valeur…"
-              onChange={e => updateRule(idx, { value: e.target.value })}
-            />
-          )}
-          <span className="text-xs text-slate-500 flex-shrink-0">→ page</span>
-          <select
-            className="select text-xs w-16 flex-shrink-0"
-            value={rule.page}
-            onChange={e => updateRule(idx, { page: Number(e.target.value) })}
-          >
-            {pageOptions.map(p => <option key={p} value={p}>{p}</option>)}
+    <div className="space-y-2.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-slate-500">Afficher si</span>
+        {rules.length > 1 && (
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs font-medium">
+            {["AND", "OR"].map(v => (
+              <button key={v} type="button" onClick={() => setLogic(v)}
+                className={`px-2.5 py-1 transition-colors ${logic === v ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}>
+                {v === "AND" ? "TOUTES" : "UNE"} les règles
+              </button>
+            ))}
+          </div>
+        )}
+        <button type="button" onClick={() => onChange(null)}
+          className="ml-auto text-slate-300 hover:text-red-400 transition-colors"><X className="w-3.5 h-3.5" /></button>
+      </div>
+
+      {rules.map((rule, i) => (
+        <div key={i} className="flex flex-wrap items-center gap-1.5 bg-slate-50 rounded-xl p-2">
+          <select className="input text-xs py-1.5 flex-1 min-w-0"
+            value={rule.key}
+            onChange={e => updateRule(i, { key: e.target.value, value: "" })}>
+            <option value="">-- Champ --</option>
+            {textFields.map(f => <option key={f._id || f.key} value={f.key}>{f.label || f.key}</option>)}
           </select>
-          <button type="button" onClick={() => removeRule(idx)} className="p-1 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500 flex-shrink-0 transition-colors">
+          <select className="input text-xs py-1.5 w-36 flex-shrink-0"
+            value={rule.operator}
+            onChange={e => updateRule(i, { operator: e.target.value })}>
+            {CONDITION_OPERATORS.map(op => <option key={op.value} value={op.value}>{op.label}</option>)}
+          </select>
+          {!["is_empty", "is_not_empty"].includes(rule.operator) && (
+            <input className="input text-xs py-1.5 flex-1 min-w-0" placeholder="Valeur"
+              value={rule.value}
+              onChange={e => updateRule(i, { value: e.target.value })} />
+          )}
+          <button type="button" onClick={() => removeRule(i)}
+            className="p-1 rounded-lg text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
       ))}
 
-      <button
-        type="button"
-        onClick={addRule}
-        className="flex items-center gap-1 text-xs text-purple-700 hover:text-purple-900 font-semibold transition-colors"
-      >
-        <Plus className="w-3 h-3" /> Ajouter un saut
+      <button type="button" onClick={addRule}
+        className="flex items-center gap-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 transition-colors">
+        <Plus className="w-3.5 h-3.5" /> Ajouter une règle
       </button>
     </div>
   );
 }
 
-/* ══════════════════════════════════════════════════
-   Main FieldEditor
-══════════════════════════════════════════════════ */
-export default function FieldEditor({
-  field,
-  idx,
-  total,
-  totalPages,
-  otherFields,
-  isCollapsed,
-  isDragging,
-  canRemove,
-  onUpdate,
-  onRemove,
-  onDuplicate,
-  onMoveUp,
-  onMoveDown,
-  onToggleCollapsed,
-  onDragStart,
-  onDrop,
-  onDragEnd,
-}) {
-  const isSeparator  = field.type === "separator";
-  const isChoiceField = field.type === "select" || field.type === "radio" || field.type === "checkbox";
-  const canJump       = field.type === "select" || field.type === "radio" || field.type === "yes_no";
-  const hasValidBounds = field.type === "number" || field.type === "scale" || field.type === "date" || field.type === "time";
-  const hasLenBounds   = field.type === "text" || field.type === "textarea" || field.type === "email" || field.type === "url" || field.type === "phone";
+/* ─────────────────────────────────────────
+   JumpRulesEditor — sauts de page conditionnels
+───────────────────────────────────────── */
+function JumpRulesEditor({ rules, totalPages, onChange }) {
+  const addRule    = () => onChange([...rules, { value: "", page: 2 }]);
+  const removeRule = i  => onChange(rules.filter((_, idx) => idx !== i));
+  const updateRule = (i, patch) => onChange(rules.map((r, idx) => idx === i ? { ...r, ...patch } : r));
 
-  const conditions    = field.show_if;
-  const hasConditions = conditions && Array.isArray(conditions.rules) && conditions.rules.length > 0;
-  const jumpRules     = field.jump_rules || [];
-  const hasJumpRules  = jumpRules.length > 0;
-  const eligibleForCondition = otherFields.filter(f => f.type !== "separator" && f.key).length > 0;
-
-  const toggleConditions = () => {
-    if (hasConditions) {
-      onUpdate({ show_if: null });
-    } else {
-      const firstKey = otherFields.find(f => f.type !== "separator" && f.key)?.key || "";
-      onUpdate({ show_if: { logic: "AND", rules: [{ key: firstKey, operator: "eq", value: "" }] } });
-    }
-  };
-
-  const toggleJumpRules = () => {
-    if (hasJumpRules) {
-      onUpdate({ jump_rules: [] });
-    } else {
-      const defaultVal = field.type === "yes_no" ? "Oui" : (field.options?.[0] || "");
-      onUpdate({ jump_rules: [{ value: defaultVal, page: 2 }] });
-    }
-  };
-
-  /* ── Separator: compact inline ── */
-  if (isSeparator) {
+  if (!rules.length) {
     return (
-      <div
-        className={`rounded-xl border-2 border-dashed p-3 flex items-center gap-3 ${isDragging ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-slate-50/50"}`}
-        draggable
-        onDragStart={onDragStart}
-        onDragOver={e => e.preventDefault()}
-        onDrop={onDrop}
-        onDragEnd={onDragEnd}
-      >
-        <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0 cursor-grab" />
-        <Minus className="w-4 h-4 text-slate-400 flex-shrink-0" />
-        <input
-          className="input flex-1 text-sm font-semibold"
-          value={field.label}
-          placeholder="Titre de section…"
-          onChange={e => onUpdate({ label: e.target.value })}
-        />
-        <select
-          className="select text-xs w-20 flex-shrink-0"
-          value={field.page || 1}
-          onChange={e => onUpdate({ page: Number(e.target.value) })}
-        >
-          {[1,2,3,4,5].map(n => <option key={n} value={n}>P.{n}</option>)}
-        </select>
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button type="button" onClick={onMoveUp} disabled={idx === 0} className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5 text-slate-500" /></button>
-          <button type="button" onClick={onMoveDown} disabled={idx === total - 1} className="p-1 rounded hover:bg-slate-100 disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5 text-slate-500" /></button>
-          <button type="button" onClick={onDuplicate} className="p-1 rounded hover:bg-slate-100"><Copy className="w-3.5 h-3.5 text-slate-500" /></button>
-          <button type="button" onClick={onRemove} disabled={!canRemove} className="p-1 rounded hover:bg-red-50 disabled:opacity-30"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
-        </div>
-      </div>
+      <button type="button" onClick={addRule}
+        className="flex items-center gap-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 py-1 transition-colors">
+        <Plus className="w-3.5 h-3.5" /> Ajouter un saut de page
+      </button>
     );
   }
 
-  /* ── Regular field ── */
   return (
-    <div
-      className={`rounded-xl border bg-white transition-shadow ${isDragging ? "border-orange-300 ring-2 ring-orange-100 shadow-lg" : "border-slate-200 hover:border-slate-300"}`}
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={e => e.preventDefault()}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-    >
-      {/* ── Header bar ── */}
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <GripVertical className="w-4 h-4 text-slate-300 flex-shrink-0 cursor-grab active:cursor-grabbing" />
-        <span className="text-xs font-mono text-slate-400 w-5 text-center flex-shrink-0">{idx + 1}</span>
-        <TypeBadge type={field.type} />
-        {isCollapsed && (
-          <span className="text-xs text-slate-600 ml-1 truncate flex-1">
-            {field.label}{field.required ? " *" : ""}
-            {hasConditions && <span className="ml-1.5 text-[10px] text-orange-500 font-semibold">si…</span>}
-            {hasJumpRules && <span className="ml-1.5 text-[10px] text-purple-500 font-semibold">↪</span>}
-          </span>
+    <div className="space-y-2">
+      {rules.map((rule, i) => (
+        <div key={i} className="flex items-center gap-1.5 bg-slate-50 rounded-xl p-2 text-xs">
+          <span className="text-slate-500 flex-shrink-0">Si valeur =</span>
+          <input className="input py-1.5 flex-1 min-w-0 text-xs" placeholder="Valeur"
+            value={rule.value}
+            onChange={e => updateRule(i, { value: e.target.value })} />
+          <span className="text-slate-500 flex-shrink-0">→ Page</span>
+          <select className="input py-1.5 w-20 flex-shrink-0 text-xs"
+            value={rule.page}
+            onChange={e => updateRule(i, { page: Number(e.target.value) })}>
+            {Array.from({ length: totalPages }, (_, p) => p + 1).map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          <button type="button" onClick={() => removeRule(i)}
+            className="p-1 rounded-lg text-slate-300 hover:text-red-400 hover:bg-red-50 transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+      <button type="button" onClick={addRule}
+        className="flex items-center gap-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 transition-colors">
+        <Plus className="w-3.5 h-3.5" /> Ajouter une règle
+      </button>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   Section wrapper
+───────────────────────────────────────── */
+function Section({ title, children }) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-3">
+      <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{title}</h4>
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children, hint }) {
+  return (
+    <div className="space-y-1">
+      {label && <label className="text-xs font-semibold text-slate-600">{label}</label>}
+      {children}
+      {hint && <p className="text-[11px] text-slate-400 leading-snug">{hint}</p>}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   FieldEditor — panneau de configuration
+═══════════════════════════════════════════ */
+export default function FieldEditor({ field, idx, totalPages, otherFields, onUpdate, onRemove, onDuplicate }) {
+  const [localKey, setLocalKey] = useState(field.key || "");
+  useEffect(() => { setLocalKey(field.key || ""); }, [field.key]);
+
+  const isSep = field.type === "separator";
+  const hasOptions = ["select", "radio", "checkbox", "yes_no"].includes(field.type);
+  const hasMinMax  = ["number", "scale", "rating"].includes(field.type);
+  const hasLength  = ["text", "textarea", "email", "url"].includes(field.type);
+  const hasJump    = ["select", "radio", "yes_no"].includes(field.type) && totalPages > 1;
+
+  return (
+    <div className="p-4 space-y-3 bg-slate-50 min-h-full">
+
+      {/* ── Identité ── */}
+      <Section title="Identité">
+        <Field label="Libellé *">
+          <input className="input text-sm font-semibold" placeholder="Question ou libellé du champ"
+            value={field.label || ""}
+            onChange={e => onUpdate({ label: e.target.value })} />
+        </Field>
+
+        {!isSep && (
+          <Field label="Clé unique *" hint="Identifiant interne, sans espaces (ex: prenom, age_participant).">
+            <input
+              className="input text-sm font-mono"
+              placeholder="cle_unique"
+              value={localKey}
+              onChange={e => setLocalKey(e.target.value)}
+              onBlur={e => onUpdate({ key: e.target.value.trim().replace(/\s+/g, "_").toLowerCase() })}
+            />
+          </Field>
         )}
-        {!isCollapsed && <div className="flex-1" />}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button type="button" onClick={onMoveUp} disabled={idx === 0} title="Monter" className="p-1 rounded hover:bg-slate-100 disabled:opacity-30">
-            <ArrowUp className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          <button type="button" onClick={onMoveDown} disabled={idx === total - 1} title="Descendre" className="p-1 rounded hover:bg-slate-100 disabled:opacity-30">
-            <ArrowDown className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          <button type="button" onClick={onDuplicate} title="Dupliquer" className="p-1 rounded hover:bg-slate-100">
-            <Copy className="w-3.5 h-3.5 text-slate-400" />
-          </button>
-          <button type="button" onClick={onRemove} disabled={!canRemove} title="Supprimer" className="p-1 rounded hover:bg-red-50 disabled:opacity-30">
-            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-          </button>
-          <button type="button" onClick={onToggleCollapsed} className="p-1 rounded hover:bg-slate-100 ml-1">
-            {isCollapsed ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronUp className="w-4 h-4 text-slate-500" />}
-          </button>
-        </div>
-      </div>
 
-      {/* ── Expanded body ── */}
-      {!isCollapsed && (
-        <div className="border-t border-slate-100 px-4 pb-4 pt-3 space-y-4">
+        <Field label="Page">
+          <select className="input text-sm"
+            value={Number(field.page) || 1}
+            onChange={e => onUpdate({ page: Number(e.target.value) })}>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+              <option key={p} value={p}>Page {p}</option>
+            ))}
+          </select>
+        </Field>
+      </Section>
 
-          {/* Row 1: Libellé / Clé / Page */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="col-span-2">
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Libellé *</label>
-              <input className="input mt-1 text-sm" value={field.label} placeholder="Ex: Nom complet"
-                onChange={e => onUpdate({ label: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Clé unique</label>
-              <input className="input mt-1 text-sm font-mono" value={field.key} placeholder="nom_complet"
-                onChange={e => onUpdate({ key: e.target.value })} />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Page</label>
-              <input type="number" min={1} className="input mt-1 text-sm" value={field.page || 1}
-                onChange={e => onUpdate({ page: Math.max(1, Number(e.target.value) || 1) })} />
-            </div>
-          </div>
-
-          {/* Row 2: Type / Largeur / Obligatoire */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Type</label>
-              <TypePicker
-                value={field.type}
-                onChange={type => onUpdate({ type, options: [], jump_rules: [], show_if: null })}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Largeur colonne</label>
-              <div className="flex gap-1.5 mt-1">
-                {[
-                  { val: "full", label: "Pleine largeur" },
-                  { val: "half", label: "Moitié (½)" },
-                ].map(({ val, label }) => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => onUpdate({ col_span: val })}
-                    className={`flex-1 rounded-lg border py-2 text-xs font-medium transition-colors ${
-                      (field.col_span || "full") === val
-                        ? "bg-orange-500 text-white border-orange-500 shadow-sm"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-orange-300"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-end pb-1">
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
-                <input type="checkbox" className="w-4 h-4 accent-orange-500 rounded"
-                  checked={Boolean(field.required)}
-                  onChange={e => onUpdate({ required: e.target.checked })} />
-                Champ obligatoire
-              </label>
-            </div>
-          </div>
-
-          {/* Row 3: Placeholder / Texte d'aide */}
-          {field.type !== "rating" && field.type !== "yes_no" && field.type !== "separator" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Placeholder</label>
-                <input className="input mt-1 text-sm" value={field.placeholder || ""}
-                  placeholder="Texte indicatif dans le champ…"
-                  onChange={e => onUpdate({ placeholder: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Texte d&apos;aide</label>
-                <input className="input mt-1 text-sm" value={field.help_text || ""}
-                  placeholder="Explication visible sous le champ…"
-                  onChange={e => onUpdate({ help_text: e.target.value })} />
-              </div>
-            </div>
-          )}
-
-          {/* Valeur par défaut (non visible pour les choix multiples et les champs spéciaux) */}
-          {!isChoiceField && field.type !== "separator" && field.type !== "rating" && field.type !== "yes_no" && field.type !== "checkbox" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Valeur par défaut</label>
-                <input className="input mt-1 text-sm" value={field.default_value || ""}
-                  placeholder="(laisser vide)"
-                  onChange={e => onUpdate({ default_value: e.target.value })} />
-              </div>
-            </div>
-          )}
-
-          {/* Options pour select / radio / checkbox */}
-          {isChoiceField && (
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                Options <span className="text-slate-300 font-normal normal-case">(une par ligne)</span>
-              </label>
-              <textarea
-                className="input mt-1 min-h-[90px] text-sm font-mono"
-                value={(field.options || []).join("\n")}
-                placeholder={"Option A\nOption B\nOption C"}
-                onChange={e => onUpdate({ options: e.target.value.split("\n").map(o => o.trim()).filter(Boolean) })}
-              />
-            </div>
-          )}
-
-          {/* Rating preview */}
-          {field.type === "rating" && (
-            <div className="flex items-center gap-3">
-              <div className="flex gap-0.5">
-                {[1,2,3,4,5].map(n => <span key={n} className="text-2xl text-amber-400 leading-none">★</span>)}
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 accent-orange-500" checked={Boolean(field.required)}
-                  onChange={e => onUpdate({ required: e.target.checked })} />
-                Obligatoire
-              </label>
-            </div>
-          )}
-
-          {/* Validation min/max pour number, scale, date, time */}
-          {hasValidBounds && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                  {field.type === "number" || field.type === "scale" ? "Valeur min" : "Min (date/heure)"}
-                </label>
-                <input
-                  className="input mt-1 text-sm"
-                  type={field.type === "number" || field.type === "scale" ? "number" : field.type}
-                  value={field.min || ""}
-                  onChange={e => onUpdate({ min: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                  {field.type === "number" || field.type === "scale" ? "Valeur max" : "Max (date/heure)"}
-                </label>
-                <input
-                  className="input mt-1 text-sm"
-                  type={field.type === "number" || field.type === "scale" ? "number" : field.type}
-                  value={field.max || ""}
-                  onChange={e => onUpdate({ max: e.target.value })}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Longueur min/max pour text, textarea, email, url, phone */}
-          {hasLenBounds && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Longueur min</label>
-                <input type="number" min={0} className="input mt-1 text-sm" value={field.min_length || ""}
-                  onChange={e => onUpdate({ min_length: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Longueur max</label>
-                <input type="number" min={0} className="input mt-1 text-sm" value={field.max_length || ""}
-                  onChange={e => onUpdate({ max_length: e.target.value })} />
-              </div>
-            </div>
-          )}
-
-          {/* ── Séparateur visuel ── */}
-          <div className="border-t border-slate-100 pt-3 space-y-3">
-
-            {/* Conditions d'affichage */}
-            {eligibleForCondition && (
-              <div>
-                <button
-                  type="button"
-                  onClick={toggleConditions}
-                  className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 transition-colors mb-2 ${
-                    hasConditions
-                      ? "bg-orange-100 text-orange-700 hover:bg-orange-200"
-                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                  }`}
-                >
-                  <Filter className="w-3.5 h-3.5" />
-                  {hasConditions
-                    ? `Conditions actives (${conditions.rules.length} règle${conditions.rules.length > 1 ? "s" : ""})`
-                    : "Ajouter des conditions d'affichage"}
-                </button>
-                {hasConditions && (
-                  <ConditionsEditor
-                    conditions={conditions}
-                    otherFields={otherFields}
-                    onUpdate={updated => onUpdate({ show_if: updated })}
-                    onRemove={() => onUpdate({ show_if: null })}
-                  />
-                )}
-              </div>
-            )}
-
-            {/* Sauts de page */}
-            {canJump && (
-              <div>
-                <button
-                  type="button"
-                  onClick={toggleJumpRules}
-                  className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 transition-colors mb-2 ${
-                    hasJumpRules
-                      ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
-                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                  }`}
-                >
-                  <GitBranch className="w-3.5 h-3.5" />
-                  {hasJumpRules
-                    ? `Sauts actifs (${jumpRules.length} règle${jumpRules.length > 1 ? "s" : ""})`
-                    : "Ajouter des sauts de page"}
-                </button>
-                {hasJumpRules && (
-                  <JumpRulesEditor
-                    jumpRules={jumpRules}
-                    totalPages={totalPages}
-                    field={field}
-                    onUpdate={rules => onUpdate({ jump_rules: rules })}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+      {/* ── Type de champ ── */}
+      {!isSep && (
+        <Section title="Type de champ">
+          <TypePicker value={field.type} onChange={type => onUpdate({ type })} />
+        </Section>
       )}
+
+      {/* ── Options de réponse ── */}
+      {hasOptions && (
+        <Section title="Options de réponse">
+          <OptionList
+            options={field.options || []}
+            onChange={opts => onUpdate({ options: opts })}
+          />
+        </Section>
+      )}
+
+      {/* ── Contenu ── */}
+      {!isSep && (
+        <Section title="Contenu">
+          <Field label="Texte d'aide / placeholder">
+            <input className="input text-sm" placeholder="Texte indicatif dans le champ"
+              value={field.placeholder || ""}
+              onChange={e => onUpdate({ placeholder: e.target.value })} />
+          </Field>
+          <Field label="Texte d'aide (sous le champ)">
+            <input className="input text-sm" placeholder="Explication supplémentaire…"
+              value={field.help_text || ""}
+              onChange={e => onUpdate({ help_text: e.target.value })} />
+          </Field>
+          <Field label="Valeur par défaut">
+            <input className="input text-sm" placeholder="Valeur pré-remplie"
+              value={field.default_value || ""}
+              onChange={e => onUpdate({ default_value: e.target.value })} />
+          </Field>
+        </Section>
+      )}
+
+      {/* ── Mise en page ── */}
+      <Section title="Mise en page">
+        {isSep && (
+          <Field label="Libellé du séparateur">
+            <input className="input text-sm" placeholder="Titre de la section"
+              value={field.label || ""}
+              onChange={e => onUpdate({ label: e.target.value })} />
+          </Field>
+        )}
+        <Field label="Largeur de la colonne">
+          <select className="input text-sm"
+            value={field.col_span || "full"}
+            onChange={e => onUpdate({ col_span: e.target.value })}>
+            <option value="full">Pleine largeur</option>
+            <option value="half">Demi-largeur (1/2)</option>
+            <option value="third">Un tiers (1/3)</option>
+            <option value="two-thirds">Deux tiers (2/3)</option>
+          </select>
+        </Field>
+      </Section>
+
+      {/* ── Validation ── */}
+      {!isSep && (
+        <Section title="Validation">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <div
+              role="checkbox"
+              aria-checked={!!field.required}
+              tabIndex={0}
+              onClick={() => onUpdate({ required: !field.required })}
+              onKeyDown={e => e.key === " " && onUpdate({ required: !field.required })}
+              className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 cursor-pointer ${field.required ? "bg-orange-500" : "bg-slate-200"}`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${field.required ? "translate-x-5" : ""}`} />
+            </div>
+            <span className="text-sm text-slate-700 font-medium">Champ obligatoire</span>
+          </label>
+
+          {hasMinMax && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Min">
+                <input type="number" className="input text-sm" placeholder="—"
+                  value={field.min ?? ""}
+                  onChange={e => onUpdate({ min: e.target.value })} />
+              </Field>
+              <Field label="Max">
+                <input type="number" className="input text-sm" placeholder="—"
+                  value={field.max ?? ""}
+                  onChange={e => onUpdate({ max: e.target.value })} />
+              </Field>
+            </div>
+          )}
+
+          {hasLength && (
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Longueur min">
+                <input type="number" className="input text-sm" placeholder="—"
+                  value={field.min_length ?? ""}
+                  onChange={e => onUpdate({ min_length: e.target.value })} />
+              </Field>
+              <Field label="Longueur max">
+                <input type="number" className="input text-sm" placeholder="—"
+                  value={field.max_length ?? ""}
+                  onChange={e => onUpdate({ max_length: e.target.value })} />
+              </Field>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ── Logique conditionnelle ── */}
+      {!isSep && (
+        <Section title="Logique conditionnelle">
+          <div className="flex items-center gap-2 mb-1">
+            <GitBranch className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-xs text-slate-500">Ce champ s'affiche si :</span>
+          </div>
+          <ConditionsEditor
+            showIf={field.show_if}
+            otherFields={otherFields}
+            totalPages={totalPages}
+            onChange={show_if => onUpdate({ show_if })}
+          />
+        </Section>
+      )}
+
+      {/* ── Sauts de page ── */}
+      {hasJump && (
+        <Section title="Sauts de page">
+          <div className="flex items-center gap-2 mb-1">
+            <GitBranch className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-xs text-slate-500">Selon la réponse, aller à :</span>
+          </div>
+          <JumpRulesEditor
+            rules={field.jump_rules || []}
+            totalPages={totalPages}
+            onChange={jump_rules => onUpdate({ jump_rules })}
+          />
+        </Section>
+      )}
+
+      {/* ── Actions ── */}
+      <Section title="Actions">
+        <div className="flex gap-2">
+          <button type="button" onClick={onDuplicate}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-all">
+            <Copy className="w-3.5 h-3.5" /> Dupliquer
+          </button>
+          <button type="button" onClick={onRemove}
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-red-100 bg-red-50 py-2 text-xs font-medium text-red-500 hover:bg-red-100 hover:border-red-200 transition-all">
+            <Trash2 className="w-3.5 h-3.5" /> Supprimer
+          </button>
+        </div>
+      </Section>
     </div>
   );
 }
