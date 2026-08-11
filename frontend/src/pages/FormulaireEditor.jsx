@@ -521,18 +521,42 @@ export default function FormulaireEditor() {
 
       {/* ════════ FORM META ════════ */}
       <div className="px-4 sm:px-6 pt-3 flex-shrink-0">
-        <div className="card p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-            <div className="sm:col-span-2">
-              <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Description</label>
-              <textarea
-                className="input mt-1 min-h-[52px] text-sm resize-none"
-                placeholder="Description du formulaire (optionnel)…"
-                value={editor.description}
-                onChange={e => setEditor(prev => ({ ...prev, description: e.target.value }))}
-              />
+        <div className="card p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Description */}
+            <div className="sm:col-span-2 space-y-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Description (introduction)</label>
+                <textarea
+                  className="input mt-1 min-h-[52px] text-sm resize-none"
+                  placeholder="Texte d'introduction affiché en haut du formulaire…"
+                  value={editor.description}
+                  onChange={e => setEditor(prev => ({ ...prev, description: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Texte du bouton d'envoi</label>
+                  <input
+                    className="input mt-1 text-sm"
+                    placeholder="Envoyer"
+                    value={editor.settings?.submit_label || ""}
+                    onChange={e => setEditor(prev => ({ ...prev, settings: { ...prev.settings, submit_label: e.target.value } }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Texte de fin (après envoi)</label>
+                  <textarea
+                    className="input mt-1 min-h-[52px] text-sm resize-none"
+                    placeholder="Merci, votre réponse a été enregistrée."
+                    value={editor.settings?.success_message || ""}
+                    onChange={e => setEditor(prev => ({ ...prev, settings: { ...prev.settings, success_message: e.target.value } }))}
+                  />
+                </div>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs text-slate-500 pb-1">
+            {/* Stats */}
+            <div className="flex flex-wrap sm:flex-col gap-2 text-xs text-slate-500 sm:justify-end">
               <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1">
                 <CheckSquare className="w-3.5 h-3.5" /> {realFieldsCount} champ{realFieldsCount !== 1 ? "s" : ""}
               </span>
