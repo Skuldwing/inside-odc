@@ -1,26 +1,48 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Award, AlertCircle, Mail } from "lucide-react";
+import { Loader2, Award, AlertCircle, Mail, RefreshCw } from "lucide-react";
 import api from "../api";
 
-const AVATARS = ["🧑","👩","👨","😎","🤓","🦸","🧙","🎓","🏆","⭐","🚀","💡","🎯","🔥","💪","🌟","🦁","🐯","🦊","🐺"];
+const STYLES = [
+  { id: "adventurer",  label: "Aventu." },
+  { id: "micah",       label: "Moderne" },
+  { id: "bottts",      label: "Robot"   },
+  { id: "fun-emoji",   label: "Fun"     },
+  { id: "pixel-art",   label: "Pixel"   },
+];
+
+function dicebearUrl(style, seed) {
+  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed || "jury")}`;
+}
+
+function randSuffix() {
+  return "_" + Math.random().toString(36).slice(2, 7);
+}
+
+/* Composant réutilisable pour afficher un avatar (URL ou emoji) */
+export function AvatarImg({ avatar, className = "w-10 h-10 rounded-xl" }) {
+  if (avatar?.startsWith("https://")) {
+    return <img src={avatar} alt="avatar" className={className} />;
+  }
+  return <span className={className + " flex items-center justify-center text-2xl"}>{avatar || "🧑"}</span>;
+}
 
 export default function VoteJoin() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
-  const [session, setSession] = useState(null);
-  const [loadError, setLoadError] = useState("");
-  const [pseudo, setPseudo] = useState("");
-  const [email, setEmail] = useState("");
-  const [avatar, setAvatar] = useState("🧑");
-  const [joining, setJoining] = useState(false);
-  const [joinError, setJoinError] = useState("");
+  const [session, setSession]       = useState(null);
+  const [loadError, setLoadError]   = useState("");
+  const [pseudo, setPseudo]         = useState("");
+  const [email, setEmail]           = useState("");
+  const [style, setStyle]           = useState("adventurer");
+  const [seed, setSeed]             = useState("jury");
+  const [joining, setJoining]       = useState(false);
+  const [joinError, setJoinError]   = useState("");
 
-  /* Mode récupération : l'utilisateur revient sans localStorage */
-  const [recovering, setRecovering] = useState(false);
-  const [recoverEmail, setRecoverEmail] = useState("");
-  const [recovering_loading, setRecoveringLoading] = useState(false);
-  const [recoverError, setRecoverError] = useState("");
+  const [recovering, setRecovering]           = useState(false);
+  const [recoverEmail, setRecoverEmail]       = useState("");
+  const [recoveringLoading, setRecoveringLoading] = useState(false);
+  const [recoverError, setRecoverError]       = useState("");
 
   useEffect(() => {
     const existing = localStorage.getItem(`vote_jury_${sessionId}`);
@@ -33,6 +55,15 @@ export default function VoteJoin() {
       .catch(err => setLoadError(err?.response?.data?.error || "Session introuvable"));
   }, [sessionId, navigate]);
 
+  /* Le seed suit le pseudo sauf si l'utilisateur a cliqué "Autre variation" */
+  useEffect(() => {
+    setSeed(pseudo.trim() || "jury");
+  }, [pseudo]);
+
+  const avatarUrl = dicebearUrl(style, seed);
+
+  const handleVariation = () => setSeed((pseudo.trim() || "jury") + randSuffix());
+
   const handleJoin = async (e) => {
     e.preventDefault();
     if (!pseudo.trim()) return;
@@ -41,7 +72,7 @@ export default function VoteJoin() {
     try {
       const r = await api.post(`/vote/join/${sessionId}`, {
         pseudo: pseudo.trim(),
-        avatar,
+        avatar: avatarUrl,
         email: email.trim() || undefined,
       });
       localStorage.setItem(`vote_jury_${sessionId}`, JSON.stringify({
@@ -57,7 +88,6 @@ export default function VoteJoin() {
     }
   };
 
-  /* Récupération de session par email uniquement */
   const handleRecover = async (e) => {
     e.preventDefault();
     if (!recoverEmail.trim()) return;
@@ -103,8 +133,9 @@ export default function VoteJoin() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8 flex items-center justify-center">
       <div className="w-full max-w-sm">
-        {/* Header */}
-        <div className="text-center mb-8">
+
+        {/* En-tête session */}
+        <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-500 mb-4 shadow-lg shadow-orange-200">
             <Award className="w-8 h-8 text-white" />
           </div>
@@ -118,14 +149,16 @@ export default function VoteJoin() {
         </div>
 
         {recovering ? (
-          /* ── Mode récupération de session ── */
+          /* ── Récupération de session ── */
           <form onSubmit={handleRecover} className="space-y-4">
             <div className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
               <div className="flex items-center gap-2 mb-1">
                 <Mail className="w-4 h-4 text-orange-500" />
                 <p className="font-semibold text-sm text-slate-800">Retrouver ma session</p>
               </div>
-              <p className="text-xs text-slate-400 mb-4">Entrez l&apos;adresse email utilisée lors de votre inscription.</p>
+              <p className="text-xs text-slate-400 mb-4">
+                Entrez l&apos;adresse email utilisée lors de votre inscription.
+              </p>
               <input
                 required
                 autoFocus
@@ -146,14 +179,13 @@ export default function VoteJoin() {
 
             <button
               type="submit"
-              disabled={recovering_loading || !recoverEmail.trim()}
+              disabled={recoveringLoading || !recoverEmail.trim()}
               className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white shadow-lg shadow-orange-200 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {recovering_loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" /> Recherche...
-                </span>
-              ) : "Retrouver ma session"}
+              {recoveringLoading
+                ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Recherche...</span>
+                : "Retrouver ma session"
+              }
             </button>
 
             <button
@@ -166,19 +198,45 @@ export default function VoteJoin() {
           </form>
         ) : (
           /* ── Formulaire d'inscription ── */
-          <form onSubmit={handleJoin} className="space-y-5">
-            {/* Avatar picker */}
+          <form onSubmit={handleJoin} className="space-y-4">
+
+            {/* Avatar builder */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3 block">Votre avatar</label>
-              <div className="grid grid-cols-5 gap-2">
-                {AVATARS.map(em => (
+              {/* Aperçu */}
+              <div className="flex flex-col items-center mb-4">
+                <div className="w-28 h-28 rounded-2xl border-2 border-slate-100 overflow-hidden mb-3 bg-slate-50 flex items-center justify-center">
+                  <img
+                    key={avatarUrl}
+                    src={avatarUrl}
+                    alt="Votre avatar"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVariation}
+                  className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-orange-500 transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Autre variation
+                </button>
+              </div>
+
+              {/* Sélecteur de style */}
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">Style</label>
+              <div className="grid grid-cols-5 gap-1.5">
+                {STYLES.map(s => (
                   <button
-                    key={em}
+                    key={s.id}
                     type="button"
-                    onClick={() => setAvatar(em)}
-                    className={`text-2xl h-11 rounded-xl transition-all ${avatar === em ? "bg-orange-100 ring-2 ring-orange-400 scale-110" : "hover:bg-slate-100"}`}
+                    onClick={() => setStyle(s.id)}
+                    className={`rounded-xl py-2 text-xs font-medium transition-all ${
+                      style === s.id
+                        ? "bg-orange-500 text-white shadow-sm"
+                        : "bg-slate-50 border border-slate-200 text-slate-600 hover:border-orange-300"
+                    }`}
                   >
-                    {em}
+                    {s.label}
                   </button>
                 ))}
               </div>
@@ -186,7 +244,9 @@ export default function VoteJoin() {
 
             {/* Pseudo */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">Votre pseudo</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
+                Votre pseudo
+              </label>
               <input
                 required
                 autoFocus
@@ -201,9 +261,12 @@ export default function VoteJoin() {
             {/* Email */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
-                Adresse email <span className="text-slate-300 font-normal normal-case">(recommandé)</span>
+                Adresse email{" "}
+                <span className="text-slate-300 font-normal normal-case">(recommandé)</span>
               </label>
-              <p className="text-xs text-slate-400 mb-2">Permet de retrouver votre session si vous changez d&apos;appareil.</p>
+              <p className="text-xs text-slate-400 mb-2">
+                Permet de retrouver votre session si vous changez d&apos;appareil.
+              </p>
               <input
                 type="email"
                 className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
@@ -220,11 +283,15 @@ export default function VoteJoin() {
               </div>
             )}
 
-            {/* Preview + submit */}
+            {/* Aperçu carte juré */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex items-center gap-3">
-              <span className="text-3xl">{avatar}</span>
-              <div className="flex-1">
-                <p className="font-semibold text-slate-800 text-sm">{pseudo || "Votre nom..."}</p>
+              <img
+                src={avatarUrl}
+                alt="avatar"
+                className="w-11 h-11 rounded-xl flex-shrink-0 border border-slate-100"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-slate-800 text-sm truncate">{pseudo || "Votre nom..."}</p>
                 <p className="text-xs text-slate-400">Membre du jury</p>
               </div>
             </div>
@@ -234,14 +301,12 @@ export default function VoteJoin() {
               disabled={joining || !pseudo.trim()}
               className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white shadow-lg shadow-orange-200 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {joining ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" /> Connexion...
-                </span>
-              ) : "Rejoindre comme juré"}
+              {joining
+                ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Connexion...</span>
+                : "Rejoindre comme juré"
+              }
             </button>
 
-            {/* Lien récupération */}
             <p className="text-center text-xs text-slate-400">
               Déjà inscrit ?{" "}
               <button

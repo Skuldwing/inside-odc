@@ -3,6 +3,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, CheckCircle2, AlertCircle, Send, Timer, MessageCircleQuestion } from "lucide-react";
 import api from "../api";
 
+function Avatar({ src, className = "w-10 h-10 rounded-xl" }) {
+  if (src?.startsWith("https://")) {
+    return <img src={src} alt="" className={className} />;
+  }
+  return <span className={className + " flex items-center justify-center"}>{src || "🧑"}</span>;
+}
+
 function PitchTimer({ startedAt, durationMinutes, label }) {
   const [timeLeft, setTimeLeft] = useState(null);
 
@@ -262,7 +269,7 @@ export default function VoteJury() {
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
         <div className="max-w-md mx-auto">
           <div className="text-center mb-6">
-            <div className="text-5xl mb-2">{juryInfo?.avatar || "🧑"}</div>
+            <Avatar src={juryInfo?.avatar} className="w-20 h-20 rounded-2xl mx-auto mb-2 border border-slate-100" />
             <p className="text-lg font-semibold text-slate-800">{juryInfo?.pseudo}</p>
             <p className="text-xs text-slate-400 mt-0.5">Membre du jury</p>
           </div>
@@ -275,7 +282,7 @@ export default function VoteJury() {
               <div className="flex flex-wrap gap-2">
                 {juryList.map(j => (
                   <div key={j.id} className="flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-2.5 py-1">
-                    <span className="text-base leading-none">{j.avatar}</span>
+                    <Avatar src={j.avatar} className="w-5 h-5 rounded-full" />
                     <span className="text-xs text-slate-700 font-medium">{j.pseudo}</span>
                   </div>
                 ))}
@@ -323,7 +330,7 @@ export default function VoteJury() {
 
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="text-3xl mb-2">{juryInfo?.avatar || "🧑"}</div>
+          <Avatar src={juryInfo?.avatar} className="w-16 h-16 rounded-2xl mx-auto mb-2 border border-slate-100" />
           {projectIndex && projectCount && (
             <div className="inline-flex items-center gap-1.5 text-xs font-medium text-orange-500 bg-orange-50 border border-orange-200 rounded-full px-3 py-1 mb-2">
               Projet {projectIndex} sur {projectCount}
@@ -388,7 +395,7 @@ export default function VoteJury() {
                           : "bg-slate-50 border-slate-100 text-slate-400"
                       }`}
                     >
-                      <span className="text-base leading-none">{j.avatar}</span>
+                      <Avatar src={j.avatar} className="w-5 h-5 rounded-full" />
                       <span>{j.pseudo}</span>
                       {j.voted && <CheckCircle2 className="w-3 h-3" />}
                     </div>

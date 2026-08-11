@@ -219,6 +219,16 @@ pool.query(`
   $$
 `).then(() => console.log("Migration OK: vote_jury_unique")).catch(e => console.warn("Migration vote_jury_unique:", e.message));
 
+/* Colonne avatar en TEXT pour supporter les URLs DiceBear */
+pool.query(`
+  DO $$
+  BEGIN
+    ALTER TABLE vote_jury ALTER COLUMN avatar TYPE TEXT;
+  EXCEPTION WHEN others THEN NULL;
+  END;
+  $$
+`).then(() => console.log("Migration OK: vote_jury_avatar_text")).catch(e => console.warn("Migration vote_jury_avatar_text:", e.message));
+
 /* Colonne email pour récupération de session */
 pool.query(`
   DO $$

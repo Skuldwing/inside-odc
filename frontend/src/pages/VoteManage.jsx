@@ -471,7 +471,10 @@ export default function VoteManage() {
             <div className="space-y-2">
               {jury.map(j => (
                 <div key={j.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${j.voted ? "border-green-100 bg-green-50" : "border-slate-100 bg-slate-50"}`}>
-                  <span className="text-xl leading-none">{j.avatar}</span>
+                  {j.avatar?.startsWith("https://")
+                    ? <img src={j.avatar} alt="" className="w-8 h-8 rounded-lg flex-shrink-0" />
+                    : <span className="text-xl leading-none flex-shrink-0">{j.avatar || "🧑"}</span>
+                  }
                   <span className="flex-1 text-sm font-medium text-slate-800 truncate">{j.pseudo}</span>
                   {j.voted
                     ? <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
