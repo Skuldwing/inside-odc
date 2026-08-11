@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import Layout from "./layout/Layout";
 import Login from "./Login";
 import SetPassword from "./pages/SetPassword";
+import PageLoader from "./components/PageLoader";
 
 import PrivateRoute from "./routes/PrivateRoute";
 import AdminRoute from "./routes/AdminRoute";
@@ -25,14 +26,6 @@ const Vote = lazy(() => import("./pages/Vote"));
 const VoteConfig = lazy(() => import("./pages/VoteConfig"));
 const VoteManage = lazy(() => import("./pages/VoteManage"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
-
-function PageLoader() {
-  return (
-    <div className="min-h-[50vh] flex items-center justify-center text-slate-500">
-      Chargement...
-    </div>
-  );
-}
 
 export default function App() {
   return (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "./auth/useAuth";
 import ODCLogo from "./components/branding/ODCLogo";
 
@@ -52,13 +52,13 @@ export default function Login() {
             </div>
 
             {redirectMessage && (
-              <div className="mt-6 rounded-xl bg-blue-50 text-blue-700 px-4 py-3 text-sm">
+              <div className="anim-fade-in-up mt-6 rounded-xl bg-blue-50 text-blue-700 px-4 py-3 text-sm">
                 {redirectMessage}
               </div>
             )}
 
             {error && (
-              <div className="mt-6 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
+              <div key={error} className="anim-shake mt-6 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
                 {error}
               </div>
             )}
@@ -111,7 +111,14 @@ export default function Login() {
                 className="btn-primary w-full animate-glow-soft disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={submitting || !email.trim() || !password}
               >
-                {submitting ? "Connexion..." : "Se connecter"}
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Connexion...
+                  </>
+                ) : (
+                  "Se connecter"
+                )}
               </button>
             </form>
           </div>

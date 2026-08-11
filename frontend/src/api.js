@@ -5,20 +5,46 @@ const api = axios.create({
   withCredentials: true,
 });
 
+/* ===== LOADING TRACKER (drives the global top progress bar) ===== */
+let activeRequests = 0;
+const loadingListeners = new Set();
+
+function setActiveRequests(next) {
+  activeRequests = Math.max(0, next);
+  loadingListeners.forEach((listener) => listener(activeRequests));
+}
+
+export function subscribeLoading(listener) {
+  loadingListeners.add(listener);
+  listener(activeRequests);
+  return () => loadingListeners.delete(listener);
+}
+
 /* ===== INTERCEPTOR TOKEN ===== */
-api.interceptors.request.use(config => {
-  const adminPin = sessionStorage.getItem("admin_pin");
-  if (adminPin) {
-    config.headers["X-Admin-Pin"] = adminPin;
+api.interceptors.request.use(
+  (config) => {
+    const adminPin = sessionStorage.getItem("admin_pin");
+    if (adminPin) {
+      config.headers["X-Admin-Pin"] = adminPin;
+    }
+    setActiveRequests(activeRequests + 1);
+    return config;
+  },
+  (error) => {
+    setActiveRequests(activeRequests - 1);
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
 const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/", "/vote/join/", "/vote/jury/"];
 
 api.interceptors.response.use(
-  response => response,
-  error => {
+  (response) => {
+    setActiveRequests(activeRequests - 1);
+    return response;
+  },
+  (error) => {
+    setActiveRequests(activeRequests - 1);
     if (error?.response?.status === 401) {
       localStorage.removeItem("user");
       sessionStorage.removeItem("admin_pin");

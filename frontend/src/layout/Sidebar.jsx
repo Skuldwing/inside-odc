@@ -99,7 +99,7 @@ const managementNavigation = [
   },
 ];
 
-function NavLink({ item, collapsed, location, onClick }) {
+function NavLink({ item, collapsed, location, onClick, index = 0 }) {
   const active = item.matchPrefix
     ? location.pathname.startsWith(item.path)
     : (item.path === "/" && location.pathname === "/") ||
@@ -112,14 +112,16 @@ function NavLink({ item, collapsed, location, onClick }) {
       to={item.path}
       onClick={onClick}
       title={collapsed ? item.name : undefined}
+      style={{ animationDelay: `${index * 35}ms` }}
       className={clsx(
+        "anim-fade-in-up group",
         collapsed
           ? "flex items-center justify-center rounded-xl py-2.5 text-slate-300 hover:bg-white/10 hover:text-white transition"
           : "nav-pill",
         active && "nav-pill-active"
       )}
     >
-      <Icon className="w-4 h-4 flex-shrink-0" />
+      <Icon className="w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
       {!collapsed && item.name}
     </Link>
   );
@@ -182,7 +184,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
 
           {/* Desktop collapse toggle */}
           <button
-            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition"
+            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white active:scale-90"
             onClick={onToggle}
             title={collapsed ? "Développer" : "Réduire"}
           >
@@ -214,13 +216,14 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
           <div className="space-y-0.5">
             {navigation
               .filter((item) => item.roles.includes(safeRole))
-              .map((item) => (
+              .map((item, index) => (
                 <NavLink
                   key={item.name}
                   item={item}
                   collapsed={collapsed}
                   location={location}
                   onClick={() => setSidebarOpen(false)}
+                  index={index}
                 />
               ))}
           </div>
@@ -240,13 +243,14 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
               <div className="space-y-0.5">
                 {managementNavigation
                   .filter((item) => item.roles.includes(safeRole))
-                  .map((item) => (
+                  .map((item, index) => (
                     <NavLink
                       key={item.name}
                       item={item}
                       collapsed={collapsed}
                       location={location}
                       onClick={() => setSidebarOpen(false)}
+                      index={index + navigation.length}
                     />
                   ))}
               </div>

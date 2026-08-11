@@ -44,7 +44,9 @@ export default function Layout() {
         />
 
         <main className="p-4 lg:p-6">
-          <Outlet />
+          <div key={location.pathname} className="anim-page-enter">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
