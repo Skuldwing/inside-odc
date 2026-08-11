@@ -9,6 +9,9 @@ const sslEnabled =
 
 const pool = new Pool({
   connectionString: dbUrl,
+  max: Number(process.env.DB_POOL_MAX || 20),
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
   ssl: sslEnabled
     ? {
         rejectUnauthorized:
