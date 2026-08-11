@@ -3,12 +3,35 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, Award, AlertCircle, Mail, RefreshCw } from "lucide-react";
 import api from "../api";
 
-const STYLES = [
-  { id: "adventurer",  label: "Aventu." },
-  { id: "micah",       label: "Moderne" },
-  { id: "bottts",      label: "Robot"   },
-  { id: "fun-emoji",   label: "Fun"     },
-  { id: "pixel-art",   label: "Pixel"   },
+/* Styles DiceBear organisés par genre */
+const STYLES_BY_GENRE = {
+  H: [
+    { id: "big-ears",        label: "Classique" },
+    { id: "personas",        label: "Personas"  },
+    { id: "pixel-art",       label: "Pixel"     },
+    { id: "bottts",          label: "Robot"     },
+    { id: "lorelei-neutral", label: "Minimal"   },
+  ],
+  F: [
+    { id: "lorelei",    label: "Lorelei"  },
+    { id: "adventurer", label: "Aventu."  },
+    { id: "big-smile",  label: "Sourire"  },
+    { id: "micah",      label: "Moderne"  },
+    { id: "open-peeps", label: "Peeps"    },
+  ],
+  N: [
+    { id: "fun-emoji",          label: "Fun"     },
+    { id: "bottts-neutral",     label: "Robot"   },
+    { id: "avataaars",          label: "Cartoon" },
+    { id: "notionists-neutral", label: "Minimal" },
+    { id: "adventurer-neutral", label: "Neutre"  },
+  ],
+};
+
+const GENRES = [
+  { id: "H", label: "Homme" },
+  { id: "F", label: "Femme" },
+  { id: "N", label: "Autre" },
 ];
 
 function dicebearUrl(style, seed) {
@@ -34,7 +57,8 @@ export default function VoteJoin() {
   const [loadError, setLoadError]   = useState("");
   const [pseudo, setPseudo]         = useState("");
   const [email, setEmail]           = useState("");
-  const [style, setStyle]           = useState("adventurer");
+  const [genre, setGenre]           = useState("H");
+  const [style, setStyle]           = useState(STYLES_BY_GENRE.H[0].id);
   const [seed, setSeed]             = useState("jury");
   const [joining, setJoining]       = useState(false);
   const [joinError, setJoinError]   = useState("");
@@ -60,7 +84,13 @@ export default function VoteJoin() {
     setSeed(pseudo.trim() || "jury");
   }, [pseudo]);
 
+  const currentStyles = STYLES_BY_GENRE[genre];
   const avatarUrl = dicebearUrl(style, seed);
+
+  const handleGenreChange = (g) => {
+    setGenre(g);
+    setStyle(STYLES_BY_GENRE[g][0].id);
+  };
 
   const handleVariation = () => setSeed((pseudo.trim() || "jury") + randSuffix());
 
@@ -222,10 +252,29 @@ export default function VoteJoin() {
                 </button>
               </div>
 
+              {/* Sélecteur de genre */}
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">Genre</label>
+              <div className="grid grid-cols-3 gap-1.5 mb-4">
+                {GENRES.map(g => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => handleGenreChange(g.id)}
+                    className={`rounded-xl py-2 text-xs font-medium transition-all ${
+                      genre === g.id
+                        ? "bg-slate-800 text-white shadow-sm"
+                        : "bg-slate-50 border border-slate-200 text-slate-600 hover:border-slate-400"
+                    }`}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Sélecteur de style */}
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">Style</label>
               <div className="grid grid-cols-5 gap-1.5">
-                {STYLES.map(s => (
+                {currentStyles.map(s => (
                   <button
                     key={s.id}
                     type="button"
