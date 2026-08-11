@@ -327,8 +327,9 @@ export default function VoteJury() {
 
   /* ── En attente d'un projet ── */
   if (!status?.active_project) {
-    const juryList    = status?.jury_list || [];
+    const juryList     = status?.jury_list || [];
     const projectCount = status?.project_count || 0;
+    const closedCount  = status?.closed_count || 0;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
@@ -363,10 +364,13 @@ export default function VoteJury() {
             <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 mb-5 anim-fade-in-up" style={{ animationDelay: "160ms" }}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Projets</p>
-                <span className="text-xs font-semibold text-orange-600">0 / {projectCount}</span>
+                <span className="text-xs font-semibold text-orange-600">{closedCount} / {projectCount}</span>
               </div>
               <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                <div className="h-full bg-orange-400 rounded-full" style={{ width: "0%" }} />
+                <div
+                  className="h-full bg-orange-400 rounded-full transition-all duration-700"
+                  style={{ width: projectCount > 0 ? `${(closedCount / projectCount) * 100}%` : "0%" }}
+                />
               </div>
             </div>
           )}

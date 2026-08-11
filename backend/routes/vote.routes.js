@@ -644,7 +644,7 @@ router.get("/jury/status", juryAuth, async (req, res) => {
     const [sessRes, critRes, projectsRes, juryRes] = await Promise.all([
       pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
       pool.query("SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num", [sessionId]),
-      pool.query("SELECT id FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+      pool.query("SELECT id, status FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
       pool.query("SELECT id, pseudo, avatar FROM vote_jury WHERE session_id=$1 ORDER BY joined_at", [sessionId]),
     ]);
 
@@ -681,6 +681,8 @@ router.get("/jury/status", juryAuth, async (req, res) => {
       jury_list = juryMembers.map(j => ({ id: j.id, pseudo: j.pseudo, avatar: j.avatar, voted: votedIds.has(j.id) }));
     }
 
+    const closed_count = projects.filter(p => p.status === "closed").length;
+
     res.json({
       session_status: session.status,
       pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
@@ -693,6 +695,7 @@ router.get("/jury/status", juryAuth, async (req, res) => {
       jury_total: juryMembers.length,
       project_index,
       project_count: projects.length,
+      closed_count,
       jury_list,
     });
   } catch (err) {
