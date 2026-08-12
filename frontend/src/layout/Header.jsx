@@ -5,7 +5,6 @@ import {
   LogOut,
   Search,
   Sparkles,
-  Rocket,
   Users,
   Calendar,
   UserCog,
@@ -25,12 +24,6 @@ export default function Header({ currentPageName, onMenuClick }) {
 
   const quickActions = useMemo(() => {
     const actions = [
-      {
-        id: "import",
-        label: "Demarrer import",
-        icon: Rocket,
-        to: "/activities?action=import",
-      },
       {
         id: "activities",
         label: "Voir activites",
