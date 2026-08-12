@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Award, Settings, Play, Trash2, Users, Calendar, Loader2, BarChart3 } from "lucide-react";
+import { Plus, Award, Settings, Play, Trash2, Users, Calendar, Loader2, BarChart3, Copy } from "lucide-react";
 import api from "../api";
 
 const STATUS_BADGE = {
@@ -15,6 +15,7 @@ export default function Vote() {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: "", event_date: "" });
   const [saving, setSaving] = useState(false);
+  const [duplicating, setDuplicating] = useState(null);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
@@ -51,6 +52,18 @@ export default function Vote() {
       setSessions(s => s.filter(x => x.id !== id));
     } catch {
       setError("Erreur lors de la suppression.");
+    }
+  };
+
+  const handleDuplicate = async (id) => {
+    setDuplicating(id);
+    try {
+      await api.post(`/vote/sessions/${id}/duplicate`);
+      await fetchSessions();
+    } catch {
+      setError("Erreur lors de la duplication.");
+    } finally {
+      setDuplicating(null);
     }
   };
 
@@ -180,6 +193,17 @@ export default function Vote() {
                       <BarChart3 className="w-3.5 h-3.5" /> Résultats
                     </button>
                   )}
+                  <button
+                    onClick={() => handleDuplicate(s.id)}
+                    disabled={duplicating === s.id}
+                    title="Dupliquer"
+                    className="rounded-xl p-2 text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-colors disabled:opacity-40"
+                  >
+                    {duplicating === s.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Copy className="w-4 h-4" />
+                    }
+                  </button>
                   <button
                     onClick={() => handleDelete(s.id)}
                     className="rounded-xl p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"

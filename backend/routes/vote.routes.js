@@ -105,6 +105,59 @@ router.delete("/sessions/:id", authMiddleware, requireAdmin, async (req, res) =>
   }
 });
 
+/* POST /vote/sessions/:id/duplicate */
+router.post("/sessions/:id/duplicate", authMiddleware, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const origRes = await client.query("SELECT * FROM vote_sessions WHERE id = $1", [req.params.id]);
+    if (!origRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const orig = origRes.rows[0];
+
+    const newSess = await client.query(
+      `INSERT INTO vote_sessions (name, event_date, pitch_duration_minutes, qa_duration_minutes, status, created_by)
+       VALUES ($1, $2, $3, $4, 'draft', $5) RETURNING *`,
+      [
+        `Copie de ${orig.name}`,
+        orig.event_date,
+        orig.pitch_duration_minutes || 5,
+        orig.qa_duration_minutes || 5,
+        req.user.id,
+      ]
+    );
+    const newId = newSess.rows[0].id;
+
+    const [projRes, critRes] = await Promise.all([
+      client.query("SELECT * FROM vote_projects WHERE session_id = $1 ORDER BY order_num, created_at", [orig.id]),
+      client.query("SELECT * FROM vote_criteria WHERE session_id = $1 ORDER BY order_num, created_at", [orig.id]),
+    ]);
+
+    for (const p of projRes.rows) {
+      await client.query(
+        "INSERT INTO vote_projects (session_id, name, porteur, description, order_num) VALUES ($1,$2,$3,$4,$5)",
+        [newId, p.name, p.porteur, p.description, p.order_num]
+      );
+    }
+
+    for (const c of critRes.rows) {
+      await client.query(
+        "INSERT INTO vote_criteria (session_id, name, scale, weight, order_num, description) VALUES ($1,$2,$3,$4,$5,$6)",
+        [newId, c.name, c.scale, c.weight, c.order_num, c.description]
+      );
+    }
+
+    await client.query("COMMIT");
+    res.status(201).json(newSess.rows[0]);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
 /* PUT /vote/sessions/:id/activate */
 router.put("/sessions/:id/activate", authMiddleware, requireAdmin, async (req, res) => {
   try {
