@@ -145,7 +145,7 @@ router.put("/sessions/:id/active-project", authMiddleware, requireAdmin, async (
     );
     if (project_id) {
       await pool.query(
-        "UPDATE vote_projects SET status='active', started_at=NOW() WHERE id=$1",
+        "UPDATE vote_projects SET status='active', started_at=NULL, pitch_stopped_at=NULL, qa_stopped_at=NULL WHERE id=$1",
         [project_id]
       );
     }
@@ -228,19 +228,52 @@ router.get("/sessions/:id/live", authMiddleware, requireAdmin, async (req, res) 
   }
 });
 
-/* POST /vote/sessions/:id/start-qa — démarre le timer Q&R sur le projet actif */
+/* POST /vote/sessions/:id/start-pitch */
+router.post("/sessions/:id/start-pitch", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const sessRes = await pool.query("SELECT active_project_id FROM vote_sessions WHERE id=$1", [req.params.id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const { active_project_id } = sessRes.rows[0];
+    if (!active_project_id) return res.status(400).json({ error: "Aucun projet actif" });
+    await pool.query("UPDATE vote_projects SET started_at=NOW(), pitch_stopped_at=NULL WHERE id=$1", [active_project_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: "Erreur serveur" }); }
+});
+
+/* POST /vote/sessions/:id/stop-pitch */
+router.post("/sessions/:id/stop-pitch", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const sessRes = await pool.query("SELECT active_project_id FROM vote_sessions WHERE id=$1", [req.params.id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const { active_project_id } = sessRes.rows[0];
+    if (!active_project_id) return res.status(400).json({ error: "Aucun projet actif" });
+    await pool.query("UPDATE vote_projects SET pitch_stopped_at=NOW() WHERE id=$1 AND pitch_stopped_at IS NULL", [active_project_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: "Erreur serveur" }); }
+});
+
+/* POST /vote/sessions/:id/start-qa */
 router.post("/sessions/:id/start-qa", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const sessRes = await pool.query("SELECT active_project_id FROM vote_sessions WHERE id=$1", [req.params.id]);
     if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
     const { active_project_id } = sessRes.rows[0];
     if (!active_project_id) return res.status(400).json({ error: "Aucun projet actif" });
-    await pool.query("UPDATE vote_projects SET qa_started_at = NOW() WHERE id=$1", [active_project_id]);
+    await pool.query("UPDATE vote_projects SET qa_started_at=NOW(), qa_stopped_at=NULL WHERE id=$1", [active_project_id]);
     res.json({ ok: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
+  } catch (err) { console.error(err); res.status(500).json({ error: "Erreur serveur" }); }
+});
+
+/* POST /vote/sessions/:id/stop-qa */
+router.post("/sessions/:id/stop-qa", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const sessRes = await pool.query("SELECT active_project_id FROM vote_sessions WHERE id=$1", [req.params.id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const { active_project_id } = sessRes.rows[0];
+    if (!active_project_id) return res.status(400).json({ error: "Aucun projet actif" });
+    await pool.query("UPDATE vote_projects SET qa_stopped_at=NOW() WHERE id=$1 AND qa_stopped_at IS NULL", [active_project_id]);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: "Erreur serveur" }); }
 });
 
 /* GET /vote/sessions/:id/results — classement complet avec détail par critère et par juré */
@@ -500,11 +533,11 @@ router.delete("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async
 /* ------- CRITERIA ------- */
 router.post("/sessions/:id/criteria", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, scale, weight, order_num } = req.body;
+    const { name, scale, weight, order_num, description } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
     const r = await pool.query(
-      "INSERT INTO vote_criteria (session_id, name, scale, weight, order_num) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-      [req.params.id, name.trim(), scale || 10, weight || 1, order_num || 0]
+      "INSERT INTO vote_criteria (session_id, name, scale, weight, order_num, description) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
+      [req.params.id, name.trim(), scale || 10, weight || 1, order_num || 0, description || null]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -515,10 +548,10 @@ router.post("/sessions/:id/criteria", authMiddleware, requireAdmin, async (req, 
 
 router.put("/sessions/:id/criteria/:cid", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, scale, weight, order_num } = req.body;
+    const { name, scale, weight, order_num, description } = req.body;
     const r = await pool.query(
-      "UPDATE vote_criteria SET name=$1, scale=$2, weight=$3, order_num=$4 WHERE id=$5 AND session_id=$6 RETURNING *",
-      [name, scale || 10, weight || 1, order_num || 0, req.params.cid, req.params.id]
+      "UPDATE vote_criteria SET name=$1, scale=$2, weight=$3, order_num=$4, description=$5 WHERE id=$6 AND session_id=$7 RETURNING *",
+      [name, scale || 10, weight || 1, order_num || 0, description || null, req.params.cid, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Critere introuvable" });
     res.json(r.rows[0]);

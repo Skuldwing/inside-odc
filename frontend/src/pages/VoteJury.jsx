@@ -501,9 +501,14 @@ export default function VoteJury() {
                     className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm anim-fade-in-up"
                     style={{ animationDelay: `${idx * 60}ms` }}
                   >
-                    <div className="flex items-center justify-between">
-                      <p className="font-semibold text-sm text-slate-800">{c.name}</p>
-                      <span className="text-xl font-bold text-orange-500">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-slate-800">{c.name}</p>
+                        {c.description && (
+                          <p className="text-xs text-slate-500 mt-0.5 leading-snug">{c.description}</p>
+                        )}
+                      </div>
+                      <span className="text-xl font-bold text-orange-500 flex-shrink-0">
                         {val}<span className="text-slate-400 text-sm font-normal"> / {c.scale}</span>
                       </span>
                     </div>

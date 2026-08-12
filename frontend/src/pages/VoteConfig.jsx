@@ -33,7 +33,7 @@ export default function VoteConfig() {
 
   /* criteria form */
   const [showCritForm, setShowCritForm] = useState(false);
-  const [critForm, setCritForm] = useState({ name: "", scale: 10, weight: 1 });
+  const [critForm, setCritForm] = useState({ name: "", scale: 10, weight: 1, description: "" });
   const [savingCrit, setSavingCrit] = useState(false);
   const [editingCrit, setEditingCrit] = useState(null);
 
@@ -148,7 +148,7 @@ export default function VoteConfig() {
         const r = await api.post(`/vote/sessions/${id}/criteria`, { ...critForm, order_num: session.criteria?.length || 0 });
         setSession(s => ({ ...s, criteria: [...(s.criteria || []), r.data] }));
       }
-      setCritForm({ name: "", scale: 10, weight: 1 });
+      setCritForm({ name: "", scale: 10, weight: 1, description: "" });
       setShowCritForm(false);
     } catch { setError("Erreur sauvegarde critère."); }
     setSavingCrit(false);
@@ -164,7 +164,7 @@ export default function VoteConfig() {
 
   const startEditCrit = (c) => {
     setEditingCrit(c.id);
-    setCritForm({ name: c.name, scale: c.scale, weight: c.weight });
+    setCritForm({ name: c.name, scale: c.scale, weight: c.weight, description: c.description || "" });
     setShowCritForm(true);
   };
 
@@ -398,7 +398,7 @@ export default function VoteConfig() {
           </h2>
           {session.status === "draft" && (
             <button
-              onClick={() => { setEditingCrit(null); setCritForm({ name: "", scale: 10, weight: 1 }); setShowCritForm(v => !v); }}
+              onClick={() => { setEditingCrit(null); setCritForm({ name: "", scale: 10, weight: 1, description: "" }); setShowCritForm(v => !v); }}
               className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 font-medium"
             >
               <Plus className="w-3.5 h-3.5" /> Ajouter
@@ -413,9 +413,10 @@ export default function VoteConfig() {
         <div className="space-y-2 mb-3">
           {session.criteria?.map((c) => (
             <div key={c.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm text-slate-800">{c.name}</p>
                 <p className="text-xs text-slate-500">Note sur {c.scale} · Poids {c.weight}</p>
+                {c.description && <p className="text-xs text-slate-400 mt-0.5 truncate italic">{c.description}</p>}
               </div>
               {session.status === "draft" && (
                 <div className="flex gap-1">
@@ -433,6 +434,15 @@ export default function VoteConfig() {
             <div>
               <label className="text-xs font-medium text-slate-600">Intitulé *</label>
               <input required className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none" placeholder="Innovation" value={critForm.name} onChange={e => setCritForm(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Description (ce que le jury doit évaluer)</label>
+              <textarea
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none resize-none min-h-[64px]"
+                placeholder="Ex : Originalité de la solution, potentiel d'impact, faisabilité technique…"
+                value={critForm.description}
+                onChange={e => setCritForm(p => ({ ...p, description: e.target.value }))}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

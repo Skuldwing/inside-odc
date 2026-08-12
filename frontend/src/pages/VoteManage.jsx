@@ -2,22 +2,27 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy,
-  MessageCircleQuestion, Download, X,
+  MessageCircleQuestion, Download, X, StopCircle,
 } from "lucide-react";
 import api from "../api";
 
 /* Timer SVG circulaire — partagé avec VoteJury */
-function PitchTimer({ startedAt, durationMinutes, label }) {
+function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
   const [timeLeft, setTimeLeft] = useState(null);
 
   useEffect(() => {
     if (!startedAt || !durationMinutes) return;
     const endMs = new Date(startedAt).getTime() + durationMinutes * 60 * 1000;
+    if (stoppedAt) {
+      // Timer gelé : on calcule le temps restant au moment du stop
+      setTimeLeft(Math.round((endMs - new Date(stoppedAt).getTime()) / 1000));
+      return;
+    }
     const calc = () => Math.round((endMs - Date.now()) / 1000);
     setTimeLeft(calc());
     const iv = setInterval(() => setTimeLeft(calc()), 1000);
     return () => clearInterval(iv);
-  }, [startedAt, durationMinutes]);
+  }, [startedAt, stoppedAt, durationMinutes]);
 
   if (timeLeft === null) return null;
 
@@ -96,7 +101,10 @@ export default function VoteManage() {
   const [error, setError] = useState("");
   const [closing, setClosing] = useState(false);
   const [activating, setActivating] = useState(false);
+  const [startingPitch, setStartingPitch] = useState(false);
+  const [stoppingPitch, setStoppingPitch] = useState(false);
   const [startingQa, setStartingQa] = useState(false);
+  const [stoppingQa, setStoppingQa] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [results, setResults] = useState(null);
   const [resultsTab, setResultsTab] = useState("ranking");
@@ -148,13 +156,32 @@ export default function VoteManage() {
     } catch { setError("Erreur."); }
   };
 
+  const startPitch = async () => {
+    setStartingPitch(true);
+    try { await api.post(`/vote/sessions/${id}/start-pitch`); await fetchLive(); }
+    catch { setError("Erreur démarrage timer pitch."); }
+    setStartingPitch(false);
+  };
+
+  const stopPitch = async () => {
+    setStoppingPitch(true);
+    try { await api.post(`/vote/sessions/${id}/stop-pitch`); await fetchLive(); }
+    catch { setError("Erreur arrêt timer pitch."); }
+    setStoppingPitch(false);
+  };
+
   const startQa = async () => {
     setStartingQa(true);
-    try {
-      await api.post(`/vote/sessions/${id}/start-qa`);
-      await fetchLive();
-    } catch { setError("Erreur lors du lancement du Q&R."); }
+    try { await api.post(`/vote/sessions/${id}/start-qa`); await fetchLive(); }
+    catch { setError("Erreur lors du lancement du Q&R."); }
     setStartingQa(false);
+  };
+
+  const stopQa = async () => {
+    setStoppingQa(true);
+    try { await api.post(`/vote/sessions/${id}/stop-qa`); await fetchLive(); }
+    catch { setError("Erreur arrêt timer Q&R."); }
+    setStoppingQa(false);
   };
 
   const loadResults = async () => {
@@ -430,17 +457,55 @@ export default function VoteManage() {
                 {activeProj.description && <p className="text-xs text-slate-500 mt-2">{activeProj.description}</p>}
               </div>
 
-              <PitchTimer startedAt={activeProj.started_at} durationMinutes={pitchDuration} />
+              {/* ── Timer Pitch ── */}
+              {activeProj.started_at ? (
+                <div>
+                  <PitchTimer
+                    startedAt={activeProj.started_at}
+                    stoppedAt={activeProj.pitch_stopped_at}
+                    durationMinutes={pitchDuration}
+                  />
+                  {!activeProj.pitch_stopped_at && session?.status === "active" && (
+                    <button onClick={stopPitch} disabled={stoppingPitch}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 text-red-600 text-xs py-2 font-medium hover:bg-red-50 disabled:opacity-50 transition-colors mb-3">
+                      {stoppingPitch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
+                      Arrêter le timer pitch
+                    </button>
+                  )}
+                </div>
+              ) : (
+                session?.status === "active" && (
+                  <button onClick={startPitch} disabled={startingPitch}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-orange-300 text-orange-600 text-xs py-2.5 font-medium hover:bg-orange-50 disabled:opacity-50 transition-colors mb-4">
+                    {startingPitch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    Démarrer le timer pitch ({pitchDuration} min)
+                  </button>
+                )
+              )}
 
-              {/* Timer Q&R */}
+              {/* ── Timer Q&R ── */}
               {activeProj.qa_started_at ? (
-                <PitchTimer startedAt={activeProj.qa_started_at} durationMinutes={qaDuration} label="Q & R" />
+                <div>
+                  <PitchTimer
+                    startedAt={activeProj.qa_started_at}
+                    stoppedAt={activeProj.qa_stopped_at}
+                    durationMinutes={qaDuration}
+                    label="Q & R"
+                  />
+                  {!activeProj.qa_stopped_at && session?.status === "active" && (
+                    <button onClick={stopQa} disabled={stoppingQa}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 text-red-600 text-xs py-2 font-medium hover:bg-red-50 disabled:opacity-50 transition-colors mb-3">
+                      {stoppingQa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
+                      Arrêter le timer Q&amp;R
+                    </button>
+                  )}
+                </div>
               ) : (
                 session?.status === "active" && (
                   <button onClick={startQa} disabled={startingQa}
                     className="w-full flex items-center justify-center gap-2 rounded-xl border border-purple-200 text-purple-600 text-xs py-2.5 font-medium hover:bg-purple-50 disabled:opacity-50 transition-colors mb-4">
                     {startingQa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircleQuestion className="w-3.5 h-3.5" />}
-                    Lancer le timer Q&amp;R ({qaDuration} min)
+                    Démarrer le timer Q&amp;R ({qaDuration} min)
                   </button>
                 )
               )}

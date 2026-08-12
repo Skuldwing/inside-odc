@@ -280,6 +280,12 @@ pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS started_at TIMEST
   .then(() => console.log("Migration OK: vote_projects.started_at")).catch(e => console.warn("Migration started_at:", e.message));
 pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS qa_started_at TIMESTAMPTZ`)
   .then(() => console.log("Migration OK: vote_projects.qa_started_at")).catch(e => console.warn("Migration qa_started_at:", e.message));
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS pitch_stopped_at TIMESTAMPTZ`)
+  .then(() => console.log("Migration OK: vote_projects.pitch_stopped_at")).catch(e => console.warn("Migration pitch_stopped_at:", e.message));
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS qa_stopped_at TIMESTAMPTZ`)
+  .then(() => console.log("Migration OK: vote_projects.qa_stopped_at")).catch(e => console.warn("Migration qa_stopped_at:", e.message));
+pool.query(`ALTER TABLE vote_criteria ADD COLUMN IF NOT EXISTS description TEXT`)
+  .then(() => console.log("Migration OK: vote_criteria.description")).catch(e => console.warn("Migration criteria.description:", e.message));
 
 pool.query(`
   CREATE TABLE IF NOT EXISTS partner_devices (
