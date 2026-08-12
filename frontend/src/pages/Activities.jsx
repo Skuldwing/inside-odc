@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Calendar,
   MapPin,
@@ -1317,7 +1318,7 @@ function ActivityModal({
   onClose,
   maxWidthClass = "max-w-lg",
 }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4 py-4">
       <div className={`card-solid w-full ${maxWidthClass} flex flex-col max-h-[90vh]`}>
         {/* Header fixe */}
@@ -1329,7 +1330,7 @@ function ActivityModal({
         </div>
 
         {/* Contenu scrollable */}
-        <div className="overflow-y-auto flex-1 px-6 pb-6">
+        <div className="overflow-y-auto flex-1 min-h-0 px-6 pb-6">
           {error && (
             <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 mb-4">
               {error}
@@ -1338,7 +1339,8 @@ function ActivityModal({
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
