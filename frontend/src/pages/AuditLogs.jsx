@@ -44,8 +44,12 @@ function ActionBadge({ action }) {
 
 function DetailsRow({ details }) {
   const [open, setOpen] = useState(false);
-  const entries = Object.entries(details ?? {}).filter(([, v]) => v != null && v !== "");
-  if (entries.length === 0) return <span className="text-slate-400">—</span>;
+  const mods = details?.modifications && typeof details.modifications === "object"
+    ? Object.entries(details.modifications)
+    : null;
+  const extras = Object.entries(details ?? {}).filter(([k, v]) => k !== "modifications" && v != null && v !== "");
+  const hasContent = (mods && mods.length > 0) || extras.length > 0;
+  if (!hasContent) return <span className="text-slate-400">—</span>;
 
   return (
     <div>
@@ -57,13 +61,32 @@ function DetailsRow({ details }) {
         {open ? "Masquer" : "Voir détails"}
       </button>
       {open && (
-        <div className="mt-1.5 rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-xs font-mono space-y-1">
-          {entries.map(([k, v]) => (
-            <div key={k} className="flex gap-2">
-              <span className="text-slate-400 shrink-0">{k}:</span>
-              <span className="text-slate-700 break-all">{String(v)}</span>
+        <div className="mt-1.5 rounded-lg bg-slate-50 border border-slate-200 p-2.5 text-xs space-y-2">
+          {mods && mods.length > 0 && (
+            <div>
+              <p className="font-semibold text-slate-600 mb-1.5">Champs modifiés :</p>
+              <div className="space-y-1">
+                {mods.map(([field, change]) => (
+                  <div key={field} className="flex items-start gap-2 font-mono">
+                    <span className="shrink-0 w-28 text-slate-400 truncate">{field}</span>
+                    <span className="line-through text-red-400 truncate max-w-[90px]">{change?.avant ?? "—"}</span>
+                    <span className="text-slate-400">→</span>
+                    <span className="text-emerald-600 truncate max-w-[90px]">{change?.apres ?? "—"}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
+          {extras.length > 0 && (
+            <div className={`space-y-1 font-mono ${mods && mods.length > 0 ? "border-t border-slate-200 pt-2" : ""}`}>
+              {extras.map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="text-slate-400 shrink-0">{k}:</span>
+                  <span className="text-slate-700 break-all">{String(v)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

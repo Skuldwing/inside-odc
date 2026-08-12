@@ -92,4 +92,56 @@ router.get("/actors", async (req, res) => {
   }
 });
 
+/* ===== GET NOTIFICATIONS (non-admin actions since last seen) ===== */
+router.get("/notifications", async (req, res) => {
+  try {
+    const userRes = await pool.query(
+      "SELECT notifications_last_seen_at FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const lastSeen = userRes.rows[0]?.notifications_last_seen_at ?? null;
+
+    const params = [];
+    const conditions = ["user_role != 'admin'"];
+
+    // Si jamais vu : limiter aux 7 derniers jours pour ne pas surcharger
+    const since = lastSeen ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    params.push(since);
+    conditions.push(`created_at > $${params.length}`);
+
+    const where = "WHERE " + conditions.join(" AND ");
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM audit_logs ${where}`,
+      params
+    );
+
+    const itemsRes = await pool.query(
+      `SELECT id, user_full_name, user_role, action, resource, resource_label, details, created_at
+       FROM audit_logs ${where}
+       ORDER BY created_at DESC LIMIT 15`,
+      params
+    );
+
+    res.json({ count: countRes.rows[0].total, items: itemsRes.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== MARK NOTIFICATIONS AS SEEN ===== */
+router.post("/notifications/seen", async (req, res) => {
+  try {
+    await pool.query(
+      "UPDATE users SET notifications_last_seen_at = NOW() WHERE id = $1",
+      [req.user.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;

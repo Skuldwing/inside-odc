@@ -4,7 +4,6 @@ import {
   Menu,
   LogOut,
   Search,
-  Bell,
   Sparkles,
   Rocket,
   Users,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../auth/useAuth";
 import ODCLogo from "../components/branding/ODCLogo";
+import NotificationBell from "../components/NotificationBell";
 
 export default function Header({ currentPageName, onMenuClick }) {
   const navigate = useNavigate();
@@ -189,12 +189,7 @@ export default function Header({ currentPageName, onMenuClick }) {
             )}
           </div>
 
-          <button
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 active:scale-90"
-            aria-label="Notifications"
-          >
-            <Bell className="w-4 h-4 transition-transform hover:rotate-6" />
-          </button>
+          <NotificationBell />
 
           <button
             className="btn-ghost border border-red-100 bg-white text-red-600 hover:bg-red-50"

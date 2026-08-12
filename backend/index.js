@@ -400,6 +400,10 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: ai_insights")).catch(e => console.warn("Migration ai_insights:", e.message));
 
+pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_seen_at TIMESTAMPTZ`)
+  .then(() => console.log("Migration OK: users.notifications_last_seen_at"))
+  .catch(e => console.warn("Migration notifications_last_seen_at:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

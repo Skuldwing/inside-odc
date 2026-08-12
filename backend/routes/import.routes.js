@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const { logAudit } = require("../services/audit");
 
 const router = express.Router();
 
@@ -596,6 +597,12 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
     await client.query("COMMIT");
     inTransaction = false;
 
+    logAudit(req, "CREATE", "activities", activity.id, activity.title, {
+      date: activity.activity_date,
+      participants_importes: stats.imported,
+      via: "import_excel",
+    });
+
     res.status(201).json({
       message: "Import termine",
       activity,
@@ -651,6 +658,11 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
 
     await client.query("COMMIT");
     inTransaction = false;
+
+    logAudit(req, "UPDATE", "activities", activityId, activity.title, {
+      action: "import_participants",
+      participants_importes: stats.imported,
+    });
 
     res.json({
       message: "Import termine avec succes",
@@ -713,6 +725,11 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
 
     await client.query("COMMIT");
     inTransaction = false;
+
+    logAudit(req, "UPDATE", "activities", activityId, activity.title, {
+      action: "import_participants",
+      participants_importes: stats.imported,
+    });
 
     res.json({
       message: "Import termine avec succes",

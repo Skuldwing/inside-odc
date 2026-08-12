@@ -129,8 +129,10 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
     const created = result.rows[0];
     logAudit(req, "CREATE", "activities", created.id, created.title, {
       date: created.activity_date,
-      partner_id: created.partner_id,
-      device_id: created.device_id,
+      mode: created.mode,
+      lieu: created.location || null,
+      duree_heures: created.duration_hours || null,
+      participants_manuels: created.participants_manual || null,
     });
     res.status(201).json(created);
   } catch (err) {
@@ -160,7 +162,7 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
     }
 
     const existing = await pool.query(
-      "SELECT id, partner_id, coach_id FROM activities WHERE id = $1",
+      "SELECT id, title, activity_date, date_fin, location, duration_hours, mode, partner_id, coach_id FROM activities WHERE id = $1",
       [id]
     );
     if (existing.rows.length === 0) {
@@ -170,6 +172,8 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
     if (!isOwner(req, existing.rows[0])) {
       return res.status(403).json({ error: "Acces refuse" });
     }
+
+    const before = existing.rows[0];
 
     const resolvedPartnerId =
       req.user.role === "partner" ? req.user.partner_id
@@ -214,10 +218,17 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
     );
 
     const updated = result.rows[0];
+    const toDate = (v) => v ? String(v).slice(0, 10) : null;
+    const modifications = {};
+    if (before.title !== updated.title) modifications.titre = { avant: before.title, apres: updated.title };
+    if (toDate(before.activity_date) !== toDate(updated.activity_date)) modifications.date = { avant: toDate(before.activity_date), apres: toDate(updated.activity_date) };
+    if (toDate(before.date_fin) !== toDate(updated.date_fin)) modifications.date_fin = { avant: toDate(before.date_fin), apres: toDate(updated.date_fin) };
+    if ((before.location || null) !== (updated.location || null)) modifications.lieu = { avant: before.location || null, apres: updated.location || null };
+    if ((before.mode || null) !== (updated.mode || null)) modifications.mode = { avant: before.mode, apres: updated.mode };
+    if (String(before.duration_hours ?? "") !== String(updated.duration_hours ?? "")) modifications.duree_heures = { avant: before.duration_hours, apres: updated.duration_hours };
     logAudit(req, "UPDATE", "activities", updated.id, updated.title, {
+      modifications: Object.keys(modifications).length > 0 ? modifications : undefined,
       date: updated.activity_date,
-      partner_id: updated.partner_id,
-      device_id: updated.device_id,
     });
     res.json(updated);
   } catch (err) {
