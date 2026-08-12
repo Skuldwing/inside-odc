@@ -7,10 +7,6 @@ import {
   Pencil,
   Trash2,
   Users,
-  FileSpreadsheet,
-  ScanSearch,
-  Link2,
-  CheckCircle2,
   Download,
   List,
   CalendarDays,
@@ -27,13 +23,6 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMont
 import { fr } from "date-fns/locale";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
-
-const importSteps = [
-  { key: "upload", label: "Import", icon: FileSpreadsheet },
-  { key: "validation", label: "Validation", icon: ScanSearch },
-  { key: "mapping", label: "Correspondance", icon: Link2 },
-  { key: "resultat", label: "Résultat", icon: CheckCircle2 },
-];
 
 export default function Activities({
   forceUploadOpen = false,
@@ -674,8 +663,6 @@ export default function Activities({
           error={uploadError}
           onClose={closeUploadModal}
         >
-          <ImportStepper currentStep={importStep} />
-
           {uploadResult ? (
             <ImportResultSummary result={uploadResult} />
           ) : (
@@ -926,33 +913,6 @@ export default function Activities({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ImportStepper({ currentStep }) {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
-      {importSteps.map((step, idx) => {
-        const index = idx + 1;
-        const active = currentStep >= index;
-        const Icon = step.icon;
-        return (
-          <div
-            key={step.key}
-            className={`rounded-xl border px-3 py-2 text-xs ${
-              active
-                ? "border-orange-300 bg-orange-50 text-orange-700"
-                : "border-slate-200 bg-white text-slate-400"
-            }`}
-          >
-            <div className="flex items-center gap-1.5 font-semibold">
-              <Icon className="h-3.5 w-3.5" />
-              <span>{index}. {step.label}</span>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
