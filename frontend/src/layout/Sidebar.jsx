@@ -26,6 +26,7 @@ const navigation = [
     icon: LayoutDashboard,
     path: "/",
     roles: ["admin", "partner", "coach", "viewer"],
+    tourId: "nav-dashboard",
   },
   {
     name: "Radar Social",
@@ -44,12 +45,14 @@ const navigation = [
     icon: Calendar,
     path: "/activities",
     roles: ["admin", "partner", "coach", "viewer"],
+    tourId: "nav-activities",
   },
   {
     name: "Participants",
     icon: Users,
     path: "/participants",
     roles: ["admin", "partner", "coach", "viewer"],
+    tourId: "nav-participants",
   },
 ];
 
@@ -112,6 +115,7 @@ function NavLink({ item, collapsed, location, onClick, index = 0 }) {
       to={item.path}
       onClick={onClick}
       title={collapsed ? item.name : undefined}
+      data-tour={item.tourId}
       style={{ animationDelay: `${index * 35}ms` }}
       className={clsx(
         "anim-fade-in-up group",
