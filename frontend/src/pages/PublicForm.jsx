@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import DOMPurify from "dompurify";
 
 function apiBase() {
   return import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -553,7 +554,7 @@ export default function PublicForm() {
             {form?.description && (
               <div
                 className="mt-2 max-w-2xl text-slate-600 prose prose-sm"
-                dangerouslySetInnerHTML={{ __html: form.description }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(form.description) }}
               />
             )}
             <div className="mt-5">
@@ -583,7 +584,7 @@ export default function PublicForm() {
             <h2 className="text-xl font-semibold" style={{ color: primaryColor }}>Réponse envoyée ✓</h2>
             <div
               className="mt-2 text-slate-700 prose prose-sm"
-              dangerouslySetInnerHTML={{ __html: settings.success_message }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(settings.success_message) }}
             />
           </section>
         ) : (

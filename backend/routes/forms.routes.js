@@ -427,8 +427,8 @@ router.post("/public/:slug/submissions", async (req, res) => {
         const submittedEmail = String(values[emailField.key] || "").trim().toLowerCase();
         if (submittedEmail) {
           const dupRes = await pool.query(
-            `SELECT 1 FROM form_submissions WHERE form_id = $1 AND lower(values->>'${emailField.key}') = $2 LIMIT 1`,
-            [form.id, submittedEmail]
+            `SELECT 1 FROM form_submissions WHERE form_id = $1 AND lower(values->>$2) = $3 LIMIT 1`,
+            [form.id, emailField.key, submittedEmail]
           );
           if (dupRes.rowCount > 0) {
             return res.status(409).json({ error: "Une reponse a deja ete enregistree avec cet email." });

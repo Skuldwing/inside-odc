@@ -140,10 +140,10 @@ router.post("/set-password", async (req, res) => {
   try {
     const { token, password } = req.body;
 
-    if (!token || !password || String(password).length < 6) {
+    if (!token || !password || String(password).length < 8) {
       return res
         .status(400)
-        .json({ error: "Token et mot de passe valides requis" });
+        .json({ error: "Le mot de passe doit contenir au moins 8 caracteres" });
     }
 
     const userId = await consumePasswordToken(token);

@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const xlsx = require("xlsx");
 const fs = require("fs");
+const path = require("path");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 
@@ -13,9 +14,24 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+const ALLOWED_EXCEL_MIMES = new Set([
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+  "application/vnd.ms-excel",                                          // .xls
+  "application/octet-stream",                                          // certains navigateurs envoient ça pour xlsx
+]);
+const ALLOWED_EXCEL_EXTS = new Set([".xlsx", ".xls"]);
+
 const upload = multer({
   dest: `${uploadDir}/`,
   limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_EXCEL_MIMES.has(file.mimetype) || ALLOWED_EXCEL_EXTS.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(Object.assign(new Error("Fichier Excel requis (.xlsx ou .xls)"), { status: 400 }));
+    }
+  },
 });
 
 function safeUnlink(path) {

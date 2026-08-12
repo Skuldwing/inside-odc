@@ -2,10 +2,9 @@ const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 
 function safeEqual(a, b) {
-  const left = Buffer.from(String(a));
-  const right = Buffer.from(String(b));
-
-  if (left.length !== right.length) return false;
+  // Hash both to a fixed 32-byte digest so timingSafeEqual never leaks length
+  const left  = crypto.createHash("sha256").update(String(a)).digest();
+  const right = crypto.createHash("sha256").update(String(b)).digest();
   return crypto.timingSafeEqual(left, right);
 }
 
