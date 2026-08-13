@@ -1394,7 +1394,7 @@ function QrModal({ activity, onClose }) {
     img.src = dataUrl;
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
       <div className="card-solid w-full max-w-sm p-6">
         <div className="flex items-center justify-between mb-4">
@@ -1441,7 +1441,8 @@ function QrModal({ activity, onClose }) {
           Les participants scannent ce QR code pour s&apos;inscrire directement.
         </p>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
