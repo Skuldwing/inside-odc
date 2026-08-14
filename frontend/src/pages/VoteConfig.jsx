@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Plus, Trash2, Edit2, Check, X, Loader2, QrCode, Copy, ExternalLink,
-  Download, Maximize2, Share2, Users,
+  Download, Maximize2, Share2, Users, Upload, FileText,
 } from "lucide-react";
 import api from "../api";
 
@@ -92,7 +92,9 @@ export default function VoteConfig() {
 
   /* project form */
   const [showProjForm, setShowProjForm] = useState(false);
-  const [projForm, setProjForm] = useState({ name: "", porteur: "", description: "", presentation_url: "" });
+  const [projForm, setProjForm] = useState({ name: "", porteur: "", description: "", presentation_url: "", presentation_pdf: "" });
+  const [presType, setPresType] = useState("url");
+  const [uploadingPdf, setUploadingPdf] = useState(false);
   const [savingProj, setSavingProj] = useState(false);
   const [editingProj, setEditingProj] = useState(null);
   const [qrGuestDataUrl, setQrGuestDataUrl] = useState("");
@@ -201,8 +203,27 @@ export default function VoteConfig() {
 
   const startEditProject = (p) => {
     setEditingProj(p.id);
-    setProjForm({ name: p.name, porteur: p.porteur || "", description: p.description || "", presentation_url: p.presentation_url || "" });
+    const type = p.presentation_pdf ? "pdf" : "url";
+    setPresType(type);
+    setProjForm({ name: p.name, porteur: p.porteur || "", description: p.description || "", presentation_url: p.presentation_url || "", presentation_pdf: p.presentation_pdf || "" });
     setShowProjForm(true);
+  };
+
+  const handlePdfSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPdf(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api.post("/vote/upload-presentation", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setProjForm(p => ({ ...p, presentation_pdf: r.data.filename, presentation_url: "" }));
+    } catch {
+      alert("Erreur lors de l'upload du PDF.");
+    } finally {
+      setUploadingPdf(false);
+      e.target.value = "";
+    }
   };
 
   /* ---- Criteria ---- */
@@ -426,14 +447,15 @@ export default function VoteConfig() {
                 <p className="font-medium text-sm text-slate-800">{p.name}</p>
                 {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
                 {p.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{p.description}</p>}
-                {p.presentation_url && (
+                {(p.presentation_url || p.presentation_pdf) && (
                   <a
-                    href={p.presentation_url}
+                    href={p.presentation_url || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/vote/presentations/${p.presentation_pdf}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-xs text-orange-500 hover:underline mt-1"
                   >
-                    <ExternalLink className="w-3 h-3" /> Présentation
+                    {p.presentation_pdf ? <FileText className="w-3 h-3" /> : <ExternalLink className="w-3 h-3" />}
+                    {p.presentation_pdf ? "PDF" : "Présentation"}
                   </a>
                 )}
               </div>
@@ -463,14 +485,48 @@ export default function VoteConfig() {
               <textarea rows={2} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none resize-none" placeholder="Courte description du projet..." value={projForm.description} onChange={e => setProjForm(p => ({ ...p, description: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600">Lien présentation</label>
-              <input
-                type="url"
-                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none"
-                placeholder="https://docs.google.com/..."
-                value={projForm.presentation_url}
-                onChange={e => setProjForm(p => ({ ...p, presentation_url: e.target.value }))}
-              />
+              <label className="text-xs font-medium text-slate-600">Présentation</label>
+              <div className="mt-1 grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setPresType("url"); setProjForm(p => ({ ...p, presentation_pdf: "" })); }}
+                  className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${presType === "url" ? "border-orange-400 bg-orange-50 text-orange-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                >
+                  <ExternalLink className="w-3 h-3" /> Lien URL
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPresType("pdf"); setProjForm(p => ({ ...p, presentation_url: "" })); }}
+                  className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${presType === "pdf" ? "border-orange-400 bg-orange-50 text-orange-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                >
+                  <FileText className="w-3 h-3" /> Fichier PDF
+                </button>
+              </div>
+              {presType === "url" ? (
+                <input
+                  type="url"
+                  className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none"
+                  placeholder="https://docs.google.com/..."
+                  value={projForm.presentation_url}
+                  onChange={e => setProjForm(p => ({ ...p, presentation_url: e.target.value }))}
+                />
+              ) : projForm.presentation_pdf ? (
+                <div className="mt-2 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
+                  <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <span className="text-xs text-green-700 flex-1 truncate font-mono">{projForm.presentation_pdf}</span>
+                  <button type="button" onClick={() => setProjForm(p => ({ ...p, presentation_pdf: "" }))} className="text-slate-400 hover:text-red-500 flex-shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className={`mt-2 flex items-center gap-2 rounded-xl border border-dashed border-slate-300 px-3 py-4 cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors ${uploadingPdf ? "opacity-50 pointer-events-none" : ""}`}>
+                  <input type="file" accept=".pdf,application/pdf" className="hidden" disabled={uploadingPdf} onChange={handlePdfSelect} />
+                  {uploadingPdf
+                    ? <><Loader2 className="w-4 h-4 animate-spin text-orange-400" /><span className="text-xs text-slate-500">Envoi en cours...</span></>
+                    : <><Upload className="w-4 h-4 text-slate-400" /><span className="text-xs text-slate-500">Cliquer pour uploader un PDF (max 20 Mo)</span></>
+                  }
+                </label>
+              )}
               <p className="text-xs text-slate-400 mt-0.5">Visible par les invités pendant la présentation</p>
             </div>
             <div className="flex gap-2">

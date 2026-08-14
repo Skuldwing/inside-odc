@@ -1,9 +1,29 @@
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const multer = require("multer");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 
 const router = express.Router();
+
+/* ── Stockage PDF présentations ── */
+const presentationsDir = path.join(__dirname, "../uploads/presentations");
+if (!fs.existsSync(presentationsDir)) fs.mkdirSync(presentationsDir, { recursive: true });
+
+const presentationUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, presentationsDir),
+    filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}.pdf`),
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(new Error("PDF uniquement"), false);
+  },
+});
 
 /* ── Jury token middleware ── */
 async function juryAuth(req, res, next) {
@@ -545,11 +565,11 @@ router.get("/sessions/:id/jury-results", juryAuth, async (req, res) => {
 /* ------- PROJECTS ------- */
 router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, presentation_url, order_num } = req.body;
+    const { name, porteur, description, presentation_url, presentation_pdf, order_num } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
     const r = await pool.query(
-      "INSERT INTO vote_projects (session_id, name, porteur, description, presentation_url, order_num) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
-      [req.params.id, name.trim(), porteur || null, description || null, presentation_url || null, order_num || 0]
+      "INSERT INTO vote_projects (session_id, name, porteur, description, presentation_url, presentation_pdf, order_num) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+      [req.params.id, name.trim(), porteur || null, description || null, presentation_url || null, presentation_pdf || null, order_num || 0]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -560,10 +580,10 @@ router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, 
 
 router.put("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, presentation_url, order_num } = req.body;
+    const { name, porteur, description, presentation_url, presentation_pdf, order_num } = req.body;
     const r = await pool.query(
-      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, order_num=$5 WHERE id=$6 AND session_id=$7 RETURNING *",
-      [name, porteur || null, description || null, presentation_url || null, order_num || 0, req.params.pid, req.params.id]
+      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, presentation_pdf=$5, order_num=$6 WHERE id=$7 AND session_id=$8 RETURNING *",
+      [name, porteur || null, description || null, presentation_url || null, presentation_pdf || null, order_num || 0, req.params.pid, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Projet introuvable" });
     res.json(r.rows[0]);
@@ -581,6 +601,28 @@ router.delete("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
   }
+});
+
+/* POST /vote/upload-presentation — upload PDF présentation (admin) */
+router.post("/upload-presentation", authMiddleware, requireAdmin, (req, res) => {
+  presentationUpload.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Erreur upload" });
+    if (!req.file) return res.status(400).json({ error: "Fichier PDF requis" });
+    res.json({ filename: req.file.filename });
+  });
+});
+
+/* GET /vote/presentations/:filename — servir le PDF (public) */
+router.get("/presentations/:filename", (req, res) => {
+  const { filename } = req.params;
+  if (!/^[a-f0-9-]{36}\.pdf$/.test(filename)) {
+    return res.status(400).json({ error: "Fichier invalide" });
+  }
+  const filePath = path.join(presentationsDir, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier introuvable" });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+  res.sendFile(filePath);
 });
 
 /* ------- CRITERIA ------- */
@@ -916,7 +958,7 @@ router.get("/guest/status", guestAuth, async (req, res) => {
 
     const [sessRes, projRes] = await Promise.all([
       pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
-      pool.query("SELECT id, name, porteur, description, presentation_url, status, order_num FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+      pool.query("SELECT id, name, porteur, description, presentation_url, presentation_pdf, status, order_num FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
     ]);
 
     const session = sessRes.rows[0];

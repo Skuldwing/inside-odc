@@ -392,9 +392,9 @@ export default function VoteGuest() {
                   {proj.description && (
                     <p className="text-sm text-slate-600 leading-relaxed mb-3">{proj.description}</p>
                   )}
-                  {proj.presentation_url && (
+                  {(proj.presentation_url || proj.presentation_pdf) && (
                     <a
-                      href={proj.presentation_url}
+                      href={proj.presentation_url || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/vote/presentations/${proj.presentation_pdf}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-600 px-4 py-2.5 text-sm font-medium hover:bg-orange-100 transition-colors"
@@ -452,9 +452,9 @@ export default function VoteGuest() {
                     </div>
                     {p.porteur && <p className="text-xs text-slate-500 mt-0.5">{p.porteur}</p>}
                     {p.description && <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{p.description}</p>}
-                    {p.presentation_url && (
+                    {(p.presentation_url || p.presentation_pdf) && (
                       <a
-                        href={p.presentation_url}
+                        href={p.presentation_url || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/vote/presentations/${p.presentation_pdf}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-orange-500 hover:underline mt-2"

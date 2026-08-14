@@ -409,6 +409,10 @@ pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS presentation_url 
   .then(() => console.log("Migration OK: vote_projects.presentation_url"))
   .catch(e => console.warn("Migration presentation_url:", e.message));
 
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS presentation_pdf TEXT`)
+  .then(() => console.log("Migration OK: vote_projects.presentation_pdf"))
+  .catch(e => console.warn("Migration presentation_pdf:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS vote_guests (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
