@@ -545,11 +545,11 @@ router.get("/sessions/:id/jury-results", juryAuth, async (req, res) => {
 /* ------- PROJECTS ------- */
 router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, order_num } = req.body;
+    const { name, porteur, description, presentation_url, order_num } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
     const r = await pool.query(
-      "INSERT INTO vote_projects (session_id, name, porteur, description, order_num) VALUES ($1,$2,$3,$4,$5) RETURNING *",
-      [req.params.id, name.trim(), porteur || null, description || null, order_num || 0]
+      "INSERT INTO vote_projects (session_id, name, porteur, description, presentation_url, order_num) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *",
+      [req.params.id, name.trim(), porteur || null, description || null, presentation_url || null, order_num || 0]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -560,10 +560,10 @@ router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, 
 
 router.put("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, order_num } = req.body;
+    const { name, porteur, description, presentation_url, order_num } = req.body;
     const r = await pool.query(
-      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, order_num=$4 WHERE id=$5 AND session_id=$6 RETURNING *",
-      [name, porteur || null, description || null, order_num || 0, req.params.pid, req.params.id]
+      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, order_num=$5 WHERE id=$6 AND session_id=$7 RETURNING *",
+      [name, porteur || null, description || null, presentation_url || null, order_num || 0, req.params.pid, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Projet introuvable" });
     res.json(r.rows[0]);
@@ -820,6 +820,205 @@ router.post("/jury/scores", juryAuth, async (req, res) => {
     } finally {
       client.release();
     }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ============================================================
+   GUEST AUTH MIDDLEWARE
+   ============================================================ */
+async function guestAuth(req, res, next) {
+  const token = req.headers["x-guest-token"];
+  if (!token) return res.status(401).json({ error: "Token invité requis" });
+  try {
+    const r = await pool.query("SELECT * FROM vote_guests WHERE token = $1", [token]);
+    if (!r.rows.length) return res.status(401).json({ error: "Token invalide" });
+    req.guest = r.rows[0];
+    next();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+}
+
+/* ============================================================
+   GUEST PUBLIC ROUTES
+   ============================================================ */
+
+/* GET /vote/guest-join/:sessionId — info session pour les invités */
+router.get("/guest-join/:sessionId", async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT id, name, event_date, status FROM vote_sessions WHERE id=$1",
+      [req.params.sessionId]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    if (r.rows[0].status === "draft") return res.status(403).json({ error: "Session pas encore ouverte" });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* POST /vote/guest-join/:sessionId — s'inscrire comme invité */
+router.post("/guest-join/:sessionId", async (req, res) => {
+  try {
+    const { prenom, nom, avatar, email } = req.body;
+    if (!prenom?.trim() || !nom?.trim()) return res.status(400).json({ error: "Prénom et nom requis" });
+    const sessRes = await pool.query("SELECT id, status FROM vote_sessions WHERE id=$1", [req.params.sessionId]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    if (sessRes.rows[0].status === "draft") return res.status(403).json({ error: "Session pas encore ouverte" });
+    if (sessRes.rows[0].status === "closed") return res.status(403).json({ error: "Session terminée" });
+
+    const avatarVal = avatar?.length > 0 ? avatar : "🎓";
+    const normalizedEmail = email?.trim().toLowerCase() || null;
+
+    const ins = await pool.query(
+      "INSERT INTO vote_guests (session_id, prenom, nom, avatar, email) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+      [req.params.sessionId, prenom.trim(), nom.trim(), avatarVal, normalizedEmail]
+    );
+    const row = ins.rows[0];
+    res.json({ token: row.token, guest_id: row.id, prenom: row.prenom, nom: row.nom, avatar: row.avatar });
+  } catch (err) {
+    console.error("GUEST JOIN ERROR:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* POST /vote/guest-recover/:sessionId — retrouver sa session d'invité par email */
+router.post("/guest-recover/:sessionId", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email?.trim()) return res.status(400).json({ error: "Email requis" });
+    const sessRes = await pool.query("SELECT id, status FROM vote_sessions WHERE id=$1", [req.params.sessionId]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    if (sessRes.rows[0].status === "draft") return res.status(403).json({ error: "Session pas encore ouverte" });
+    const r = await pool.query(
+      "SELECT * FROM vote_guests WHERE session_id=$1 AND email=$2",
+      [req.params.sessionId, email.trim().toLowerCase()]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Aucune session trouvée pour cet email." });
+    const row = r.rows[0];
+    res.json({ token: row.token, guest_id: row.id, prenom: row.prenom, nom: row.nom, avatar: row.avatar });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* GET /vote/guest/status — état courant pour les invités (polling) */
+router.get("/guest/status", guestAuth, async (req, res) => {
+  try {
+    const sessionId = req.guest.session_id;
+
+    const [sessRes, projRes] = await Promise.all([
+      pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
+      pool.query("SELECT id, name, porteur, description, presentation_url, status, order_num FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+    ]);
+
+    const session = sessRes.rows[0];
+    const projects = projRes.rows;
+
+    let active_project = null;
+    if (session.active_project_id) {
+      active_project = projects.find(p => p.id === session.active_project_id) || null;
+    }
+
+    /* Récupérer le pronostic existant de cet invité */
+    const predRes = await pool.query(
+      "SELECT predicted_ranking FROM vote_guest_predictions WHERE guest_id=$1 AND session_id=$2",
+      [req.guest.id, sessionId]
+    );
+    const my_prediction = predRes.rows[0]?.predicted_ranking || null;
+
+    res.json({
+      session_status: session.status,
+      session_name: session.name,
+      pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
+      qa_duration_minutes: session.qa_duration_minutes ?? 5,
+      projects,
+      active_project,
+      my_prediction,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* POST /vote/guest/predict — soumettre un pronostic de classement */
+router.post("/guest/predict", guestAuth, async (req, res) => {
+  try {
+    const { predicted_ranking } = req.body;
+    if (!Array.isArray(predicted_ranking) || predicted_ranking.length === 0) {
+      return res.status(400).json({ error: "predicted_ranking (tableau) requis" });
+    }
+    const sessRes = await pool.query("SELECT status FROM vote_sessions WHERE id=$1", [req.guest.session_id]);
+    if (sessRes.rows[0]?.status === "closed") return res.status(403).json({ error: "Session terminée, pronostic clos" });
+
+    await pool.query(`
+      INSERT INTO vote_guest_predictions (guest_id, session_id, predicted_ranking)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (guest_id, session_id)
+      DO UPDATE SET predicted_ranking=$3, submitted_at=NOW()
+    `, [req.guest.id, req.guest.session_id, JSON.stringify(predicted_ranking)]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* GET /vote/sessions/:id/guest-results — résultats + comparaison pronostic */
+router.get("/sessions/:id/guest-results", guestAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.guest.session_id !== id) return res.status(403).json({ error: "Accès non autorisé" });
+
+    const sessRes = await pool.query("SELECT status, name FROM vote_sessions WHERE id=$1", [id]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    if (sessRes.rows[0].status !== "closed") return res.status(403).json({ error: "Résultats non disponibles" });
+
+    const [projRes, wAvgRes, predRes] = await Promise.all([
+      pool.query("SELECT id, name, porteur FROM vote_projects WHERE session_id=$1 ORDER BY order_num", [id]),
+      pool.query(`
+        SELECT vs.project_id,
+               SUM(vs.score * vc.weight) / NULLIF(SUM(vc.weight), 0) AS weighted_avg,
+               COUNT(DISTINCT vs.jury_id)::int AS voter_count
+        FROM vote_scores vs
+        JOIN vote_criteria vc ON vc.id = vs.criteria_id
+        WHERE vs.session_id = $1
+        GROUP BY vs.project_id
+      `, [id]),
+      pool.query(
+        "SELECT predicted_ranking FROM vote_guest_predictions WHERE guest_id=$1 AND session_id=$2",
+        [req.guest.id, id]
+      ),
+    ]);
+
+    const wAvgMap = {};
+    wAvgRes.rows.forEach(r => { wAvgMap[r.project_id] = { weighted_avg: parseFloat(r.weighted_avg || 0).toFixed(2), voter_count: r.voter_count }; });
+
+    const ranking = projRes.rows
+      .map(p => ({ ...p, ...(wAvgMap[p.id] || { weighted_avg: "0.00", voter_count: 0 }) }))
+      .sort((a, b) => parseFloat(b.weighted_avg) - parseFloat(a.weighted_avg));
+
+    const my_prediction = predRes.rows[0]?.predicted_ranking || null;
+
+    /* Comparer le top 3 du pronostic avec le top 3 réel */
+    let prediction_correct = false;
+    if (my_prediction && ranking.length >= 3) {
+      const actualTop3 = ranking.slice(0, 3).map(p => p.id);
+      const predTop3   = my_prediction.slice(0, 3);
+      prediction_correct = actualTop3.length === predTop3.length
+        && actualTop3.every((id, i) => id === predTop3[i]);
+    }
+
+    res.json({ session_name: sessRes.rows[0].name, ranking, my_prediction, prediction_correct });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

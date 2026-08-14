@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Award, AlertCircle, Mail, RefreshCw } from "lucide-react";
+import { Loader2, Users, AlertCircle, Mail, RefreshCw } from "lucide-react";
 import api from "../api";
 
 const UNISEX_STYLES = [
@@ -15,29 +15,24 @@ const UNISEX_STYLES = [
 ];
 
 function dicebearUrl(style, seed) {
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed || "jury")}`;
+  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed || "guest")}`;
 }
 
 function randSuffix() {
   return "_" + Math.random().toString(36).slice(2, 7);
 }
 
-export function AvatarImg({ avatar, className = "w-10 h-10 rounded-xl" }) {
-  if (avatar?.startsWith("https://")) {
-    return <img src={avatar} alt="avatar" className={className} />;
-  }
-  return <span className={className + " flex items-center justify-center text-2xl"}>{avatar || "🧑"}</span>;
-}
-
-export default function VoteJoin() {
+export default function VoteGuestJoin() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
+
   const [session, setSession]       = useState(null);
   const [loadError, setLoadError]   = useState("");
-  const [pseudo, setPseudo]         = useState("");
+  const [prenom, setPrenom]         = useState("");
+  const [nom, setNom]               = useState("");
   const [email, setEmail]           = useState("");
   const [style, setStyle]           = useState(UNISEX_STYLES[0].id);
-  const [seed, setSeed]             = useState("jury");
+  const [seed, setSeed]             = useState("guest");
   const [joining, setJoining]       = useState(false);
   const [joinError, setJoinError]   = useState("");
 
@@ -47,42 +42,47 @@ export default function VoteJoin() {
   const [recoverError, setRecoverError]           = useState("");
 
   useEffect(() => {
-    const existing = localStorage.getItem(`vote_jury_${sessionId}`);
+    const existing = localStorage.getItem(`vote_guest_${sessionId}`);
     if (existing) {
-      navigate(`/vote/jury/${sessionId}`, { replace: true });
+      navigate(`/vote/guest/${sessionId}`, { replace: true });
       return;
     }
-    api.get(`/vote/join/${sessionId}`)
+    api.get(`/vote/guest-join/${sessionId}`)
       .then(r => setSession(r.data))
       .catch(err => setLoadError(err?.response?.data?.error || "Session introuvable"));
   }, [sessionId, navigate]);
 
   useEffect(() => {
-    setSeed(pseudo.trim() || "jury");
-  }, [pseudo]);
+    const combined = [prenom, nom].filter(Boolean).join(" ") || "guest";
+    setSeed(combined);
+  }, [prenom, nom]);
 
   const avatarUrl = dicebearUrl(style, seed);
-
-  const handleVariation = () => setSeed((pseudo.trim() || "jury") + randSuffix());
+  const handleVariation = () => {
+    const base = [prenom, nom].filter(Boolean).join(" ") || "guest";
+    setSeed(base + randSuffix());
+  };
 
   const handleJoin = async (e) => {
     e.preventDefault();
-    if (!pseudo.trim()) return;
+    if (!prenom.trim() || !nom.trim()) return;
     setJoining(true);
     setJoinError("");
     try {
-      const r = await api.post(`/vote/join/${sessionId}`, {
-        pseudo: pseudo.trim(),
+      const r = await api.post(`/vote/guest-join/${sessionId}`, {
+        prenom: prenom.trim(),
+        nom: nom.trim(),
         avatar: avatarUrl,
         email: email.trim() || undefined,
       });
-      localStorage.setItem(`vote_jury_${sessionId}`, JSON.stringify({
+      localStorage.setItem(`vote_guest_${sessionId}`, JSON.stringify({
         token: r.data.token,
-        pseudo: r.data.pseudo,
+        prenom: r.data.prenom,
+        nom: r.data.nom,
         avatar: r.data.avatar,
         email: email.trim() || undefined,
       }));
-      navigate(`/vote/jury/${sessionId}`, { replace: true });
+      navigate(`/vote/guest/${sessionId}`, { replace: true });
     } catch (err) {
       setJoinError(err?.response?.data?.error || "Erreur. Réessayez.");
       setJoining(false);
@@ -95,20 +95,17 @@ export default function VoteJoin() {
     setRecoveringLoading(true);
     setRecoverError("");
     try {
-      const r = await api.post(`/vote/recover/${sessionId}`, { email: recoverEmail.trim() });
-      localStorage.setItem(`vote_jury_${sessionId}`, JSON.stringify({
+      const r = await api.post(`/vote/guest-recover/${sessionId}`, { email: recoverEmail.trim() });
+      localStorage.setItem(`vote_guest_${sessionId}`, JSON.stringify({
         token: r.data.token,
-        pseudo: r.data.pseudo,
+        prenom: r.data.prenom,
+        nom: r.data.nom,
         avatar: r.data.avatar,
         email: recoverEmail.trim(),
       }));
-      navigate(`/vote/jury/${sessionId}`, { replace: true });
+      navigate(`/vote/guest/${sessionId}`, { replace: true });
     } catch (err) {
-      if (err?.response?.status === 403) {
-        setRecoverError(err.response.data?.error || "Session non disponible.");
-      } else {
-        setRecoverError("Adresse e-mail non trouvée dans cette session.");
-      }
+      setRecoverError(err?.response?.data?.error || "Adresse e-mail non trouvée.");
       setRecoveringLoading(false);
     }
   };
@@ -137,9 +134,9 @@ export default function VoteJoin() {
 
         <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-500 mb-4 shadow-lg shadow-orange-200">
-            <Award className="w-8 h-8 text-white" />
+            <Users className="w-8 h-8 text-white" />
           </div>
-          <p className="text-xs uppercase tracking-widest text-orange-500 font-semibold mb-1">Jury</p>
+          <p className="text-xs uppercase tracking-widest text-orange-500 font-semibold mb-1">Invités</p>
           <h1 className="text-2xl font-bold text-slate-900">{session.name}</h1>
           {session.event_date && (
             <p className="text-sm text-slate-500 mt-1">
@@ -200,15 +197,9 @@ export default function VoteJoin() {
 
             {/* Sélecteur d'avatar */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              {/* Aperçu */}
               <div className="flex flex-col items-center mb-4">
                 <div className="w-24 h-24 rounded-2xl border-2 border-slate-100 overflow-hidden mb-3 bg-slate-50 flex items-center justify-center">
-                  <img
-                    key={avatarUrl}
-                    src={avatarUrl}
-                    alt="Votre avatar"
-                    className="w-full h-full object-cover"
-                  />
+                  <img key={avatarUrl} src={avatarUrl} alt="Votre avatar" className="w-full h-full object-cover" />
                 </div>
                 <button
                   type="button"
@@ -220,7 +211,6 @@ export default function VoteJoin() {
                 </button>
               </div>
 
-              {/* Sélecteur de style */}
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
                 Choisissez votre personnage
               </label>
@@ -236,31 +226,42 @@ export default function VoteJoin() {
                         : "bg-slate-50 border border-slate-200 hover:border-orange-200"
                     }`}
                   >
-                    <img
-                      src={dicebearUrl(s.id, seed)}
-                      alt={s.label}
-                      className="w-10 h-10 rounded-lg"
-                    />
+                    <img src={dicebearUrl(s.id, seed)} alt={s.label} className="w-10 h-10 rounded-lg" />
                     <span className="text-[10px] text-slate-500 font-medium">{s.label}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Pseudo */}
-            <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
-                Votre pseudo
-              </label>
-              <input
-                required
-                autoFocus
-                className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                placeholder="Ex : Amadou D."
-                value={pseudo}
-                onChange={e => setPseudo(e.target.value)}
-                maxLength={50}
-              />
+            {/* Identité */}
+            <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
+                  Prénom <span className="text-red-400">*</span>
+                </label>
+                <input
+                  required
+                  autoFocus
+                  className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  placeholder="Fatou"
+                  value={prenom}
+                  onChange={e => setPrenom(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
+                  Nom <span className="text-red-400">*</span>
+                </label>
+                <input
+                  required
+                  className="w-full rounded-xl border border-slate-200 px-3 py-3 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
+                  placeholder="Diallo"
+                  value={nom}
+                  onChange={e => setNom(e.target.value)}
+                  maxLength={100}
+                />
+              </div>
             </div>
 
             {/* Email */}
@@ -270,7 +271,7 @@ export default function VoteJoin() {
                 <span className="text-slate-300 font-normal normal-case">(recommandé)</span>
               </label>
               <p className="text-xs text-slate-400 mb-2">
-                Permet de retrouver votre session si vous changez d&apos;appareil.
+                Permet de retrouver votre session et de recevoir les résultats.
               </p>
               <input
                 type="email"
@@ -288,27 +289,25 @@ export default function VoteJoin() {
               </div>
             )}
 
-            {/* Aperçu carte juré */}
+            {/* Aperçu carte invité */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex items-center gap-3">
-              <img
-                src={avatarUrl}
-                alt="avatar"
-                className="w-11 h-11 rounded-xl flex-shrink-0 border border-slate-100"
-              />
+              <img src={avatarUrl} alt="avatar" className="w-11 h-11 rounded-xl flex-shrink-0 border border-slate-100" />
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-800 text-sm truncate">{pseudo || "Votre pseudo..."}</p>
-                <p className="text-xs text-slate-400">Membre du jury</p>
+                <p className="font-semibold text-slate-800 text-sm truncate">
+                  {prenom || nom ? `${prenom} ${nom}`.trim() : "Votre nom..."}
+                </p>
+                <p className="text-xs text-slate-400">Invité</p>
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={joining || !pseudo.trim()}
+              disabled={joining || !prenom.trim() || !nom.trim()}
               className="w-full rounded-2xl bg-orange-500 py-4 text-base font-semibold text-white shadow-lg shadow-orange-200 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {joining
                 ? <span className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Connexion...</span>
-                : "Rejoindre comme juré"
+                : "Rejoindre comme invité"
               }
             </button>
 

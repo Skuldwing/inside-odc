@@ -319,7 +319,7 @@ export default function VoteJury() {
               <Loader2 className="w-6 h-6 animate-spin text-orange-400" />
             </div>
           )}
-          <p className="text-center text-xs text-slate-400 mt-8">Orange Digital Center Senegal</p>
+          <p className="text-center text-xs text-slate-400 mt-8">Orange Digital Center Sénégal</p>
         </div>
       </div>
     );
@@ -381,7 +381,7 @@ export default function VoteJury() {
               <span>En attente du prochain projet...</span>
             </div>
             <p className="text-xs text-slate-400 mt-6">L&apos;administrateur lancera le vote sous peu</p>
-            <p className="mt-2 text-xs text-slate-400">Orange Digital Center Senegal</p>
+            <p className="mt-2 text-xs text-slate-400">Orange Digital Center Sénégal</p>
           </div>
         </div>
       </div>
@@ -560,7 +560,7 @@ export default function VoteJury() {
             </form>
           )}
 
-          <p className="text-center text-xs text-slate-400 py-4">Orange Digital Center Senegal</p>
+          <p className="text-center text-xs text-slate-400 py-4">Orange Digital Center Sénégal</p>
         </div>
       </div>
     </>

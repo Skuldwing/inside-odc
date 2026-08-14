@@ -2,14 +2,79 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Plus, Trash2, Edit2, Check, X, Loader2, QrCode, Copy, ExternalLink,
-  Download, Maximize2, Share2,
+  Download, Maximize2, Share2, Users,
 } from "lucide-react";
 import api from "../api";
 
 const AVATARS = ["🧑","👩","👨","😎","🤓","🦸","🧙","🎓","🏆","⭐","🚀","💡","🎯","🔥","💪","🌟","🦁","🐯","🦊","🐺"];
 
-const STATUS_LABEL = { draft: "Brouillon", active: "En cours", closed: "Termine" };
+const STATUS_LABEL = { draft: "Brouillon", active: "En cours", closed: "Terminé" };
 const STATUS_CLS   = { draft: "bg-slate-100 text-slate-600", active: "bg-orange-100 text-orange-700", closed: "bg-green-100 text-green-700" };
+
+function GuestQrSection({ session, qrDataUrl, guestJoinUrl, onProject }) {
+  const [copiedGuest, setCopiedGuest] = useState(false);
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(guestJoinUrl).catch(() => {});
+    setCopiedGuest(true);
+    setTimeout(() => setCopiedGuest(false), 2000);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <h2 className="font-semibold text-slate-800">QR Code invités</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Pour le public — pas de vote, pronostic uniquement</p>
+        </div>
+        <a href={guestJoinUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-orange-500 hover:underline">
+          <ExternalLink className="w-3 h-3" /> Ouvrir
+        </a>
+      </div>
+
+      <div className="flex flex-col items-center gap-4">
+        {qrDataUrl ? (
+          <button
+            onClick={onProject}
+            title="Projeter en plein écran"
+            className="group relative bg-white rounded-2xl border-2 border-purple-200 p-4 shadow-sm hover:border-purple-400 transition-colors"
+          >
+            <img src={qrDataUrl} alt="QR Code invités" className="w-56 h-56" />
+            <div className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
+              <Maximize2 className="w-6 h-6 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+          </button>
+        ) : (
+          <div className="w-56 h-56 rounded-2xl border-2 border-slate-200 flex items-center justify-center">
+            <QrCode className="w-12 h-12 text-slate-200" />
+          </div>
+        )}
+
+        <div className="text-center">
+          <p className="font-semibold text-slate-800">{session.name}</p>
+          <p className="text-xs text-purple-500 mt-0.5">Espace invités</p>
+        </div>
+
+        <div className="w-full flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <span className="text-xs text-slate-500 flex-1 truncate font-mono">{guestJoinUrl}</span>
+          <button onClick={copyLink} title="Copier le lien" className="flex-shrink-0 text-slate-400 hover:text-orange-500 transition-colors">
+            {copiedGuest ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {navigator.share && (
+          <button
+            onClick={() => navigator.share({ title: `Invités — ${session.name}`, url: guestJoinUrl }).catch(() => {})}
+            className="w-full flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 py-3 text-xs font-medium text-slate-600 hover:border-purple-300 hover:text-purple-500 transition-colors"
+          >
+            <Share2 className="w-4 h-4" />
+            Partager le lien invités
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function VoteConfig() {
   const { id } = useParams();
@@ -27,9 +92,10 @@ export default function VoteConfig() {
 
   /* project form */
   const [showProjForm, setShowProjForm] = useState(false);
-  const [projForm, setProjForm] = useState({ name: "", porteur: "", description: "" });
+  const [projForm, setProjForm] = useState({ name: "", porteur: "", description: "", presentation_url: "" });
   const [savingProj, setSavingProj] = useState(false);
   const [editingProj, setEditingProj] = useState(null);
+  const [qrGuestDataUrl, setQrGuestDataUrl] = useState("");
 
   /* criteria form */
   const [showCritForm, setShowCritForm] = useState(false);
@@ -40,6 +106,7 @@ export default function VoteConfig() {
   const [activating, setActivating] = useState(false);
   const [projecting, setProjecting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [qrTab, setQrTab] = useState("jury");
 
   const fetch = async () => {
     try {
@@ -59,12 +126,16 @@ export default function VoteConfig() {
   const generateQr = async (sid) => {
     try {
       const QRCode = await import("qrcode");
-      const url = `${window.location.origin}/vote/join/${sid}`;
-      const dataUrl = await QRCode.default.toDataURL(url, {
-        width: 512, margin: 2,
-        color: { dark: "#1e293b", light: "#ffffff" },
-      });
-      setQrDataUrl(dataUrl);
+      const [juryUrl, dataUrl] = await Promise.all([
+        QRCode.default.toDataURL(`${window.location.origin}/vote/join/${sid}`, {
+          width: 512, margin: 2, color: { dark: "#1e293b", light: "#ffffff" },
+        }),
+        QRCode.default.toDataURL(`${window.location.origin}/vote/guest-join/${sid}`, {
+          width: 512, margin: 2, color: { dark: "#7c3aed", light: "#ffffff" },
+        }),
+      ]);
+      setQrDataUrl(juryUrl);
+      setQrGuestDataUrl(dataUrl);
     } catch {}
   };
 
@@ -130,7 +201,7 @@ export default function VoteConfig() {
 
   const startEditProject = (p) => {
     setEditingProj(p.id);
-    setProjForm({ name: p.name, porteur: p.porteur || "", description: p.description || "" });
+    setProjForm({ name: p.name, porteur: p.porteur || "", description: p.description || "", presentation_url: p.presentation_url || "" });
     setShowProjForm(true);
   };
 
@@ -226,7 +297,8 @@ export default function VoteConfig() {
     } catch {}
   };
 
-  const joinUrl = `${window.location.origin}/vote/join/${id}`;
+  const joinUrl      = `${window.location.origin}/vote/join/${id}`;
+  const guestJoinUrl = `${window.location.origin}/vote/guest-join/${id}`;
 
   if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-orange-400" /></div>;
   if (error && !session) return <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3">{error}</div>;
@@ -354,6 +426,16 @@ export default function VoteConfig() {
                 <p className="font-medium text-sm text-slate-800">{p.name}</p>
                 {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
                 {p.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{p.description}</p>}
+                {p.presentation_url && (
+                  <a
+                    href={p.presentation_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-orange-500 hover:underline mt-1"
+                  >
+                    <ExternalLink className="w-3 h-3" /> Présentation
+                  </a>
+                )}
               </div>
               {session.status === "draft" && (
                 <div className="flex gap-1 flex-shrink-0">
@@ -379,6 +461,17 @@ export default function VoteConfig() {
             <div>
               <label className="text-xs font-medium text-slate-600">Description</label>
               <textarea rows={2} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none resize-none" placeholder="Courte description du projet..." value={projForm.description} onChange={e => setProjForm(p => ({ ...p, description: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600">Lien présentation</label>
+              <input
+                type="url"
+                className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none"
+                placeholder="https://docs.google.com/..."
+                value={projForm.presentation_url}
+                onChange={e => setProjForm(p => ({ ...p, presentation_url: e.target.value }))}
+              />
+              <p className="text-xs text-slate-400 mt-0.5">Visible par les invités pendant la présentation</p>
             </div>
             <div className="flex gap-2">
               <button type="submit" disabled={savingProj} className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
@@ -486,6 +579,37 @@ export default function VoteConfig() {
           </div>
         ) : (
           <div>
+            {/* ── Tabs jury / invités ── */}
+            {!projecting && (
+              <div className="flex gap-1 rounded-xl bg-slate-100 p-1 mb-5">
+                <button
+                  onClick={() => setQrTab("jury")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
+                    (qrTab ?? "jury") === "jury" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <QrCode className="w-3.5 h-3.5" /> Jury
+                </button>
+                <button
+                  onClick={() => setQrTab("guests")}
+                  className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all ${
+                    qrTab === "guests" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" /> Invités
+                </button>
+              </div>
+            )}
+
+            {(qrTab === "guests") ? (
+              <GuestQrSection
+                session={session}
+                qrDataUrl={qrGuestDataUrl}
+                guestJoinUrl={guestJoinUrl}
+                onProject={() => setProjecting(true)}
+              />
+            ) : (
+            <>
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-semibold text-slate-800">QR Code jury</h2>
               <a
@@ -590,6 +714,8 @@ export default function VoteConfig() {
                   ))}
                 </div>
               </div>
+            )}
+            </>
             )}
           </div>
         )}

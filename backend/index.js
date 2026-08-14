@@ -404,6 +404,35 @@ pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_seen_a
   .then(() => console.log("Migration OK: users.notifications_last_seen_at"))
   .catch(e => console.warn("Migration notifications_last_seen_at:", e.message));
 
+/* ── Vote : présentation projets + espace invités ── */
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS presentation_url TEXT`)
+  .then(() => console.log("Migration OK: vote_projects.presentation_url"))
+  .catch(e => console.warn("Migration presentation_url:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_guests (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    prenom     VARCHAR(100) NOT NULL,
+    nom        VARCHAR(100) NOT NULL,
+    avatar     TEXT DEFAULT '🎓',
+    email      VARCHAR(255),
+    token      UUID UNIQUE DEFAULT gen_random_uuid(),
+    joined_at  TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_guests")).catch(e => console.warn("Migration vote_guests:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_guest_predictions (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    guest_id           UUID REFERENCES vote_guests(id) ON DELETE CASCADE,
+    session_id         UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    predicted_ranking  JSONB NOT NULL,
+    submitted_at       TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(guest_id, session_id)
+  )
+`).then(() => console.log("Migration OK: vote_guest_predictions")).catch(e => console.warn("Migration vote_guest_predictions:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
