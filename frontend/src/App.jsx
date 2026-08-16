@@ -25,6 +25,7 @@ const VoteJoin = lazy(() => import("./pages/VoteJoin"));
 const VoteJury = lazy(() => import("./pages/VoteJury"));
 const VoteGuestJoin = lazy(() => import("./pages/VoteGuestJoin"));
 const VoteGuest = lazy(() => import("./pages/VoteGuest"));
+const VoteProject = lazy(() => import("./pages/VoteProject"));
 const Vote = lazy(() => import("./pages/Vote"));
 const VoteConfig = lazy(() => import("./pages/VoteConfig"));
 const VoteManage = lazy(() => import("./pages/VoteManage"));
@@ -81,6 +82,14 @@ export default function App() {
         element={
           <Suspense fallback={<PageLoader />}>
             <VoteGuest />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/vote/project/:sessionId"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <VoteProject />
           </Suspense>
         }
       />

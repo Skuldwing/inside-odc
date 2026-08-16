@@ -413,6 +413,14 @@ pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS presentation_pdf 
   .then(() => console.log("Migration OK: vote_projects.presentation_pdf"))
   .catch(e => console.warn("Migration presentation_pdf:", e.message));
 
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS video_url TEXT`)
+  .then(() => console.log("Migration OK: vote_projects.video_url"))
+  .catch(e => console.warn("Migration video_url:", e.message));
+
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS video_file TEXT`)
+  .then(() => console.log("Migration OK: vote_projects.video_file"))
+  .catch(e => console.warn("Migration video_file:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS vote_guests (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy,
-  MessageCircleQuestion, Download, X, StopCircle,
+  MessageCircleQuestion, Download, X, StopCircle, Monitor,
 } from "lucide-react";
 import api from "../api";
 
@@ -231,6 +231,15 @@ export default function VoteManage() {
           <p className="text-sm text-slate-500">{juryTotal} juré{juryTotal !== 1 ? "s" : ""} connecté{juryTotal !== 1 ? "s" : ""}</p>
         </div>
         <div className="flex gap-2">
+          <a
+            href={`/vote/project/${id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            title="Ouvrir la vue projecteur sur une autre machine"
+          >
+            <Monitor className="w-3.5 h-3.5" /> Projecteur
+          </a>
           <button onClick={loadResults} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             <BarChart3 className="w-3.5 h-3.5" /> Résultats
           </button>

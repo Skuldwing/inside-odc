@@ -25,6 +25,32 @@ const presentationUpload = multer({
   },
 });
 
+/* ── Stockage vidéos présentations ── */
+const videosDir = path.join(__dirname, "../uploads/videos");
+if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
+
+const VIDEO_MIMES = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
+
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, videosDir),
+    filename: (req, file, cb) => {
+      const ext = file.mimetype === "video/quicktime" ? ".mov"
+        : file.mimetype === "video/x-msvideo" ? ".avi"
+        : file.mimetype === "video/x-matroska" ? ".mkv"
+        : file.mimetype === "video/webm" ? ".webm"
+        : file.mimetype === "video/ogg" ? ".ogv"
+        : ".mp4";
+      cb(null, `${crypto.randomUUID()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 500 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (VIDEO_MIMES.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Format vidéo non supporté (MP4, WebM, MOV, AVI, MKV)"), false);
+  },
+});
+
 /* ── Jury token middleware ── */
 async function juryAuth(req, res, next) {
   const token = req.headers["x-jury-token"];
@@ -565,11 +591,11 @@ router.get("/sessions/:id/jury-results", juryAuth, async (req, res) => {
 /* ------- PROJECTS ------- */
 router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, presentation_url, presentation_pdf, order_num } = req.body;
+    const { name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, order_num } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Nom requis" });
     const r = await pool.query(
-      "INSERT INTO vote_projects (session_id, name, porteur, description, presentation_url, presentation_pdf, order_num) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [req.params.id, name.trim(), porteur || null, description || null, presentation_url || null, presentation_pdf || null, order_num || 0]
+      "INSERT INTO vote_projects (session_id, name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, order_num) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *",
+      [req.params.id, name.trim(), porteur || null, description || null, presentation_url || null, presentation_pdf || null, video_url || null, video_file || null, order_num || 0]
     );
     res.status(201).json(r.rows[0]);
   } catch (err) {
@@ -580,10 +606,10 @@ router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, 
 
 router.put("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, presentation_url, presentation_pdf, order_num } = req.body;
+    const { name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, order_num } = req.body;
     const r = await pool.query(
-      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, presentation_pdf=$5, order_num=$6 WHERE id=$7 AND session_id=$8 RETURNING *",
-      [name, porteur || null, description || null, presentation_url || null, presentation_pdf || null, order_num || 0, req.params.pid, req.params.id]
+      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, presentation_pdf=$5, video_url=$6, video_file=$7, order_num=$8 WHERE id=$9 AND session_id=$10 RETURNING *",
+      [name, porteur || null, description || null, presentation_url || null, presentation_pdf || null, video_url || null, video_file || null, order_num || 0, req.params.pid, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Projet introuvable" });
     res.json(r.rows[0]);
@@ -623,6 +649,60 @@ router.get("/presentations/:filename", (req, res) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
   res.sendFile(filePath);
+});
+
+/* POST /vote/upload-video — upload vidéo présentation (admin) */
+router.post("/upload-video", authMiddleware, requireAdmin, (req, res) => {
+  videoUpload.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Erreur upload" });
+    if (!req.file) return res.status(400).json({ error: "Fichier vidéo requis" });
+    res.json({ filename: req.file.filename });
+  });
+});
+
+/* GET /vote/videos/:filename — servir la vidéo (public) */
+router.get("/videos/:filename", (req, res) => {
+  const { filename } = req.params;
+  if (!/^[a-f0-9-]{36}\.(mp4|webm|ogv|mov|avi|mkv)$/.test(filename)) {
+    return res.status(400).json({ error: "Fichier invalide" });
+  }
+  const filePath = path.join(videosDir, filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier introuvable" });
+  const ext = path.extname(filename).slice(1);
+  const mimeMap = { mp4: "video/mp4", webm: "video/webm", ogv: "video/ogg", mov: "video/quicktime", avi: "video/x-msvideo", mkv: "video/x-matroska" };
+  res.setHeader("Content-Type", mimeMap[ext] || "video/mp4");
+  res.setHeader("Accept-Ranges", "bytes");
+  res.sendFile(filePath);
+});
+
+/* GET /vote/project/:sessionId — données projecteur (public, pas d'auth) */
+router.get("/project/:sessionId", async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const sessRes = await pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]);
+    if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    const session = sessRes.rows[0];
+
+    let active_project = null;
+    if (session.active_project_id) {
+      const projRes = await pool.query(
+        "SELECT id, name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, started_at, pitch_stopped_at, qa_started_at, qa_stopped_at FROM vote_projects WHERE id=$1",
+        [session.active_project_id]
+      );
+      active_project = projRes.rows[0] || null;
+    }
+
+    res.json({
+      session_name: session.name,
+      session_status: session.status,
+      pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
+      qa_duration_minutes: session.qa_duration_minutes ?? 5,
+      active_project,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
 /* ------- CRITERIA ------- */
@@ -958,7 +1038,7 @@ router.get("/guest/status", guestAuth, async (req, res) => {
 
     const [sessRes, projRes] = await Promise.all([
       pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
-      pool.query("SELECT id, name, porteur, description, presentation_url, presentation_pdf, status, order_num FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+      pool.query("SELECT id, name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, status, order_num FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
     ]);
 
     const session = sessRes.rows[0];
