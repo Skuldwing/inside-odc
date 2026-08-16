@@ -128,6 +128,20 @@ function PdfViewer({ url, onReset }) {
 /* ─── Présentation PowerPoint via Office Online ─── */
 function PptxViewer({ filename }) {
   const fileUrl  = `${API_BASE}/vote/presentations/${filename}`;
+  const isLocal  = /localhost|127\.0\.0\.1/.test(API_BASE);
+
+  if (isLocal) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-slate-900">
+        <FileText className="w-16 h-16 text-slate-600" />
+        <p className="text-slate-400 text-sm text-center max-w-xs">
+          Aperçu PowerPoint indisponible en local.<br />
+          Configurez <code className="text-orange-400">VITE_API_URL</code> sur l&apos;URL publique du backend.
+        </p>
+      </div>
+    );
+  }
+
   const embedUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
   return (
     <iframe

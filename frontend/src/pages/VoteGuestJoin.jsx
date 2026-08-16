@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Users, AlertCircle, Mail, RefreshCw } from "lucide-react";
+import { Loader2, Users, AlertCircle, Mail } from "lucide-react";
 import api from "../api";
 
 const UNISEX_STYLES = [
@@ -18,10 +18,6 @@ function dicebearUrl(style, seed) {
   return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed || "guest")}`;
 }
 
-function randSuffix() {
-  return "_" + Math.random().toString(36).slice(2, 7);
-}
-
 export default function VoteGuestJoin() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
@@ -31,8 +27,7 @@ export default function VoteGuestJoin() {
   const [prenom, setPrenom]         = useState("");
   const [nom, setNom]               = useState("");
   const [email, setEmail]           = useState("");
-  const [style, setStyle]           = useState(UNISEX_STYLES[0].id);
-  const [seed, setSeed]             = useState("guest");
+  const [style]                      = useState(() => UNISEX_STYLES[Math.floor(Math.random() * UNISEX_STYLES.length)].id);
   const [joining, setJoining]       = useState(false);
   const [joinError, setJoinError]   = useState("");
 
@@ -52,16 +47,8 @@ export default function VoteGuestJoin() {
       .catch(err => setLoadError(err?.response?.data?.error || "Session introuvable"));
   }, [sessionId, navigate]);
 
-  useEffect(() => {
-    const combined = [prenom, nom].filter(Boolean).join(" ") || "guest";
-    setSeed(combined);
-  }, [prenom, nom]);
-
+  const seed = [prenom, nom].filter(Boolean).join(" ") || "guest";
   const avatarUrl = dicebearUrl(style, seed);
-  const handleVariation = () => {
-    const base = [prenom, nom].filter(Boolean).join(" ") || "guest";
-    setSeed(base + randSuffix());
-  };
 
   const handleJoin = async (e) => {
     e.preventDefault();
@@ -195,44 +182,6 @@ export default function VoteGuestJoin() {
         ) : (
           <form onSubmit={handleJoin} className="space-y-4">
 
-            {/* Sélecteur d'avatar */}
-            <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <div className="flex flex-col items-center mb-4">
-                <div className="w-24 h-24 rounded-2xl border-2 border-slate-100 overflow-hidden mb-3 bg-slate-50 flex items-center justify-center">
-                  <img key={avatarUrl} src={avatarUrl} alt="Votre avatar" className="w-full h-full object-cover" />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleVariation}
-                  className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-orange-500 transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Autre variation
-                </button>
-              </div>
-
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
-                Choisissez votre personnage
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {UNISEX_STYLES.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setStyle(s.id)}
-                    className={`flex flex-col items-center gap-1 rounded-xl py-2 px-1 transition-all ${
-                      style === s.id
-                        ? "bg-orange-50 border-2 border-orange-400 shadow-sm"
-                        : "bg-slate-50 border border-slate-200 hover:border-orange-200"
-                    }`}
-                  >
-                    <img src={dicebearUrl(s.id, seed)} alt={s.label} className="w-10 h-10 rounded-lg" />
-                    <span className="text-[10px] text-slate-500 font-medium">{s.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Identité */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
               <div>
@@ -288,17 +237,6 @@ export default function VoteGuestJoin() {
                 {joinError}
               </div>
             )}
-
-            {/* Aperçu carte invité */}
-            <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex items-center gap-3">
-              <img src={avatarUrl} alt="avatar" className="w-11 h-11 rounded-xl flex-shrink-0 border border-slate-100" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-slate-800 text-sm truncate">
-                  {prenom || nom ? `${prenom} ${nom}`.trim() : "Votre nom..."}
-                </p>
-                <p className="text-xs text-slate-400">Invité</p>
-              </div>
-            </div>
 
             <button
               type="submit"

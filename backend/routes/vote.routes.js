@@ -9,10 +9,7 @@ const requireAdmin = require("../middleware/role.middleware");
 
 const router = express.Router();
 
-/* ── Stockage PDF présentations ── */
-const presentationsDir = path.join(__dirname, "../uploads/presentations");
-if (!fs.existsSync(presentationsDir)) fs.mkdirSync(presentationsDir, { recursive: true });
-
+/* ── Stockage présentations en base (persistant face aux redéploiements Railway) ── */
 const PRESENTATION_MIMES = {
   "application/pdf": ".pdf",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
@@ -20,13 +17,7 @@ const PRESENTATION_MIMES = {
 };
 
 const presentationUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, presentationsDir),
-    filename: (req, file, cb) => {
-      const ext = PRESENTATION_MIMES[file.mimetype] || ".pdf";
-      cb(null, `${crypto.randomUUID()}${ext}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (PRESENTATION_MIMES[file.mimetype]) cb(null, true);
@@ -638,33 +629,47 @@ router.delete("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async
   }
 });
 
-/* POST /vote/upload-presentation — upload PDF présentation (admin) */
+/* POST /vote/upload-presentation — upload présentation (admin) → stockage DB */
 router.post("/upload-presentation", authMiddleware, requireAdmin, (req, res) => {
-  presentationUpload.single("file")(req, res, (err) => {
+  presentationUpload.single("file")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message || "Erreur upload" });
-    if (!req.file) return res.status(400).json({ error: "Fichier PDF requis" });
-    res.json({ filename: req.file.filename });
+    if (!req.file) return res.status(400).json({ error: "Fichier requis" });
+    const ext = PRESENTATION_MIMES[req.file.mimetype] || ".pdf";
+    const filename = `${crypto.randomUUID()}${ext}`;
+    try {
+      await pool.query(
+        "INSERT INTO vote_presentation_files (filename, mimetype, data) VALUES ($1, $2, $3)",
+        [filename, req.file.mimetype, req.file.buffer]
+      );
+      res.json({ filename });
+    } catch (dbErr) {
+      console.error(dbErr);
+      res.status(500).json({ error: "Erreur stockage fichier" });
+    }
   });
 });
 
-/* GET /vote/presentations/:filename — servir PDF / PPTX / PPT (public) */
-router.get("/presentations/:filename", (req, res) => {
+/* GET /vote/presentations/:filename — servir PDF / PPTX / PPT depuis la DB (public) */
+router.get("/presentations/:filename", async (req, res) => {
   const { filename } = req.params;
   if (!/^[a-f0-9-]{36}\.(pdf|pptx|ppt)$/.test(filename)) {
     return res.status(400).json({ error: "Fichier invalide" });
   }
-  const filePath = path.join(presentationsDir, filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier introuvable" });
-  const ext = path.extname(filename).slice(1);
-  const mimeMap = {
-    pdf: "application/pdf",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ppt: "application/vnd.ms-powerpoint",
-  };
-  res.setHeader("Content-Type", mimeMap[ext] || "application/octet-stream");
-  res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.sendFile(filePath);
+  try {
+    const r = await pool.query(
+      "SELECT data, mimetype FROM vote_presentation_files WHERE filename=$1",
+      [filename]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Fichier introuvable" });
+    const { data, mimetype } = r.rows[0];
+    res.setHeader("Content-Type", mimetype);
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.send(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
 /* POST /vote/upload-video — upload vidéo présentation (admin) */
