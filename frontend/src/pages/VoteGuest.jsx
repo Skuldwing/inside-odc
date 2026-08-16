@@ -204,6 +204,7 @@ export default function VoteGuest() {
     try {
       const r = await api.get("/vote/guest/status", { headers: { "X-Guest-Token": guestInfo.token } });
       setStatus(r.data);
+      setError("");
       setLoading(false);
     } catch (err) {
       if (err?.response?.status === 401) {

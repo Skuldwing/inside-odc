@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "react-router-dom";
 import * as pdfjsLib from "pdfjs-dist";
-import { Loader2, ChevronUp, ChevronDown, Monitor, FileText, ExternalLink } from "lucide-react";
+import { Loader2, ChevronUp, ChevronDown, Monitor, FileText, ExternalLink, Play } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -185,22 +185,42 @@ function UrlViewer({ url }) {
 /* ─── Lecteur vidéo ─── */
 function VideoViewer({ url, file, autoplay }) {
   const videoRef = useRef(null);
+  const [playFailed, setPlayFailed] = useState(false);
 
   useEffect(() => {
     if (autoplay && videoRef.current) {
-      videoRef.current.play().catch(() => {});
+      videoRef.current.play().catch(() => setPlayFailed(true));
     }
   }, [autoplay]);
 
+  const handleOverlayClick = () => {
+    if (videoRef.current) {
+      videoRef.current.play().then(() => setPlayFailed(false)).catch(() => {});
+    }
+  };
+
   if (file) {
     return (
-      <video
-        ref={videoRef}
-        src={`${API_BASE}/vote/videos/${file}`}
-        controls
-        autoPlay={autoplay}
-        className="w-full h-full object-contain bg-black"
-      />
+      <div className="relative w-full h-full">
+        <video
+          ref={videoRef}
+          src={`${API_BASE}/vote/videos/${file}`}
+          controls
+          autoPlay={autoplay}
+          className="w-full h-full object-contain bg-black"
+        />
+        {playFailed && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 cursor-pointer"
+            onClick={handleOverlayClick}
+          >
+            <div className="flex flex-col items-center gap-3 text-white">
+              <Play className="w-20 h-20 text-orange-400 drop-shadow-lg" />
+              <p className="text-xl font-bold">Cliquer pour lancer la vidéo</p>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
   const ytId = getYoutubeId(url);
@@ -286,7 +306,7 @@ export default function VoteProject() {
       if (!r.ok) return;
       const json = await r.json();
       setData(json);
-      if (loading) setLoading(false);
+      setLoading(false);
 
       /* Détecter changement de projet → reset slides */
       const newId = json.active_project?.id;
@@ -295,9 +315,9 @@ export default function VoteProject() {
         setProjReset(n => n + 1);
       }
     } catch {
-      if (loading) setLoading(false);
+      setLoading(false);
     }
-  }, [sessionId, loading]);
+  }, [sessionId]);
 
   useEffect(() => {
     fetchData();

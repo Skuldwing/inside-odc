@@ -124,7 +124,8 @@ export default function VoteManage() {
     try {
       const r = await api.get(`/vote/sessions/${id}/live`);
       setData(r.data);
-      if (loading) setLoading(false);
+      setError("");
+      setLoading(false);
     } catch {
       setError("Impossible de charger les données.");
       setLoading(false);

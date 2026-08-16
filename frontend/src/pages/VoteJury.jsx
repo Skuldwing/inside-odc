@@ -206,6 +206,7 @@ export default function VoteJury() {
       const r = await api.get("/vote/jury/status", { headers: { "X-Jury-Token": juryInfo.token } });
       const d = r.data;
       setStatus(d);
+      setError("");
       setLoading(false);
 
       const newProjId = d.active_project?.id || null;
