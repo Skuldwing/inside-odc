@@ -26,16 +26,21 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
 
   if (timeLeft === null) return null;
 
+  const stopped = !!stoppedAt;
   const isQa    = !!label;
   const elapsed = timeLeft <= 0;
-  const urgent  = !elapsed && timeLeft <= 10;
-  const warning = !elapsed && timeLeft <= 30;
+  const urgent  = !stopped && !elapsed && timeLeft <= 10;
+  const warning = !stopped && !elapsed && timeLeft <= 30;
 
   const R    = 38;
   const circ = 2 * Math.PI * R;
   const pct  = Math.max(0, Math.min(1, timeLeft / (durationMinutes * 60)));
   const dashOffset = circ * (1 - pct);
-  const stroke = elapsed ? "#ef4444" : warning ? "#f59e0b" : isQa ? "#a855f7" : "#f97316";
+  const stroke = stopped ? "#94a3b8"
+    : elapsed  ? "#ef4444"
+    : warning  ? "#f59e0b"
+    : isQa     ? "#a855f7"
+    : "#f97316";
 
   const mins = Math.floor(Math.abs(timeLeft) / 60);
   const secs = Math.abs(timeLeft) % 60;
@@ -43,9 +48,10 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
 
   return (
     <div className={`flex items-center gap-4 rounded-xl border px-4 py-3 mb-4 ${
-      elapsed ? "border-red-200 bg-red-50"
-      : warning ? "border-amber-200 bg-amber-50"
-      : isQa   ? "border-purple-200 bg-purple-50"
+      stopped  ? "border-slate-200 bg-slate-50"
+      : elapsed  ? "border-red-200 bg-red-50"
+      : warning  ? "border-amber-200 bg-amber-50"
+      : isQa     ? "border-purple-200 bg-purple-50"
       : "border-slate-200 bg-slate-50"
     } ${urgent ? "anim-timer-urgent" : ""}`}>
       {/* Cercle SVG compact */}
@@ -65,7 +71,7 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`text-base font-bold tabular-nums leading-none ${
-            elapsed ? "text-red-600" : warning ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"
+            stopped ? "text-slate-400" : elapsed ? "text-red-600" : warning ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"
           }`}>
             {elapsed ? `+${fmt}` : fmt}
           </span>
@@ -76,7 +82,9 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
           {isQa ? "Q & R" : "Pitch"} · {durationMinutes} min
         </p>
-        {elapsed
+        {stopped
+          ? <p className="text-sm font-semibold text-slate-400 mt-0.5">⏹ Arrêté</p>
+          : elapsed
           ? <p className="text-sm font-bold text-red-600 mt-0.5">Temps écoulé</p>
           : warning
           ? <p className="text-sm font-semibold text-amber-600 mt-0.5">Moins de 30 secondes !</p>
@@ -437,9 +445,17 @@ export default function VoteManage() {
                     </div>
                     <span className={`text-xs rounded-full px-2 py-0.5 flex-shrink-0 ${st.cls}`}>{st.label}</span>
                   </div>
-                  {session?.status === "active" && p.status !== "closed" && (
+                  {session?.status === "active" && (
                     <div className="mt-2">
-                      {isActive ? (
+                      {p.status === "closed" ? (
+                        <button
+                          onClick={() => setActiveProject(p.id)}
+                          disabled={activating}
+                          className="w-full rounded-lg border border-slate-300 text-slate-500 text-xs py-1.5 font-medium hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                        >
+                          {activating ? "..." : "Réouvrir / Relancer"}
+                        </button>
+                      ) : isActive ? (
                         <button
                           onClick={closeProject}
                           disabled={closing}

@@ -11,24 +11,29 @@ function Avatar({ src, className = "w-10 h-10 rounded-xl" }) {
 }
 
 /* Timer SVG circulaire */
-function CircleTimer({ startedAt, durationMinutes, label, size = "md" }) {
+function CircleTimer({ startedAt, stoppedAt, durationMinutes, label, size = "md" }) {
   const [timeLeft, setTimeLeft] = useState(null);
 
   useEffect(() => {
     if (!startedAt || !durationMinutes) return;
     const endMs = new Date(startedAt).getTime() + durationMinutes * 60 * 1000;
+    if (stoppedAt) {
+      setTimeLeft(Math.round((endMs - new Date(stoppedAt).getTime()) / 1000));
+      return;
+    }
     const calc = () => Math.round((endMs - Date.now()) / 1000);
     setTimeLeft(calc());
     const iv = setInterval(() => setTimeLeft(calc()), 1000);
     return () => clearInterval(iv);
-  }, [startedAt, durationMinutes]);
+  }, [startedAt, stoppedAt, durationMinutes]);
 
   if (timeLeft === null) return null;
 
+  const stopped = !!stoppedAt;
   const isQa    = !!label;
   const elapsed = timeLeft <= 0;
-  const urgent  = !elapsed && timeLeft <= 10;
-  const warning = !elapsed && timeLeft <= 30;
+  const urgent  = !stopped && !elapsed && timeLeft <= 10;
+  const warning = !stopped && !elapsed && timeLeft <= 30;
 
   const dim  = size === "sm" ? 80 : 112;
   const R    = size === "sm" ? 32 : 46;
@@ -40,7 +45,8 @@ function CircleTimer({ startedAt, durationMinutes, label, size = "md" }) {
   const pct  = Math.max(0, Math.min(1, timeLeft / (durationMinutes * 60)));
   const dashOffset = circ * (1 - pct);
 
-  const stroke = elapsed ? "#ef4444"
+  const stroke = stopped ? "#94a3b8"
+    : elapsed  ? "#ef4444"
     : warning  ? "#f59e0b"
     : isQa     ? "#a855f7"
     : "#f97316";
@@ -67,7 +73,7 @@ function CircleTimer({ startedAt, durationMinutes, label, size = "md" }) {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`${size === "sm" ? "text-base" : "text-xl"} font-bold tabular-nums leading-none ${
-            elapsed ? "text-red-500" : warning ? "text-amber-500" : isQa ? "text-purple-700" : "text-slate-800"
+            stopped ? "text-slate-400" : elapsed ? "text-red-500" : warning ? "text-amber-500" : isQa ? "text-purple-700" : "text-slate-800"
           }`}>
             {elapsed ? `+${fmt}` : fmt}
           </span>
@@ -76,9 +82,12 @@ function CircleTimer({ startedAt, durationMinutes, label, size = "md" }) {
           </span>
         </div>
       </div>
-      {elapsed && (
-        <p className="text-xs font-semibold text-red-500 mt-1">Temps écoulé</p>
-      )}
+      {stopped
+        ? <p className="text-xs font-semibold text-slate-400 mt-1">⏹ Arrêté</p>
+        : elapsed
+        ? <p className="text-xs font-semibold text-red-500 mt-1">Temps écoulé</p>
+        : null
+      }
     </div>
   );
 }
@@ -421,10 +430,10 @@ export default function VoteJury() {
 
           {/* Timers */}
           {proj.started_at && (
-            <CircleTimer startedAt={proj.started_at} durationMinutes={status.pitch_duration_minutes} />
+            <CircleTimer startedAt={proj.started_at} stoppedAt={proj.pitch_stopped_at} durationMinutes={status.pitch_duration_minutes} />
           )}
           {proj.qa_started_at && (
-            <CircleTimer startedAt={proj.qa_started_at} durationMinutes={status.qa_duration_minutes} label="Q & R" />
+            <CircleTimer startedAt={proj.qa_started_at} stoppedAt={proj.qa_stopped_at} durationMinutes={status.qa_duration_minutes} label="Q & R" />
           )}
 
           {submitted ? (
