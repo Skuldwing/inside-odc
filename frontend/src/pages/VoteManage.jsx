@@ -154,7 +154,7 @@ export default function VoteManage() {
     try {
       await api.post(`/vote/sessions/${id}/close-project`);
       await fetchLive();
-    } catch { setError("Erreur lors de la cloture."); }
+    } catch { setError("Erreur lors de la clôture."); }
     setClosing(false);
   };
 
@@ -264,7 +264,7 @@ export default function VoteManage() {
           </button>
           {session?.status === "active" && (
             <button onClick={closeSession} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors">
-              <Square className="w-3.5 h-3.5" /> Terminer session
+              <Square className="w-3.5 h-3.5" /> Terminer la session
             </button>
           )}
         </div>

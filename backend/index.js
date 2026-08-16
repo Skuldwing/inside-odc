@@ -56,7 +56,20 @@ const authRateLimiter = rateLimit({
   message: { error: "Trop de tentatives. Reessayez plus tard." },
 });
 
-app.use(globalRateLimiter);
+/* Rate limit dédié aux routes vote — polling fréquent multi-utilisateurs sur même WiFi */
+const voteRateLimiter = rateLimit({
+  windowMs: 60 * 1000,  // 1 minute
+  max: 3000,            // 250 utilisateurs × 12 req/min = 3000 req/min
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Trop de requêtes. Réessayez dans une minute." },
+});
+
+/* Route le trafic : /vote → limiteur souple, reste → limiteur global strict */
+app.use((req, res, next) => {
+  if (req.path.startsWith("/vote")) return voteRateLimiter(req, res, next);
+  return globalRateLimiter(req, res, next);
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -448,6 +461,18 @@ pool.query(`
     UNIQUE(guest_id, session_id)
   )
 `).then(() => console.log("Migration OK: vote_guest_predictions")).catch(e => console.warn("Migration vote_guest_predictions:", e.message));
+
+/* ── Index pour les hot paths de polling (auth middleware exécuté à chaque requête) ── */
+pool.query(`CREATE INDEX IF NOT EXISTS idx_vote_jury_token   ON vote_jury(token)`)
+  .then(() => console.log("Migration OK: idx_vote_jury_token")).catch(e => console.warn("Migration idx_vote_jury_token:", e.message));
+pool.query(`CREATE INDEX IF NOT EXISTS idx_vote_guests_token ON vote_guests(token)`)
+  .then(() => console.log("Migration OK: idx_vote_guests_token")).catch(e => console.warn("Migration idx_vote_guests_token:", e.message));
+pool.query(`CREATE INDEX IF NOT EXISTS idx_vote_projects_session ON vote_projects(session_id)`)
+  .then(() => console.log("Migration OK: idx_vote_projects_session")).catch(e => console.warn("Migration idx_vote_projects_session:", e.message));
+pool.query(`CREATE INDEX IF NOT EXISTS idx_vote_criteria_session ON vote_criteria(session_id)`)
+  .then(() => console.log("Migration OK: idx_vote_criteria_session")).catch(e => console.warn("Migration idx_vote_criteria_session:", e.message));
+pool.query(`CREATE INDEX IF NOT EXISTS idx_vote_scores_proj_jury ON vote_scores(project_id, jury_id)`)
+  .then(() => console.log("Migration OK: idx_vote_scores_proj_jury")).catch(e => console.warn("Migration idx_vote_scores_proj_jury:", e.message));
 
 /* Stockage persistant des fichiers de présentation (résiste aux redéploiements Railway) */
 pool.query(`

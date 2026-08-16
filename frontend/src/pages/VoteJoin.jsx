@@ -4,9 +4,9 @@ import { Loader2, Award, AlertCircle, Mail, RefreshCw } from "lucide-react";
 import api from "../api";
 
 const UNISEX_STYLES = [
-  { id: "fun-emoji",          label: "Fun"      },
+  { id: "fun-emoji",          label: "Amusant"  },
   { id: "bottts-neutral",     label: "Robot"    },
-  { id: "avataaars-neutral",  label: "Cartoon"  },
+  { id: "avataaars-neutral",  label: "Personnage" },
   { id: "notionists-neutral", label: "Minimal"  },
   { id: "adventurer-neutral", label: "Aventure" },
   { id: "lorelei-neutral",    label: "Simple"   },

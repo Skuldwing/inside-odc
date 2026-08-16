@@ -104,7 +104,7 @@ function PdfViewer({ url, onReset }) {
             onClick={() => setPage(p => Math.max(p - 1, 1))}
             disabled={page <= 1}
             className="text-white disabled:opacity-30 hover:text-orange-400 transition-colors"
-            title="Slide précédente (↑)"
+            title="Diapositive précédente (↑)"
           >
             <ChevronUp className="w-7 h-7" />
           </button>
@@ -115,7 +115,7 @@ function PdfViewer({ url, onReset }) {
             onClick={() => setPage(p => Math.min(p + 1, total))}
             disabled={page >= total}
             className="text-white disabled:opacity-30 hover:text-orange-400 transition-colors"
-            title="Slide suivante (↓)"
+            title="Diapositive suivante (↓)"
           >
             <ChevronDown className="w-7 h-7" />
           </button>
@@ -294,11 +294,13 @@ function MiniTimer({ startedAt, stoppedAt, durationMinutes, label }) {
 /* ─── Page principale ─── */
 export default function VoteProject() {
   const { sessionId } = useParams();
-  const [data, setData]         = useState(null);
-  const [loading, setLoading]   = useState(true);
-  const [projReset, setProjReset] = useState(0); // incrémenté à chaque changement de projet → reset page PDF
-  const prevProjIdRef           = useRef(null);
-  const prevVideoRef            = useRef(false);
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [offline, setOffline]     = useState(false);
+  const [projReset, setProjReset] = useState(0);
+  const prevProjIdRef             = useRef(null);
+  const prevVideoRef              = useRef(false);
+  const failCountRef              = useRef(0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -307,8 +309,9 @@ export default function VoteProject() {
       const json = await r.json();
       setData(json);
       setLoading(false);
+      failCountRef.current = 0;
+      setOffline(false);
 
-      /* Détecter changement de projet → reset slides */
       const newId = json.active_project?.id;
       if (newId && newId !== prevProjIdRef.current) {
         prevProjIdRef.current = newId;
@@ -316,12 +319,14 @@ export default function VoteProject() {
       }
     } catch {
       setLoading(false);
+      failCountRef.current += 1;
+      if (failCountRef.current >= 3) setOffline(true); // affiche alerte après 3 échecs consécutifs (~6s)
     }
   }, [sessionId]);
 
   useEffect(() => {
     fetchData();
-    const iv = setInterval(fetchData, 1000); // polling 1s pour réactivité vidéo
+    const iv = setInterval(fetchData, 2000); // 2s : suffisant pour réactivité vidéo, 30 req/min au lieu de 60
     return () => clearInterval(iv);
   }, [fetchData]);
 
@@ -374,6 +379,11 @@ export default function VoteProject() {
           {videoActive && (
             <span className="text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-2 py-0.5 uppercase tracking-wide animate-pulse">
               ● Vidéo
+            </span>
+          )}
+          {offline && (
+            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full px-2 py-0.5 uppercase tracking-wide animate-pulse">
+              ⚠ Reconnexion…
             </span>
           )}
         </div>
