@@ -36,7 +36,7 @@ api.interceptors.request.use(
   }
 );
 
-const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/", "/vote/join/", "/vote/jury/"];
+const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/", "/vote/join/", "/vote/jury/", "/vote/guest-join/", "/vote/guest/", "/vote/project/"];
 
 api.interceptors.response.use(
   (response) => {
