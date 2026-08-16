@@ -13,15 +13,24 @@ const router = express.Router();
 const presentationsDir = path.join(__dirname, "../uploads/presentations");
 if (!fs.existsSync(presentationsDir)) fs.mkdirSync(presentationsDir, { recursive: true });
 
+const PRESENTATION_MIMES = {
+  "application/pdf": ".pdf",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+  "application/vnd.ms-powerpoint": ".ppt",
+};
+
 const presentationUpload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, presentationsDir),
-    filename: (req, file, cb) => cb(null, `${crypto.randomUUID()}.pdf`),
+    filename: (req, file, cb) => {
+      const ext = PRESENTATION_MIMES[file.mimetype] || ".pdf";
+      cb(null, `${crypto.randomUUID()}${ext}`);
+    },
   }),
-  limits: { fileSize: 20 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === "application/pdf") cb(null, true);
-    else cb(new Error("PDF uniquement"), false);
+    if (PRESENTATION_MIMES[file.mimetype]) cb(null, true);
+    else cb(new Error("Format non supporté (PDF, PPTX, PPT)"), false);
   },
 });
 
@@ -249,7 +258,7 @@ router.put("/sessions/:id/active-project", authMiddleware, requireAdmin, async (
       );
     }
     const r = await pool.query(
-      "UPDATE vote_sessions SET active_project_id=$1 WHERE id=$2 RETURNING *",
+      "UPDATE vote_sessions SET active_project_id=$1, projector_video_active=FALSE WHERE id=$2 RETURNING *",
       [project_id || null, req.params.id]
     );
     res.json(r.rows[0]);
@@ -638,16 +647,23 @@ router.post("/upload-presentation", authMiddleware, requireAdmin, (req, res) => 
   });
 });
 
-/* GET /vote/presentations/:filename — servir le PDF (public) */
+/* GET /vote/presentations/:filename — servir PDF / PPTX / PPT (public) */
 router.get("/presentations/:filename", (req, res) => {
   const { filename } = req.params;
-  if (!/^[a-f0-9-]{36}\.pdf$/.test(filename)) {
+  if (!/^[a-f0-9-]{36}\.(pdf|pptx|ppt)$/.test(filename)) {
     return res.status(400).json({ error: "Fichier invalide" });
   }
   const filePath = path.join(presentationsDir, filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier introuvable" });
-  res.setHeader("Content-Type", "application/pdf");
+  const ext = path.extname(filename).slice(1);
+  const mimeMap = {
+    pdf: "application/pdf",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ppt: "application/vnd.ms-powerpoint",
+  };
+  res.setHeader("Content-Type", mimeMap[ext] || "application/octet-stream");
   res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.sendFile(filePath);
 });
 
@@ -675,6 +691,18 @@ router.get("/videos/:filename", (req, res) => {
   res.sendFile(filePath);
 });
 
+/* PUT /vote/sessions/:id/projector-video — activer/désactiver la vidéo sur le projecteur (admin) */
+router.put("/sessions/:id/projector-video", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { active } = req.body;
+    await pool.query("UPDATE vote_sessions SET projector_video_active=$1 WHERE id=$2", [!!active, req.params.id]);
+    res.json({ success: true, projector_video_active: !!active });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* GET /vote/project/:sessionId — données projecteur (public, pas d'auth) */
 router.get("/project/:sessionId", async (req, res) => {
   try {
@@ -695,6 +723,7 @@ router.get("/project/:sessionId", async (req, res) => {
     res.json({
       session_name: session.name,
       session_status: session.status,
+      projector_video_active: session.projector_video_active ?? false,
       pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
       qa_duration_minutes: session.qa_duration_minutes ?? 5,
       active_project,

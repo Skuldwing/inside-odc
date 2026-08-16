@@ -105,6 +105,7 @@ export default function VoteManage() {
   const [stoppingPitch, setStoppingPitch] = useState(false);
   const [startingQa, setStartingQa] = useState(false);
   const [stoppingQa, setStoppingQa] = useState(false);
+  const [togglingVideo, setTogglingVideo] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [results, setResults] = useState(null);
   const [resultsTab, setResultsTab] = useState("ranking");
@@ -182,6 +183,15 @@ export default function VoteManage() {
     try { await api.post(`/vote/sessions/${id}/stop-qa`); await fetchLive(); }
     catch { setError("Erreur arrêt timer Q&R."); }
     setStoppingQa(false);
+  };
+
+  const toggleProjectorVideo = async (active) => {
+    setTogglingVideo(true);
+    try {
+      await api.put(`/vote/sessions/${id}/projector-video`, { active });
+      await fetchLive();
+    } catch { setError("Erreur contrôle projecteur."); }
+    setTogglingVideo(false);
   };
 
   const loadResults = async () => {
@@ -517,6 +527,34 @@ export default function VoteManage() {
                     Démarrer le timer Q&amp;R ({qaDuration} min)
                   </button>
                 )
+              )}
+
+              {/* ── Contrôle projecteur vidéo ── */}
+              {(activeProj.video_url || activeProj.video_file) && session?.status === "active" && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 mb-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Monitor className="w-3.5 h-3.5" /> Projecteur — vidéo
+                  </p>
+                  {session.projector_video_active ? (
+                    <button
+                      onClick={() => toggleProjectorVideo(false)}
+                      disabled={togglingVideo}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 text-red-600 text-xs py-2 font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors"
+                    >
+                      {togglingVideo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
+                      Arrêter la vidéo
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => toggleProjectorVideo(true)}
+                      disabled={togglingVideo}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-800 text-white text-xs py-2 font-semibold hover:bg-slate-900 disabled:opacity-50 transition-colors"
+                    >
+                      {togglingVideo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                      Diffuser la vidéo sur le projecteur
+                    </button>
+                  )}
+                </div>
               )}
 
               {/* Vote progress */}

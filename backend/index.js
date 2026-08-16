@@ -421,6 +421,10 @@ pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS video_file TEXT`)
   .then(() => console.log("Migration OK: vote_projects.video_file"))
   .catch(e => console.warn("Migration video_file:", e.message));
 
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS projector_video_active BOOLEAN DEFAULT FALSE`)
+  .then(() => console.log("Migration OK: vote_sessions.projector_video_active"))
+  .catch(e => console.warn("Migration projector_video_active:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS vote_guests (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
