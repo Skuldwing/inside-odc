@@ -708,22 +708,18 @@ router.get("/videos/:filename", async (req, res) => {
       const start = parseInt(startStr, 10);
       const end = endStr ? parseInt(endStr, 10) : total - 1;
       const chunk = data.slice(start, end + 1);
-      res.writeHead(206, {
-        "Content-Range":                `bytes ${start}-${end}/${total}`,
-        "Accept-Ranges":                "bytes",
-        "Content-Length":               chunk.length,
-        "Content-Type":                 mimetype,
-        "Cross-Origin-Resource-Policy": "cross-origin",
-      });
-      res.end(chunk);
+      res.status(206)
+        .set("Content-Range",  `bytes ${start}-${end}/${total}`)
+        .set("Accept-Ranges",  "bytes")
+        .set("Content-Length", String(chunk.length))
+        .set("Content-Type",   mimetype)
+        .end(chunk);
     } else {
-      res.writeHead(200, {
-        "Content-Length":               total,
-        "Content-Type":                 mimetype,
-        "Accept-Ranges":                "bytes",
-        "Cross-Origin-Resource-Policy": "cross-origin",
-      });
-      res.end(data);
+      res.status(200)
+        .set("Content-Length", String(total))
+        .set("Content-Type",   mimetype)
+        .set("Accept-Ranges",  "bytes")
+        .end(data);
     }
   } catch (e) {
     console.error(e);
