@@ -183,18 +183,12 @@ function UrlViewer({ url }) {
 }
 
 /* ─── Lecteur vidéo ─── */
-function VideoViewer({ url, file, autoplay }) {
+function VideoViewer({ url, file }) {
   const videoRef = useRef(null);
-  const [ready, setReady] = useState(false);
   const [playFailed, setPlayFailed] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  /* Dès que la vidéo peut être lue (canplay), tenter autoplay */
-  useEffect(() => {
-    if (!ready || !videoRef.current) return;
-    videoRef.current.play().catch(() => setPlayFailed(true));
-  }, [ready]);
-
-  const handleOverlayClick = () => {
+  const tryPlay = () => {
     if (!videoRef.current) return;
     setPlayFailed(false);
     videoRef.current.play().catch(() => setPlayFailed(true));
@@ -208,22 +202,22 @@ function VideoViewer({ url, file, autoplay }) {
           src={`${API_BASE}/vote/videos/${file}`}
           controls
           className="w-full h-full object-contain bg-black"
-          onCanPlay={() => setReady(true)}
+          onCanPlay={tryPlay}
+          onError={() => setLoadError(true)}
         />
-        {!ready && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
+        {loadError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black gap-3">
+            <p className="text-red-400 text-lg font-semibold">Impossible de charger la vidéo</p>
+            <p className="text-slate-500 text-sm">Vérifiez que le fichier a bien été uploadé</p>
           </div>
         )}
-        {ready && playFailed && (
+        {!loadError && playFailed && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 cursor-pointer"
-            onClick={handleOverlayClick}
+            onClick={tryPlay}
           >
-            <div className="flex flex-col items-center gap-3 text-white">
-              <Play className="w-20 h-20 text-orange-400 drop-shadow-lg" />
-              <p className="text-xl font-bold">Cliquer pour lancer la vidéo</p>
-            </div>
+            <Play className="w-20 h-20 text-orange-400 drop-shadow-lg" />
+            <p className="text-xl font-bold text-white mt-3">Cliquer pour lancer la vidéo</p>
           </div>
         )}
       </div>
@@ -305,7 +299,6 @@ export default function VoteProject() {
   const [offline, setOffline]     = useState(false);
   const [projReset, setProjReset] = useState(0);
   const prevProjIdRef             = useRef(null);
-  const prevVideoRef              = useRef(false);
   const failCountRef              = useRef(0);
 
   const fetchData = useCallback(async () => {
@@ -341,10 +334,6 @@ export default function VoteProject() {
   const hasPresentation = proj && (proj.presentation_url || proj.presentation_pdf);
   const hasVideo        = proj && (proj.video_url || proj.video_file);
   const fileExt         = getFileExt(proj?.presentation_pdf);
-
-  /* Détecter le premier passage en mode vidéo pour autoplay */
-  const isNewVideoTrigger = videoActive && !prevVideoRef.current;
-  prevVideoRef.current = videoActive;
 
   return (
     <div
@@ -414,7 +403,6 @@ export default function VoteProject() {
           <VideoViewer
             url={proj.video_url}
             file={proj.video_file}
-            autoplay={isNewVideoTrigger}
           />
         ) : hasPresentation ? (
           /* ── Mode présentation ── */
@@ -430,7 +418,7 @@ export default function VoteProject() {
           )
         ) : hasVideo ? (
           /* Pas de présentation mais une vidéo : l'afficher directement */
-          <VideoViewer url={proj.video_url} file={proj.video_file} autoplay={false} />
+          <VideoViewer url={proj.video_url} file={proj.video_file} />
         ) : (
           /* Ni présentation ni vidéo */
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-slate-700">
