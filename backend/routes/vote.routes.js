@@ -693,6 +693,12 @@ router.get("/videos/:filename", async (req, res) => {
   if (!/^[a-f0-9-]{36}\.(mp4|webm|ogv|mov|avi|mkv)$/.test(filename)) {
     return res.status(400).json({ error: "Fichier invalide" });
   }
+  /* Headers CORS explicites pour les requêtes crossOrigin="anonymous" du <video> */
+  const origin = req.headers.origin;
+  if (origin) res.setHeader("Access-Control-Allow-Origin", origin);
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
   try {
     const r = await pool.query(
       "SELECT data, mimetype FROM vote_video_files WHERE filename=$1",

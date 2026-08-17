@@ -201,6 +201,7 @@ function VideoViewer({ url, file }) {
           ref={videoRef}
           src={`${API_BASE}/vote/videos/${file}`}
           controls
+          crossOrigin="anonymous"
           className="w-full h-full object-contain bg-black"
           onCanPlay={tryPlay}
           onError={() => setLoadError(true)}
