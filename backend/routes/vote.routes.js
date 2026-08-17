@@ -18,7 +18,7 @@ const PRESENTATION_MIMES = {
 
 const presentationUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (PRESENTATION_MIMES[file.mimetype]) cb(null, true);
     else cb(new Error("Format non supporté (PDF, PPTX, PPT)"), false);
