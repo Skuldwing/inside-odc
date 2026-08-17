@@ -184,35 +184,87 @@ function UrlViewer({ url }) {
 
 /* ─── Lecteur vidéo ─── */
 function VideoViewer({ url, file }) {
-  const videoRef = useRef(null);
-  const [playFailed, setPlayFailed] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const videoRef  = useRef(null);
+  const [blobUrl,     setBlobUrl]     = useState(null);
+  const [downloading, setDownloading] = useState(false);
+  const [progress,    setProgress]    = useState(0);
+  const [loadError,   setLoadError]   = useState(false);
+  const [playFailed,  setPlayFailed]  = useState(false);
+
+  /* Télécharge la vidéo via fetch puis crée un blob URL same-origin
+     → contourne tous les problèmes CORS / CORP du <video> cross-origin */
+  useEffect(() => {
+    if (!file) return;
+    let objectUrl;
+    setDownloading(true);
+    setLoadError(false);
+    setProgress(0);
+
+    fetch(`${API_BASE}/vote/videos/${file}`)
+      .then(r => {
+        if (!r.ok) throw new Error("not found");
+        const total = Number(r.headers.get("Content-Length")) || 0;
+        const reader = r.body.getReader();
+        const chunks = [];
+        let received = 0;
+        const pump = () => reader.read().then(({ done, value }) => {
+          if (done) return;
+          chunks.push(value);
+          received += value.length;
+          if (total) setProgress(Math.round(received / total * 100));
+          return pump();
+        });
+        return pump().then(() => {
+          const blob = new Blob(chunks, { type: r.headers.get("Content-Type") || "video/mp4" });
+          return blob;
+        });
+      })
+      .then(blob => {
+        objectUrl = URL.createObjectURL(blob);
+        setBlobUrl(objectUrl);
+        setDownloading(false);
+      })
+      .catch(() => {
+        setLoadError(true);
+        setDownloading(false);
+      });
+
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [file]);
 
   const tryPlay = () => {
-    if (!videoRef.current) return;
     setPlayFailed(false);
-    videoRef.current.play().catch(() => setPlayFailed(true));
+    videoRef.current?.play().catch(() => setPlayFailed(true));
   };
 
   if (file) {
+    if (loadError) return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black gap-3">
+        <p className="text-red-400 text-lg font-semibold">Impossible de charger la vidéo</p>
+        <p className="text-slate-500 text-sm">Vérifiez que le fichier a bien été uploadé dans la configuration</p>
+      </div>
+    );
+    if (downloading) return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black gap-4">
+        <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
+        <p className="text-slate-300 text-base font-medium">Préparation de la vidéo…</p>
+        {progress > 0 && (
+          <div className="w-48 bg-slate-700 rounded-full h-1.5">
+            <div className="bg-orange-400 h-1.5 rounded-full transition-all" style={{ width: `${progress}%` }} />
+          </div>
+        )}
+      </div>
+    );
     return (
       <div className="relative w-full h-full">
         <video
           ref={videoRef}
-          src={`${API_BASE}/vote/videos/${file}`}
+          src={blobUrl}
           controls
-          crossOrigin="anonymous"
           className="w-full h-full object-contain bg-black"
           onCanPlay={tryPlay}
-          onError={() => setLoadError(true)}
         />
-        {loadError && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black gap-3">
-            <p className="text-red-400 text-lg font-semibold">Impossible de charger la vidéo</p>
-            <p className="text-slate-500 text-sm">Vérifiez que le fichier a bien été uploadé</p>
-          </div>
-        )}
-        {!loadError && playFailed && (
+        {playFailed && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 cursor-pointer"
             onClick={tryPlay}
@@ -224,11 +276,12 @@ function VideoViewer({ url, file }) {
       </div>
     );
   }
+
   const ytId = getYoutubeId(url);
   if (ytId) {
     return (
       <iframe
-        src={`https://www.youtube.com/embed/${ytId}?autoplay=${autoplay ? 1 : 0}&rel=0`}
+        src={`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0`}
         className="w-full h-full border-0"
         title="Vidéo"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -240,7 +293,7 @@ function VideoViewer({ url, file }) {
   if (vmId) {
     return (
       <iframe
-        src={`https://player.vimeo.com/video/${vmId}?autoplay=${autoplay ? 1 : 0}`}
+        src={`https://player.vimeo.com/video/${vmId}?autoplay=1`}
         className="w-full h-full border-0"
         title="Vidéo"
         allow="autoplay; fullscreen; picture-in-picture"
@@ -250,10 +303,7 @@ function VideoViewer({ url, file }) {
   }
   return (
     <div className="w-full h-full flex items-center justify-center">
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
+      <a href={url} target="_blank" rel="noopener noreferrer"
         className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-600 transition-colors"
       >
         <ExternalLink className="w-4 h-4" /> Ouvrir la vidéo
