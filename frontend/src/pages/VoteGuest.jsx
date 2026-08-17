@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  Loader2, CheckCircle2, AlertCircle, Trophy, ExternalLink,
+  Loader2, CheckCircle2, AlertCircle, Trophy,
   ListOrdered, ChevronUp, ChevronDown, RotateCcw, Send,
 } from "lucide-react";
 import api from "../api";
@@ -393,17 +393,6 @@ export default function VoteGuest() {
                   {proj.description && (
                     <p className="text-sm text-slate-600 leading-relaxed mb-3">{proj.description}</p>
                   )}
-                  {(proj.presentation_url || proj.presentation_pdf) && (
-                    <a
-                      href={proj.presentation_url || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/vote/presentations/${proj.presentation_pdf}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-600 px-4 py-2.5 text-sm font-medium hover:bg-orange-100 transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Voir la présentation
-                    </a>
-                  )}
                 </div>
 
                 {/* Timers (lecture seule, pas de vote) */}
@@ -453,16 +442,6 @@ export default function VoteGuest() {
                     </div>
                     {p.porteur && <p className="text-xs text-slate-500 mt-0.5">{p.porteur}</p>}
                     {p.description && <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{p.description}</p>}
-                    {(p.presentation_url || p.presentation_pdf) && (
-                      <a
-                        href={p.presentation_url || `${import.meta.env.VITE_API_URL || "http://localhost:3000"}/vote/presentations/${p.presentation_pdf}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-orange-500 hover:underline mt-2"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Présentation
-                      </a>
-                    )}
                   </div>
                 </div>
               </div>
