@@ -659,6 +659,7 @@ router.get("/presentations/:filename", async (req, res) => {
     res.setHeader("Content-Type", mimetype);
     res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     res.send(data);
   } catch (err) {
     console.error(err);
@@ -708,17 +709,19 @@ router.get("/videos/:filename", async (req, res) => {
       const end = endStr ? parseInt(endStr, 10) : total - 1;
       const chunk = data.slice(start, end + 1);
       res.writeHead(206, {
-        "Content-Range":  `bytes ${start}-${end}/${total}`,
-        "Accept-Ranges":  "bytes",
-        "Content-Length": chunk.length,
-        "Content-Type":   mimetype,
+        "Content-Range":                `bytes ${start}-${end}/${total}`,
+        "Accept-Ranges":                "bytes",
+        "Content-Length":               chunk.length,
+        "Content-Type":                 mimetype,
+        "Cross-Origin-Resource-Policy": "cross-origin",
       });
       res.end(chunk);
     } else {
       res.writeHead(200, {
-        "Content-Length": total,
-        "Content-Type":   mimetype,
-        "Accept-Ranges":  "bytes",
+        "Content-Length":               total,
+        "Content-Type":                 mimetype,
+        "Accept-Ranges":                "bytes",
+        "Cross-Origin-Resource-Policy": "cross-origin",
       });
       res.end(data);
     }
