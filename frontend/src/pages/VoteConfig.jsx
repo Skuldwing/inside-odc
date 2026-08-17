@@ -588,7 +588,7 @@ export default function VoteConfig() {
                   <input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo,video/x-matroska" className="hidden" disabled={uploadingVideo} onChange={handleVideoSelect} />
                   {uploadingVideo
                     ? <><Loader2 className="w-4 h-4 animate-spin text-orange-400" /><span className="text-xs text-slate-500">Envoi en cours... (peut prendre du temps)</span></>
-                    : <><Upload className="w-4 h-4 text-slate-400" /><span className="text-xs text-slate-500">MP4, WebM, MOV — max 500 Mo (préférer YouTube pour les grandes vidéos)</span></>
+                    : <><Upload className="w-4 h-4 text-slate-400" /><span className="text-xs text-slate-500">MP4, WebM, MOV — max 150 Mo (préférer YouTube pour les grandes vidéos)</span></>
                   }
                 </label>
               )}

@@ -1,6 +1,4 @@
 const express = require("express");
-const path = require("path");
-const fs = require("fs");
 const crypto = require("crypto");
 const multer = require("multer");
 const pool = require("../db");
@@ -25,29 +23,22 @@ const presentationUpload = multer({
   },
 });
 
-/* ── Stockage vidéos présentations ── */
-const videosDir = path.join(__dirname, "../uploads/videos");
-if (!fs.existsSync(videosDir)) fs.mkdirSync(videosDir, { recursive: true });
-
-const VIDEO_MIMES = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
+/* ── Stockage vidéos en base (persistant face aux redéploiements Railway) ── */
+const VIDEO_MIMES = {
+  "video/mp4":         ".mp4",
+  "video/webm":        ".webm",
+  "video/ogg":         ".ogv",
+  "video/quicktime":   ".mov",
+  "video/x-msvideo":   ".avi",
+  "video/x-matroska":  ".mkv",
+};
 
 const videoUpload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, videosDir),
-    filename: (req, file, cb) => {
-      const ext = file.mimetype === "video/quicktime" ? ".mov"
-        : file.mimetype === "video/x-msvideo" ? ".avi"
-        : file.mimetype === "video/x-matroska" ? ".mkv"
-        : file.mimetype === "video/webm" ? ".webm"
-        : file.mimetype === "video/ogg" ? ".ogv"
-        : ".mp4";
-      cb(null, `${crypto.randomUUID()}${ext}`);
-    },
-  }),
-  limits: { fileSize: 500 * 1024 * 1024 },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 150 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (VIDEO_MIMES.includes(file.mimetype)) cb(null, true);
-    else cb(new Error("Format vidéo non supporté (MP4, WebM, MOV, AVI, MKV)"), false);
+    if (VIDEO_MIMES[file.mimetype]) cb(null, true);
+    else cb(new Error("Format vidéo non supporté (MP4, WebM, MOV)"), false);
   },
 });
 
@@ -675,28 +666,47 @@ router.get("/presentations/:filename", async (req, res) => {
   }
 });
 
-/* POST /vote/upload-video — upload vidéo présentation (admin) */
+/* POST /vote/upload-video — upload vidéo présentation (admin) → stockage DB */
 router.post("/upload-video", authMiddleware, requireAdmin, (req, res) => {
-  videoUpload.single("file")(req, res, (err) => {
+  videoUpload.single("file")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message || "Erreur upload" });
     if (!req.file) return res.status(400).json({ error: "Fichier vidéo requis" });
-    res.json({ filename: req.file.filename });
+    const ext = VIDEO_MIMES[req.file.mimetype] || ".mp4";
+    const filename = `${crypto.randomUUID()}${ext}`;
+    try {
+      await pool.query(
+        "INSERT INTO vote_video_files (filename, mimetype, data) VALUES ($1, $2, $3)",
+        [filename, req.file.mimetype, req.file.buffer]
+      );
+      res.json({ filename });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Erreur stockage vidéo" });
+    }
   });
 });
 
-/* GET /vote/videos/:filename — servir la vidéo (public) */
-router.get("/videos/:filename", (req, res) => {
+/* GET /vote/videos/:filename — servir la vidéo depuis la DB (public) */
+router.get("/videos/:filename", async (req, res) => {
   const { filename } = req.params;
   if (!/^[a-f0-9-]{36}\.(mp4|webm|ogv|mov|avi|mkv)$/.test(filename)) {
     return res.status(400).json({ error: "Fichier invalide" });
   }
-  const filePath = path.join(videosDir, filename);
-  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Fichier introuvable" });
-  const ext = path.extname(filename).slice(1);
-  const mimeMap = { mp4: "video/mp4", webm: "video/webm", ogv: "video/ogg", mov: "video/quicktime", avi: "video/x-msvideo", mkv: "video/x-matroska" };
-  res.setHeader("Content-Type", mimeMap[ext] || "video/mp4");
-  res.setHeader("Accept-Ranges", "bytes");
-  res.sendFile(filePath);
+  try {
+    const r = await pool.query(
+      "SELECT data, mimetype FROM vote_video_files WHERE filename=$1",
+      [filename]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Fichier introuvable" });
+    const { data, mimetype } = r.rows[0];
+    res.setHeader("Content-Type", mimetype);
+    res.setHeader("Content-Length", data.length);
+    res.setHeader("Accept-Ranges", "none");
+    res.send(data);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
 /* PUT /vote/sessions/:id/projector-video — activer/désactiver la vidéo sur le projecteur (admin) */

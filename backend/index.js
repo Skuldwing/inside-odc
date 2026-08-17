@@ -484,6 +484,16 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: vote_presentation_files")).catch(e => console.warn("Migration vote_presentation_files:", e.message));
 
+/* Stockage persistant des vidéos (résiste aux redéploiements Railway) */
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_video_files (
+    filename    TEXT PRIMARY KEY,
+    mimetype    TEXT NOT NULL,
+    data        BYTEA NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_video_files")).catch(e => console.warn("Migration vote_video_files:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
