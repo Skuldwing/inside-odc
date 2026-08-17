@@ -686,7 +686,7 @@ router.post("/upload-video", authMiddleware, requireAdmin, (req, res) => {
   });
 });
 
-/* GET /vote/videos/:filename — servir la vidéo depuis la DB (public) */
+/* GET /vote/videos/:filename — servir la vidéo depuis la DB avec support range requests */
 router.get("/videos/:filename", async (req, res) => {
   const { filename } = req.params;
   if (!/^[a-f0-9-]{36}\.(mp4|webm|ogv|mov|avi|mkv)$/.test(filename)) {
@@ -699,10 +699,29 @@ router.get("/videos/:filename", async (req, res) => {
     );
     if (!r.rows.length) return res.status(404).json({ error: "Fichier introuvable" });
     const { data, mimetype } = r.rows[0];
-    res.setHeader("Content-Type", mimetype);
-    res.setHeader("Content-Length", data.length);
-    res.setHeader("Accept-Ranges", "none");
-    res.send(data);
+    const total = data.length;
+    const rangeHeader = req.headers.range;
+
+    if (rangeHeader) {
+      const [startStr, endStr] = rangeHeader.replace(/bytes=/, "").split("-");
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : total - 1;
+      const chunk = data.slice(start, end + 1);
+      res.writeHead(206, {
+        "Content-Range":  `bytes ${start}-${end}/${total}`,
+        "Accept-Ranges":  "bytes",
+        "Content-Length": chunk.length,
+        "Content-Type":   mimetype,
+      });
+      res.end(chunk);
+    } else {
+      res.writeHead(200, {
+        "Content-Length": total,
+        "Content-Type":   mimetype,
+        "Accept-Ranges":  "bytes",
+      });
+      res.end(data);
+    }
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erreur serveur" });

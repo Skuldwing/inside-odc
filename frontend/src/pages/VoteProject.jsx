@@ -185,18 +185,19 @@ function UrlViewer({ url }) {
 /* ─── Lecteur vidéo ─── */
 function VideoViewer({ url, file, autoplay }) {
   const videoRef = useRef(null);
+  const [ready, setReady] = useState(false);
   const [playFailed, setPlayFailed] = useState(false);
 
+  /* Dès que la vidéo peut être lue (canplay), tenter autoplay */
   useEffect(() => {
-    if (autoplay && videoRef.current) {
-      videoRef.current.play().catch(() => setPlayFailed(true));
-    }
-  }, [autoplay]);
+    if (!ready || !videoRef.current) return;
+    videoRef.current.play().catch(() => setPlayFailed(true));
+  }, [ready]);
 
   const handleOverlayClick = () => {
-    if (videoRef.current) {
-      videoRef.current.play().then(() => setPlayFailed(false)).catch(() => {});
-    }
+    if (!videoRef.current) return;
+    setPlayFailed(false);
+    videoRef.current.play().catch(() => setPlayFailed(true));
   };
 
   if (file) {
@@ -206,10 +207,15 @@ function VideoViewer({ url, file, autoplay }) {
           ref={videoRef}
           src={`${API_BASE}/vote/videos/${file}`}
           controls
-          autoPlay={autoplay}
           className="w-full h-full object-contain bg-black"
+          onCanPlay={() => setReady(true)}
         />
-        {playFailed && (
+        {!ready && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black">
+            <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
+          </div>
+        )}
+        {ready && playFailed && (
           <div
             className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 cursor-pointer"
             onClick={handleOverlayClick}
