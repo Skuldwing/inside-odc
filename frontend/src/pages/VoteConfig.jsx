@@ -542,11 +542,11 @@ export default function VoteConfig() {
                   <input type="file" accept=".pdf,.pptx,.ppt,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint" className="hidden" disabled={uploadingPdf} onChange={handlePdfSelect} />
                   {uploadingPdf
                     ? <><Loader2 className="w-4 h-4 animate-spin text-orange-400" /><span className="text-xs text-slate-500">Envoi en cours...</span></>
-                    : <><Upload className="w-4 h-4 text-slate-400" /><span className="text-xs text-slate-500">PDF ou PowerPoint (.pptx) — max 50 Mo</span></>
+                    : <><Upload className="w-4 h-4 text-slate-400" /><span className="text-xs text-slate-500">PDF (recommandé, max 200 Mo) ou PPTX (max 25 Mo — limite Office Online)</span></>
                   }
                 </label>
               )}
-              <p className="text-xs text-slate-400 mt-0.5">Visible par les invités pendant la présentation</p>
+              <p className="text-xs text-slate-400 mt-0.5">Pour les PPTX volumineux, préférer Google Slides via le champ &quot;Lien&quot;</p>
             </div>
 
             {/* Vidéo */}
