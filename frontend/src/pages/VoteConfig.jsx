@@ -429,7 +429,7 @@ export default function VoteConfig() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm mb-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-slate-800">Informations</h2>
-          {session.status === "draft" && (
+          {session.status !== "closed" && (
             <button onClick={() => setEditInfo(v => !v)} className="text-xs text-orange-500 hover:underline">
               {editInfo ? "Annuler" : "Modifier"}
             </button>
@@ -555,7 +555,7 @@ export default function VoteConfig() {
           <h2 className="font-semibold text-slate-800">
             Projets <span className="text-slate-400 font-normal text-sm">({session.projects?.length || 0})</span>
           </h2>
-          {session.status === "draft" && (
+          {session.status !== "closed" && (
             <button
               onClick={() => { setEditingProj(null); setProjForm({ name: "", porteur: "", description: "" }); setShowProjForm(v => !v); }}
               className="inline-flex items-center gap-1 text-xs text-orange-500 hover:text-orange-600 font-medium"
@@ -605,7 +605,7 @@ export default function VoteConfig() {
                     ♀
                   </button>
                 )}
-                {session.status === "draft" && (
+                {session.status !== "closed" && (
                   <>
                     <div className="flex flex-col">
                       <button onClick={() => moveProject(i, -1)} disabled={i === 0} className="p-1 rounded hover:bg-slate-200 text-slate-300 hover:text-slate-600 disabled:opacity-30 transition-colors"><ChevronUp className="w-3 h-3" /></button>
@@ -620,7 +620,7 @@ export default function VoteConfig() {
           ))}
         </div>
 
-        {showProjForm && session.status === "draft" && (
+        {showProjForm && session.status !== "closed" && (
           <form onSubmit={saveProject} className="rounded-xl border border-orange-200 bg-orange-50/50 p-4 space-y-3">
             <p className="text-xs font-semibold text-orange-700">{editingProj ? "Modifier le projet" : "Nouveau projet"}</p>
             <div>
