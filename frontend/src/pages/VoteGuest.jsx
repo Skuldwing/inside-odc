@@ -234,6 +234,15 @@ export default function VoteGuest() {
     }
   }, [status?.session_status, guestInfo, sessionId, guestResults]);
 
+  // Bascule automatiquement sur l'onglet CDC dès que la phase démarre
+  useEffect(() => {
+    if (status?.coup_de_coeur_active && (status?.female_projects?.length ?? 0) > 0) {
+      setActiveTab("cdc");
+    } else if (!status?.coup_de_coeur_active) {
+      setActiveTab(prev => prev === "cdc" ? "live" : prev);
+    }
+  }, [status?.coup_de_coeur_active, status?.female_projects?.length]);
+
   const handleCdcVote = async (projectId) => {
     if (!guestInfo?.token || cdcVoting) return;
     setCdcVoting(true);
@@ -347,6 +356,17 @@ export default function VoteGuest() {
             <p className="text-xs text-slate-400">Invité · {status?.session_name}</p>
           </div>
         </div>
+
+        {/* Bannière coup de cœur */}
+        {cdcActive && femaleProjs.length > 0 && activeTab !== "cdc" && (
+          <button
+            onClick={() => setActiveTab("cdc")}
+            className="w-full rounded-xl bg-pink-500 text-white px-4 py-3 mb-4 text-sm font-semibold flex items-center justify-center gap-2 anim-fade-in-up shadow-md"
+          >
+            <Heart className="w-4 h-4 animate-pulse" />
+            Coup de cœur féminin en cours — Voter maintenant
+          </button>
+        )}
 
         {/* Tabs */}
         <div className="flex gap-1 rounded-xl bg-slate-100 p-1 mb-5">
