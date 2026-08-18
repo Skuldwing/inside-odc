@@ -23,6 +23,23 @@ const presentationUpload = multer({
   },
 });
 
+/* ── Stockage fonds de scène en base ── */
+const BACKDROP_MIMES = {
+  "image/jpeg": ".jpg",
+  "image/png":  ".png",
+  "image/gif":  ".gif",
+  "image/webp": ".webp",
+};
+
+const backdropUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (BACKDROP_MIMES[file.mimetype]) cb(null, true);
+    else cb(new Error("Format non supporté (JPG, PNG, GIF, WebP)"), false);
+  },
+});
+
 /* ── Stockage vidéos en base (persistant face aux redéploiements Railway) ── */
 const VIDEO_MIMES = {
   "video/mp4":         ".mp4",
@@ -121,10 +138,10 @@ router.get("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
 /* PUT /vote/sessions/:id */
 router.put("/sessions/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, event_date, pitch_duration_minutes, qa_duration_minutes } = req.body;
+    const { name, event_date, pitch_duration_minutes, qa_duration_minutes, backdrop } = req.body;
     const r = await pool.query(
-      "UPDATE vote_sessions SET name=$1, event_date=$2, pitch_duration_minutes=$3, qa_duration_minutes=$4 WHERE id=$5 RETURNING *",
-      [name, event_date || null, pitch_duration_minutes || 5, qa_duration_minutes || 5, req.params.id]
+      "UPDATE vote_sessions SET name=$1, event_date=$2, pitch_duration_minutes=$3, qa_duration_minutes=$4, backdrop=$5 WHERE id=$6 RETURNING *",
+      [name, event_date || null, pitch_duration_minutes || 5, qa_duration_minutes || 5, backdrop || null, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Session introuvable" });
     res.json(r.rows[0]);
@@ -314,7 +331,22 @@ router.get("/sessions/:id/live", authMiddleware, requireAdmin, async (req, res) 
       criteria = critRes.rows.map(c => ({ ...c, ...avgMap[c.id] }));
     }
 
-    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5, qa_duration_minutes: session.qa_duration_minutes ?? 5 });
+    const cdcVotesRes = session.coup_de_coeur_active
+      ? await pool.query(`SELECT project_id, voter_type, COUNT(*)::int AS cnt FROM vote_coup_de_coeur_votes WHERE session_id=$1 GROUP BY project_id, voter_type`, [id])
+      : { rows: [] };
+    const cdcMap = {};
+    cdcVotesRes.rows.forEach(r => {
+      if (!cdcMap[r.project_id]) cdcMap[r.project_id] = { jury: 0, guest: 0 };
+      cdcMap[r.project_id][r.voter_type] = r.cnt;
+    });
+    const female_projects = projRes.rows.filter(p => p.is_female_led).map(p => ({
+      ...p,
+      cdc_votes_jury: cdcMap[p.id]?.jury || 0,
+      cdc_votes_guest: cdcMap[p.id]?.guest || 0,
+      cdc_votes_total: (cdcMap[p.id]?.jury || 0) + (cdcMap[p.id]?.guest || 0),
+    }));
+
+    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5, qa_duration_minutes: session.qa_duration_minutes ?? 5, female_projects, coup_de_coeur_active: session.coup_de_coeur_active || false });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -600,10 +632,10 @@ router.post("/sessions/:id/projects", authMiddleware, requireAdmin, async (req, 
 
 router.put("/sessions/:id/projects/:pid", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const { name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, order_num } = req.body;
+    const { name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, order_num, is_female_led } = req.body;
     const r = await pool.query(
-      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, presentation_pdf=$5, video_url=$6, video_file=$7, order_num=$8 WHERE id=$9 AND session_id=$10 RETURNING *",
-      [name, porteur || null, description || null, presentation_url || null, presentation_pdf || null, video_url || null, video_file || null, order_num || 0, req.params.pid, req.params.id]
+      "UPDATE vote_projects SET name=$1, porteur=$2, description=$3, presentation_url=$4, presentation_pdf=$5, video_url=$6, video_file=$7, order_num=$8, is_female_led=$9 WHERE id=$10 AND session_id=$11 RETURNING *",
+      [name, porteur || null, description || null, presentation_url || null, presentation_pdf || null, video_url || null, video_file || null, order_num || 0, !!is_female_led, req.params.pid, req.params.id]
     );
     if (!r.rows.length) return res.status(404).json({ error: "Projet introuvable" });
     res.json(r.rows[0]);
@@ -733,6 +765,49 @@ router.get("/videos/:filename", async (req, res) => {
   }
 });
 
+/* POST /vote/upload-backdrop — upload image fond de scène (admin) → stockage DB */
+router.post("/upload-backdrop", authMiddleware, requireAdmin, (req, res) => {
+  backdropUpload.single("file")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Erreur upload" });
+    if (!req.file) return res.status(400).json({ error: "Fichier image requis" });
+    const ext = BACKDROP_MIMES[req.file.mimetype] || ".jpg";
+    const filename = `${crypto.randomUUID()}${ext}`;
+    try {
+      await pool.query(
+        "INSERT INTO vote_backdrop_files (filename, mimetype, data) VALUES ($1, $2, $3)",
+        [filename, req.file.mimetype, req.file.buffer]
+      );
+      res.json({ filename });
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Erreur stockage image" });
+    }
+  });
+});
+
+/* GET /vote/backdrops/:filename — servir l'image de fond depuis la DB (public, cacheable) */
+router.get("/backdrops/:filename", async (req, res) => {
+  const { filename } = req.params;
+  if (!/^[a-f0-9-]{36}\.(jpg|png|gif|webp)$/.test(filename)) {
+    return res.status(400).json({ error: "Fichier invalide" });
+  }
+  try {
+    const r = await pool.query(
+      "SELECT data, mimetype FROM vote_backdrop_files WHERE filename=$1",
+      [filename]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Fichier introuvable" });
+    const { data, mimetype } = r.rows[0];
+    res.setHeader("Content-Type", mimetype);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.send(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* PUT /vote/sessions/:id/projector-video — activer/désactiver la vidéo sur le projecteur (admin) */
 router.put("/sessions/:id/projector-video", authMiddleware, requireAdmin, async (req, res) => {
   try {
@@ -768,6 +843,7 @@ router.get("/project/:sessionId", async (req, res) => {
       projector_video_active: session.projector_video_active ?? false,
       pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
       qa_duration_minutes: session.qa_duration_minutes ?? 5,
+      backdrop: session.backdrop || null,
       active_project,
     });
   } catch (err) {
@@ -896,9 +972,9 @@ router.get("/jury/status", juryAuth, async (req, res) => {
     const sessionId = req.jury.session_id;
 
     const [sessRes, critRes, projectsRes, juryRes] = await Promise.all([
-      pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
+      pool.query("SELECT id, status, active_project_id, pitch_duration_minutes, qa_duration_minutes, coup_de_coeur_active FROM vote_sessions WHERE id=$1", [sessionId]),
       pool.query("SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num", [sessionId]),
-      pool.query("SELECT id, status FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+      pool.query("SELECT id, name, porteur, is_female_led, status FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
       pool.query("SELECT id, pseudo, avatar FROM vote_jury WHERE session_id=$1 ORDER BY joined_at", [sessionId]),
     ]);
 
@@ -937,6 +1013,17 @@ router.get("/jury/status", juryAuth, async (req, res) => {
 
     const closed_count = projects.filter(p => p.status === "closed").length;
 
+    /* Données coup de cœur féminin */
+    const female_projects = projects.filter(p => p.is_female_led);
+    let my_cdc_vote = null;
+    if (session.coup_de_coeur_active && female_projects.length > 0) {
+      const cdcRes = await pool.query(
+        "SELECT project_id FROM vote_coup_de_coeur_votes WHERE session_id=$1 AND voter_type='jury' AND voter_id=$2",
+        [sessionId, req.jury.id]
+      );
+      my_cdc_vote = cdcRes.rows[0]?.project_id || null;
+    }
+
     res.json({
       session_status: session.status,
       pitch_duration_minutes: session.pitch_duration_minutes ?? 5,
@@ -951,6 +1038,9 @@ router.get("/jury/status", juryAuth, async (req, res) => {
       project_count: projects.length,
       closed_count,
       jury_list,
+      coup_de_coeur_active: session.coup_de_coeur_active || false,
+      female_projects,
+      my_cdc_vote,
     });
   } catch (err) {
     console.error(err);
@@ -1086,8 +1176,8 @@ router.get("/guest/status", guestAuth, async (req, res) => {
     const sessionId = req.guest.session_id;
 
     const [sessRes, projRes] = await Promise.all([
-      pool.query("SELECT * FROM vote_sessions WHERE id=$1", [sessionId]),
-      pool.query("SELECT id, name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, status, order_num FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
+      pool.query("SELECT id, status, name, active_project_id, pitch_duration_minutes, qa_duration_minutes, coup_de_coeur_active FROM vote_sessions WHERE id=$1", [sessionId]),
+      pool.query("SELECT id, name, porteur, description, presentation_url, presentation_pdf, video_url, video_file, status, order_num, is_female_led FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
     ]);
 
     const session = sessRes.rows[0];
@@ -1098,12 +1188,14 @@ router.get("/guest/status", guestAuth, async (req, res) => {
       active_project = projects.find(p => p.id === session.active_project_id) || null;
     }
 
-    /* Récupérer le pronostic existant de cet invité */
-    const predRes = await pool.query(
-      "SELECT predicted_ranking FROM vote_guest_predictions WHERE guest_id=$1 AND session_id=$2",
-      [req.guest.id, sessionId]
-    );
-    const my_prediction = predRes.rows[0]?.predicted_ranking || null;
+    /* Pronostic + données coup de cœur */
+    const female_projects = projects.filter(p => p.is_female_led);
+    const [predRes, cdcRes] = await Promise.all([
+      pool.query("SELECT predicted_ranking FROM vote_guest_predictions WHERE guest_id=$1 AND session_id=$2", [req.guest.id, sessionId]),
+      session.coup_de_coeur_active && female_projects.length > 0
+        ? pool.query("SELECT project_id FROM vote_coup_de_coeur_votes WHERE session_id=$1 AND voter_type='guest' AND voter_id=$2", [sessionId, req.guest.id])
+        : Promise.resolve({ rows: [] }),
+    ]);
 
     res.json({
       session_status: session.status,
@@ -1112,7 +1204,10 @@ router.get("/guest/status", guestAuth, async (req, res) => {
       qa_duration_minutes: session.qa_duration_minutes ?? 5,
       projects,
       active_project,
-      my_prediction,
+      my_prediction: predRes.rows[0]?.predicted_ranking || null,
+      coup_de_coeur_active: session.coup_de_coeur_active || false,
+      female_projects,
+      my_cdc_vote: cdcRes.rows[0]?.project_id || null,
     });
   } catch (err) {
     console.error(err);
@@ -1144,7 +1239,7 @@ router.post("/guest/predict", guestAuth, async (req, res) => {
   }
 });
 
-/* GET /vote/sessions/:id/guest-results — résultats + comparaison pronostic */
+/* GET /vote/sessions/:id/guest-results — pronostic uniquement (pas le classement réel) */
 router.get("/sessions/:id/guest-results", guestAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -1152,44 +1247,203 @@ router.get("/sessions/:id/guest-results", guestAuth, async (req, res) => {
 
     const sessRes = await pool.query("SELECT status, name FROM vote_sessions WHERE id=$1", [id]);
     if (!sessRes.rows.length) return res.status(404).json({ error: "Session introuvable" });
-    if (sessRes.rows[0].status !== "closed") return res.status(403).json({ error: "Résultats non disponibles" });
+    if (sessRes.rows[0].status !== "closed") return res.status(403).json({ error: "Session non terminée" });
 
-    const [projRes, wAvgRes, predRes] = await Promise.all([
+    const [predRes, projRes, cdcRes] = await Promise.all([
+      pool.query("SELECT predicted_ranking FROM vote_guest_predictions WHERE guest_id=$1 AND session_id=$2", [req.guest.id, id]),
       pool.query("SELECT id, name, porteur FROM vote_projects WHERE session_id=$1 ORDER BY order_num", [id]),
-      pool.query(`
-        SELECT vs.project_id,
-               SUM(vs.score * vc.weight) / NULLIF(SUM(vc.weight), 0) AS weighted_avg,
-               COUNT(DISTINCT vs.jury_id)::int AS voter_count
-        FROM vote_scores vs
-        JOIN vote_criteria vc ON vc.id = vs.criteria_id
-        WHERE vs.session_id = $1
-        GROUP BY vs.project_id
-      `, [id]),
-      pool.query(
-        "SELECT predicted_ranking FROM vote_guest_predictions WHERE guest_id=$1 AND session_id=$2",
-        [req.guest.id, id]
-      ),
+      pool.query("SELECT project_id FROM vote_coup_de_coeur_votes WHERE session_id=$1 AND voter_type='guest' AND voter_id=$2", [id, req.guest.id]),
     ]);
 
-    const wAvgMap = {};
-    wAvgRes.rows.forEach(r => { wAvgMap[r.project_id] = { weighted_avg: parseFloat(r.weighted_avg || 0).toFixed(2), voter_count: r.voter_count }; });
+    res.json({
+      session_name: sessRes.rows[0].name,
+      my_prediction: predRes.rows[0]?.predicted_ranking || null,
+      projects: projRes.rows,
+      my_cdc_vote: cdcRes.rows[0]?.project_id || null,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
-    const ranking = projRes.rows
-      .map(p => ({ ...p, ...(wAvgMap[p.id] || { weighted_avg: "0.00", voter_count: 0 }) }))
-      .sort((a, b) => parseFloat(b.weighted_avg) - parseFloat(a.weighted_avg));
+/* GET /vote/sessions/:id/guest-predictions — pronostics de tous les invités (admin) */
+router.get("/sessions/:id/guest-predictions", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [guestsRes, projRes] = await Promise.all([
+      pool.query(`
+        SELECT vg.id, vg.prenom, vg.nom, vg.email, vg.joined_at,
+               vgp.predicted_ranking, vgp.submitted_at
+        FROM vote_guests vg
+        LEFT JOIN vote_guest_predictions vgp ON vgp.guest_id = vg.id AND vgp.session_id = $1
+        WHERE vg.session_id = $1
+        ORDER BY vg.joined_at
+      `, [id]),
+      pool.query("SELECT id, name FROM vote_projects WHERE session_id=$1 ORDER BY order_num", [id]),
+    ]);
+    res.json({ guests: guestsRes.rows, projects: projRes.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
-    const my_prediction = predRes.rows[0]?.predicted_ranking || null;
+/* GET /vote/sessions/:id/participants — liste combinée jury + invités (admin) */
+router.get("/sessions/:id/participants", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [juryRes, guestRes] = await Promise.all([
+      pool.query("SELECT id, pseudo AS nom_complet, email, joined_at FROM vote_jury WHERE session_id=$1 ORDER BY joined_at", [id]),
+      pool.query("SELECT id, (prenom || ' ' || nom) AS nom_complet, email, joined_at FROM vote_guests WHERE session_id=$1 ORDER BY joined_at", [id]),
+    ]);
+    res.json({
+      jury: juryRes.rows.map(r => ({ ...r, role: "jury" })),
+      guests: guestRes.rows.map(r => ({ ...r, role: "invité" })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
-    /* Comparer le top 3 du pronostic avec le top 3 réel */
-    let prediction_correct = false;
-    if (my_prediction && ranking.length >= 3) {
-      const actualTop3 = ranking.slice(0, 3).map(p => p.id);
-      const predTop3   = my_prediction.slice(0, 3);
-      prediction_correct = actualTop3.length === predTop3.length
-        && actualTop3.every((id, i) => id === predTop3[i]);
-    }
+/* PUT /vote/sessions/:id/coup-de-coeur — activer / désactiver la phase coup de cœur (admin) */
+router.put("/sessions/:id/coup-de-coeur", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { active } = req.body;
+    await pool.query("UPDATE vote_sessions SET coup_de_coeur_active=$1 WHERE id=$2", [!!active, req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
-    res.json({ session_name: sessRes.rows[0].name, ranking, my_prediction, prediction_correct });
+/* POST /vote/coup-de-coeur/jury-vote — vote coup de cœur féminin (jury) */
+router.post("/coup-de-coeur/jury-vote", juryAuth, async (req, res) => {
+  try {
+    const { project_id } = req.body;
+    if (!project_id) return res.status(400).json({ error: "project_id requis" });
+
+    const sessRes = await pool.query("SELECT coup_de_coeur_active, status FROM vote_sessions WHERE id=$1", [req.jury.session_id]);
+    if (!sessRes.rows[0]?.coup_de_coeur_active) return res.status(403).json({ error: "Phase coup de cœur non active" });
+    if (sessRes.rows[0].status === "closed") return res.status(403).json({ error: "Session terminée" });
+
+    const projRes = await pool.query("SELECT is_female_led FROM vote_projects WHERE id=$1 AND session_id=$2", [project_id, req.jury.session_id]);
+    if (!projRes.rows.length || !projRes.rows[0].is_female_led) return res.status(400).json({ error: "Projet non éligible" });
+
+    await pool.query(`
+      INSERT INTO vote_coup_de_coeur_votes (session_id, project_id, voter_type, voter_id)
+      VALUES ($1, $2, 'jury', $3)
+      ON CONFLICT (session_id, voter_type, voter_id) DO UPDATE SET project_id=$2, voted_at=NOW()
+    `, [req.jury.session_id, project_id, req.jury.id]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* POST /vote/coup-de-coeur/guest-vote — vote coup de cœur féminin (invité) */
+router.post("/coup-de-coeur/guest-vote", guestAuth, async (req, res) => {
+  try {
+    const { project_id } = req.body;
+    if (!project_id) return res.status(400).json({ error: "project_id requis" });
+
+    const sessRes = await pool.query("SELECT coup_de_coeur_active, status FROM vote_sessions WHERE id=$1", [req.guest.session_id]);
+    if (!sessRes.rows[0]?.coup_de_coeur_active) return res.status(403).json({ error: "Phase coup de cœur non active" });
+    if (sessRes.rows[0].status === "closed") return res.status(403).json({ error: "Session terminée" });
+
+    const projRes = await pool.query("SELECT is_female_led FROM vote_projects WHERE id=$1 AND session_id=$2", [project_id, req.guest.session_id]);
+    if (!projRes.rows.length || !projRes.rows[0].is_female_led) return res.status(400).json({ error: "Projet non éligible" });
+
+    await pool.query(`
+      INSERT INTO vote_coup_de_coeur_votes (session_id, project_id, voter_type, voter_id)
+      VALUES ($1, $2, 'guest', $3)
+      ON CONFLICT (session_id, voter_type, voter_id) DO UPDATE SET project_id=$2, voted_at=NOW()
+    `, [req.guest.session_id, project_id, req.guest.id]);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* GET /vote/sessions/:id/coup-de-coeur/results — résultats CDC (jury + admin) */
+router.get("/sessions/:id/coup-de-coeur/results", juryAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.jury.session_id !== id) return res.status(403).json({ error: "Accès non autorisé" });
+
+    const [projRes, votesRes] = await Promise.all([
+      pool.query("SELECT id, name, porteur, is_female_led FROM vote_projects WHERE session_id=$1 AND is_female_led=TRUE ORDER BY order_num", [id]),
+      pool.query(`
+        SELECT project_id, voter_type, COUNT(*)::int AS vote_count
+        FROM vote_coup_de_coeur_votes
+        WHERE session_id=$1
+        GROUP BY project_id, voter_type
+      `, [id]),
+    ]);
+
+    const countMap = {};
+    votesRes.rows.forEach(r => {
+      if (!countMap[r.project_id]) countMap[r.project_id] = { jury: 0, guest: 0 };
+      countMap[r.project_id][r.voter_type] = r.vote_count;
+    });
+
+    const results = projRes.rows.map(p => ({
+      ...p,
+      jury_votes: countMap[p.id]?.jury || 0,
+      guest_votes: countMap[p.id]?.guest || 0,
+      total_votes: (countMap[p.id]?.jury || 0) + (countMap[p.id]?.guest || 0),
+    })).sort((a, b) => b.total_votes - a.total_votes);
+
+    res.json({ results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* GET /vote/sessions/:id/coup-de-coeur/results/admin — résultats CDC (admin) */
+router.get("/sessions/:id/coup-de-coeur/results/admin", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [projRes, votesRes] = await Promise.all([
+      pool.query("SELECT id, name, porteur, is_female_led FROM vote_projects WHERE session_id=$1 AND is_female_led=TRUE ORDER BY order_num", [id]),
+      pool.query(`
+        SELECT project_id, voter_type, COUNT(*)::int AS vote_count
+        FROM vote_coup_de_coeur_votes
+        WHERE session_id=$1
+        GROUP BY project_id, voter_type
+      `, [id]),
+    ]);
+
+    const countMap = {};
+    votesRes.rows.forEach(r => {
+      if (!countMap[r.project_id]) countMap[r.project_id] = { jury: 0, guest: 0 };
+      countMap[r.project_id][r.voter_type] = r.vote_count;
+    });
+
+    const results = projRes.rows.map(p => ({
+      ...p,
+      jury_votes: countMap[p.id]?.jury || 0,
+      guest_votes: countMap[p.id]?.guest || 0,
+      total_votes: (countMap[p.id]?.jury || 0) + (countMap[p.id]?.guest || 0),
+    })).sort((a, b) => b.total_votes - a.total_votes);
+
+    const totalVoters = await Promise.all([
+      pool.query("SELECT COUNT(*)::int AS c FROM vote_jury WHERE session_id=$1", [id]),
+      pool.query("SELECT COUNT(*)::int AS c FROM vote_guests WHERE session_id=$1", [id]),
+    ]);
+
+    res.json({
+      results,
+      jury_total: totalVoters[0].rows[0].c,
+      guest_total: totalVoters[1].rows[0].c,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

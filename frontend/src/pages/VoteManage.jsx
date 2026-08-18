@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy,
-  MessageCircleQuestion, Download, X, StopCircle, Monitor,
+  MessageCircleQuestion, Download, X, StopCircle, Monitor, Heart, ListOrdered, UserCheck, ChevronUp, ChevronDown,
 } from "lucide-react";
 import api from "../api";
 
@@ -118,6 +118,11 @@ export default function VoteManage() {
   const [results, setResults] = useState(null);
   const [resultsTab, setResultsTab] = useState("ranking");
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [bottomTab, setBottomTab] = useState("predictions");
+  const [guestPredictions, setGuestPredictions] = useState(null);
+  const [participants, setParticipants] = useState(null);
+  const [togglingCdc, setTogglingCdc] = useState(false);
+  const [cdcResults, setCdcResults] = useState(null);
   const intervalRef = useRef(null);
 
   const fetchLive = useCallback(async () => {
@@ -212,6 +217,59 @@ export default function VoteManage() {
     } catch { setError("Erreur chargement résultats."); }
   };
 
+  const loadGuestPredictions = useCallback(async () => {
+    try {
+      const r = await api.get(`/vote/sessions/${id}/guest-predictions`);
+      setGuestPredictions(r.data);
+    } catch {}
+  }, [id]);
+
+  const loadParticipants = useCallback(async () => {
+    try {
+      const r = await api.get(`/vote/sessions/${id}/participants`);
+      setParticipants(r.data);
+    } catch {}
+  }, [id]);
+
+  const loadCdcResults = useCallback(async () => {
+    try {
+      const r = await api.get(`/vote/sessions/${id}/coup-de-coeur/results/admin`);
+      setCdcResults(r.data);
+    } catch {}
+  }, [id]);
+
+  useEffect(() => {
+    loadGuestPredictions();
+    loadParticipants();
+  }, [loadGuestPredictions, loadParticipants]);
+
+  const moveProject = async (idx, direction) => {
+    const projs = [...projects];
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= projs.length) return;
+    const a = { ...projs[idx], order_num: newIdx };
+    const b = { ...projs[newIdx], order_num: idx };
+    projs[idx] = b;
+    projs[newIdx] = a;
+    setData(d => ({ ...d, projects: projs }));
+    try {
+      await Promise.all([
+        api.put(`/vote/sessions/${id}/projects/${a.id}`, a),
+        api.put(`/vote/sessions/${id}/projects/${b.id}`, b),
+      ]);
+    } catch { setError("Erreur réordonnancement."); }
+  };
+
+  const toggleCoupDeCoeur = async (active) => {
+    setTogglingCdc(true);
+    try {
+      await api.put(`/vote/sessions/${id}/coup-de-coeur`, { active });
+      await fetchLive();
+      if (active) loadCdcResults();
+    } catch { setError("Erreur activation coup de cœur."); }
+    setTogglingCdc(false);
+  };
+
   const exportPdf = async () => {
     setExportingPdf(true);
     try {
@@ -237,6 +295,8 @@ export default function VoteManage() {
   const juryTotal = data?.jury_total || 0;
   const pitchDuration = data?.pitch_duration_minutes ?? session?.pitch_duration_minutes ?? 5;
   const qaDuration = data?.qa_duration_minutes ?? session?.qa_duration_minutes ?? 5;
+  const femaleProjects = data?.female_projects || [];
+  const cdcActive = data?.coup_de_coeur_active || false;
 
   return (
     <div>
@@ -262,6 +322,16 @@ export default function VoteManage() {
           <button onClick={loadResults} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors">
             <BarChart3 className="w-3.5 h-3.5" /> Résultats
           </button>
+          {session?.status === "active" && femaleProjects.length > 0 && (
+            <button
+              onClick={() => toggleCoupDeCoeur(!cdcActive)}
+              disabled={togglingCdc}
+              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${cdcActive ? "border-pink-300 bg-pink-50 text-pink-700 hover:bg-pink-100" : "border-pink-200 text-pink-600 hover:bg-pink-50"}`}
+            >
+              {togglingCdc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Heart className="w-3.5 h-3.5" />}
+              {cdcActive ? "Clore coup de cœur" : "Lancer coup de cœur ♀"}
+            </button>
+          )}
           {session?.status === "active" && (
             <button onClick={closeSession} className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors">
               <Square className="w-3.5 h-3.5" /> Terminer la session
@@ -431,7 +501,7 @@ export default function VoteManage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-800 mb-3">Projets</h2>
           <div className="space-y-2">
-            {projects.map(p => {
+            {projects.map((p, i) => {
               const st = PROJ_STATUS[p.status] || PROJ_STATUS.pending;
               const isActive = activeProj?.id === p.id;
               return (
@@ -444,7 +514,15 @@ export default function VoteManage() {
                       <p className="font-medium text-sm text-slate-800 truncate">{p.name}</p>
                       {p.porteur && <p className="text-xs text-slate-500 truncate">{p.porteur}</p>}
                     </div>
-                    <span className={`text-xs rounded-full px-2 py-0.5 flex-shrink-0 ${st.cls}`}>{st.label}</span>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <span className={`text-xs rounded-full px-2 py-0.5 ${st.cls}`}>{st.label}</span>
+                      {!isActive && p.status !== "active" && (
+                        <div className="flex flex-col -mr-1">
+                          <button onClick={() => moveProject(i, -1)} disabled={i === 0} className="p-0.5 rounded text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                          <button onClick={() => moveProject(i, 1)} disabled={i === projects.length - 1} className="p-0.5 rounded text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors"><ChevronDown className="w-3 h-3" /></button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {session?.status === "active" && (
                     <div className="mt-2">
@@ -642,6 +720,150 @@ export default function VoteManage() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ── Panneaux bas ── */}
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* Tabs */}
+        <div className="flex gap-1 px-4 pt-3 border-b border-slate-100">
+          {[
+            { key: "predictions", label: "Pronostics invités", icon: ListOrdered },
+            { key: "participants", label: "Participants",       icon: UserCheck },
+            ...(femaleProjects.length > 0 ? [{ key: "cdc", label: "Coup de cœur ♀", icon: Heart }] : []),
+          ].map(t => (
+            <button
+              key={t.key}
+              onClick={() => {
+                setBottomTab(t.key);
+                if (t.key === "participants" && !participants) loadParticipants();
+                if (t.key === "cdc") loadCdcResults();
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${bottomTab === t.key ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+            >
+              <t.icon className="w-3.5 h-3.5" /> {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-5">
+
+          {/* ── Pronostics invités ── */}
+          {bottomTab === "predictions" && (
+            <div>
+              {!guestPredictions ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
+              ) : guestPredictions.guests.length === 0 ? (
+                <p className="text-sm text-slate-400 italic text-center py-6">Aucun invité inscrit</p>
+              ) : (
+                <div className="space-y-3">
+                  {guestPredictions.guests.map(g => (
+                    <div key={g.id} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3 mb-1">
+                        <p className="font-medium text-sm text-slate-800">{g.prenom} {g.nom}</p>
+                        {g.email && <p className="text-xs text-slate-400">{g.email}</p>}
+                        {g.predicted_ranking
+                          ? <span className="text-[10px] font-semibold bg-green-100 text-green-700 rounded-full px-2 py-0.5">Pronostic envoyé</span>
+                          : <span className="text-[10px] text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Pas encore</span>
+                        }
+                      </div>
+                      {g.predicted_ranking && (
+                        <ol className="mt-1 space-y-0.5">
+                          {g.predicted_ranking.slice(0, 5).map((pid, rank) => {
+                            const proj = guestPredictions.projects.find(p => p.id === pid);
+                            return (
+                              <li key={pid} className="text-xs text-slate-600 flex items-center gap-1.5">
+                                <span className="text-slate-300 w-3">{["🥇","🥈","🥉","4.","5."][rank]}</span>
+                                {proj?.name || pid}
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Participants ── */}
+          {bottomTab === "participants" && (
+            <div>
+              {!participants ? (
+                <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="text-left py-2 pr-4 font-semibold text-slate-600">Nom</th>
+                        <th className="text-left py-2 pr-4 font-semibold text-slate-600">Rôle</th>
+                        <th className="text-left py-2 font-semibold text-slate-600">Email</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...participants.jury, ...participants.guests].map(p => (
+                        <tr key={`${p.role}-${p.id}`} className="border-b border-slate-50">
+                          <td className="py-2 pr-4 font-medium text-slate-800">{p.nom_complet}</td>
+                          <td className="py-2 pr-4">
+                            <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${p.role === "jury" ? "bg-orange-100 text-orange-700" : "bg-purple-100 text-purple-700"}`}>
+                              {p.role}
+                            </span>
+                          </td>
+                          <td className="py-2 text-slate-500 text-xs">{p.email || "—"}</td>
+                        </tr>
+                      ))}
+                      {participants.jury.length === 0 && participants.guests.length === 0 && (
+                        <tr><td colSpan={3} className="py-6 text-center text-slate-400 text-sm italic">Aucun participant</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-slate-400 mt-3">{participants.jury.length} juré{participants.jury.length !== 1 ? "s" : ""} · {participants.guests.length} invité{participants.guests.length !== 1 ? "s" : ""}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Coup de cœur féminin ── */}
+          {bottomTab === "cdc" && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="font-semibold text-slate-800">Coup de cœur féminin</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{femaleProjects.length} projet{femaleProjects.length !== 1 ? "s" : ""} porté{femaleProjects.length !== 1 ? "s" : ""} par une femme</p>
+                </div>
+                <span className={`text-xs font-semibold rounded-full px-3 py-1 ${cdcActive ? "bg-pink-100 text-pink-700" : "bg-slate-100 text-slate-500"}`}>
+                  {cdcActive ? "Vote en cours" : "Inactif"}
+                </span>
+              </div>
+              {!cdcResults ? (
+                <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
+              ) : cdcResults.results.length === 0 ? (
+                <p className="text-sm text-slate-400 italic text-center py-4">Aucun projet féminin</p>
+              ) : (
+                <div className="space-y-2">
+                  {cdcResults.results.map((p, i) => (
+                    <div key={p.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${i === 0 ? "border-pink-200 bg-pink-50" : "border-slate-100 bg-slate-50"}`}>
+                      <span className="text-xl w-6">{i === 0 ? "💗" : `#${i + 1}`}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-slate-800">{p.name}</p>
+                        {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
+                      </div>
+                      <div className="text-right text-xs flex-shrink-0">
+                        <p className="font-bold text-pink-600 text-base">{p.total_votes}</p>
+                        <p className="text-slate-400">{p.jury_votes}j · {p.guest_votes}i</p>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs text-slate-400 mt-2">
+                    {cdcResults.jury_total} jurés · {cdcResults.guest_total} invités ont participé
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>

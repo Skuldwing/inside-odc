@@ -2,11 +2,20 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Plus, Trash2, Edit2, Check, X, Loader2, QrCode, Copy, ExternalLink,
-  Download, Maximize2, Share2, Users, Upload, FileText,
+  Download, Maximize2, Share2, Users, Upload, FileText, ChevronUp, ChevronDown,
 } from "lucide-react";
 import api from "../api";
 
 const AVATARS = ["🧑","👩","👨","😎","🤓","🦸","🧙","🎓","🏆","⭐","🚀","💡","🎯","🔥","💪","🌟","🦁","🐯","🦊","🐺"];
+
+const BACKDROP_PRESETS = [
+  { key: "none",   label: "Aucun",       css: "",    preview: "bg-slate-100 border-slate-300" },
+  { key: "odc",    label: "ODC Orange",  css: "linear-gradient(135deg, #ea580c 0%, #1e1b4b 100%)" },
+  { key: "blue",   label: "Nuit bleue",  css: "linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%)" },
+  { key: "purple", label: "Tech violet", css: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #533483 100%)" },
+  { key: "green",  label: "Forêt",       css: "linear-gradient(135deg, #0a3d2e 0%, #1a5c3a 50%, #0d2b20 100%)" },
+  { key: "dark",   label: "Noir",        css: "#0a0a0a" },
+];
 
 const STATUS_LABEL = { draft: "Brouillon", active: "En cours", closed: "Terminé" };
 const STATUS_CLS   = { draft: "bg-slate-100 text-slate-600", active: "bg-orange-100 text-orange-700", closed: "bg-green-100 text-green-700" };
@@ -87,16 +96,17 @@ export default function VoteConfig() {
 
   /* editable session info */
   const [editInfo, setEditInfo] = useState(false);
-  const [infoForm, setInfoForm] = useState({ name: "", event_date: "", pitch_duration_minutes: 5, qa_duration_minutes: 5 });
+  const [infoForm, setInfoForm] = useState({ name: "", event_date: "", pitch_duration_minutes: 5, qa_duration_minutes: 5, backdrop: "" });
   const [savingInfo, setSavingInfo] = useState(false);
 
   /* project form */
   const [showProjForm, setShowProjForm] = useState(false);
-  const [projForm, setProjForm] = useState({ name: "", porteur: "", description: "", presentation_url: "", presentation_pdf: "", video_url: "", video_file: "" });
+  const [projForm, setProjForm] = useState({ name: "", porteur: "", description: "", presentation_url: "", presentation_pdf: "", video_url: "", video_file: "", is_female_led: false });
   const [presType, setPresType] = useState("url");
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [videoType, setVideoType] = useState("url");
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingBackdrop, setUploadingBackdrop] = useState(false);
   const [savingProj, setSavingProj] = useState(false);
   const [editingProj, setEditingProj] = useState(null);
   const [qrGuestDataUrl, setQrGuestDataUrl] = useState("");
@@ -116,7 +126,7 @@ export default function VoteConfig() {
     try {
       const r = await api.get(`/vote/sessions/${id}`);
       setSession(r.data);
-      setInfoForm({ name: r.data.name, event_date: r.data.event_date ? String(r.data.event_date).slice(0, 10) : "", pitch_duration_minutes: r.data.pitch_duration_minutes ?? 5, qa_duration_minutes: r.data.qa_duration_minutes ?? 5 });
+      setInfoForm({ name: r.data.name, event_date: r.data.event_date ? String(r.data.event_date).slice(0, 10) : "", pitch_duration_minutes: r.data.pitch_duration_minutes ?? 5, qa_duration_minutes: r.data.qa_duration_minutes ?? 5, backdrop: r.data.backdrop || "" });
       if (r.data.status !== "draft") generateQr(r.data.id);
     } catch {
       setError("Session introuvable.");
@@ -203,12 +213,37 @@ export default function VoteConfig() {
     } catch { setError("Erreur suppression."); }
   };
 
+  const moveProject = async (idx, direction) => {
+    const projects = [...(session.projects || [])];
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= projects.length) return;
+    const a = { ...projects[idx], order_num: newIdx };
+    const b = { ...projects[newIdx], order_num: idx };
+    projects[idx] = b;
+    projects[newIdx] = a;
+    setSession(s => ({ ...s, projects }));
+    try {
+      await Promise.all([
+        api.put(`/vote/sessions/${id}/projects/${a.id}`, a),
+        api.put(`/vote/sessions/${id}/projects/${b.id}`, b),
+      ]);
+    } catch { setError("Erreur réordonnancement."); }
+  };
+
   const startEditProject = (p) => {
     setEditingProj(p.id);
     setPresType(p.presentation_pdf ? "pdf" : "url");
     setVideoType(p.video_file ? "file" : "url");
-    setProjForm({ name: p.name, porteur: p.porteur || "", description: p.description || "", presentation_url: p.presentation_url || "", presentation_pdf: p.presentation_pdf || "", video_url: p.video_url || "", video_file: p.video_file || "" });
+    setProjForm({ name: p.name, porteur: p.porteur || "", description: p.description || "", presentation_url: p.presentation_url || "", presentation_pdf: p.presentation_pdf || "", video_url: p.video_url || "", video_file: p.video_file || "", is_female_led: !!p.is_female_led });
     setShowProjForm(true);
+  };
+
+  const toggleFemaleLed = async (p) => {
+    const updated = { ...p, is_female_led: !p.is_female_led };
+    setSession(s => ({ ...s, projects: s.projects.map(x => x.id === p.id ? updated : x) }));
+    try {
+      await api.put(`/vote/sessions/${id}/projects/${p.id}`, updated);
+    } catch { setError("Erreur mise à jour projet."); }
   };
 
   const handlePdfSelect = async (e) => {
@@ -241,6 +276,23 @@ export default function VoteConfig() {
       alert("Erreur lors de l'upload de la vidéo.");
     } finally {
       setUploadingVideo(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleBackdropSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingBackdrop(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api.post("/vote/upload-backdrop", fd, { headers: { "Content-Type": "multipart/form-data" } });
+      setInfoForm(f => ({ ...f, backdrop: r.data.filename }));
+    } catch {
+      alert("Erreur lors de l'upload de l'image.");
+    } finally {
+      setUploadingBackdrop(false);
       e.target.value = "";
     }
   };
@@ -423,6 +475,58 @@ export default function VoteConfig() {
               </select>
               <p className="text-xs text-slate-400 mt-1">Timer Q&amp;R lancé manuellement par l'admin</p>
             </div>
+            {/* Fond de scène projecteur */}
+            <div>
+              <label className="text-xs font-medium text-slate-600">Fond de scène (projecteur entre deux projets)</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {BACKDROP_PRESETS.map(p => {
+                  const isSelected = infoForm.backdrop === p.css;
+                  return (
+                    <button
+                      key={p.key}
+                      type="button"
+                      onClick={() => setInfoForm(f => ({ ...f, backdrop: p.css }))}
+                      title={p.label}
+                      className={`flex flex-col items-center gap-1 rounded-xl border-2 p-1.5 transition-all ${isSelected ? "border-orange-400 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}
+                    >
+                      <div
+                        className="w-10 h-7 rounded-lg"
+                        style={p.css ? { background: p.css } : { background: "#f1f5f9", border: "1px dashed #cbd5e1" }}
+                      />
+                      <span className="text-[10px] text-slate-500 leading-none">{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* URL ou fichier uploadé */}
+              {(() => {
+                const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+                const isFile = infoForm.backdrop && !infoForm.backdrop.startsWith("http") && !infoForm.backdrop.startsWith("linear-gradient") && !infoForm.backdrop.startsWith("#") && infoForm.backdrop !== "";
+                const isUrl  = infoForm.backdrop?.startsWith("http");
+                return isFile ? (
+                  <div className="mt-2 flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
+                    <img src={`${API_BASE}/vote/backdrops/${infoForm.backdrop}`} alt="aperçu" className="w-10 h-7 rounded object-cover flex-shrink-0" />
+                    <span className="text-xs text-green-700 flex-1 truncate font-mono">{infoForm.backdrop}</span>
+                    <button type="button" onClick={() => setInfoForm(f => ({ ...f, backdrop: "" }))} className="text-slate-400 hover:text-red-500 flex-shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="URL d'une image (https://...)"
+                      className="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none"
+                      value={isUrl ? infoForm.backdrop : ""}
+                      onChange={e => setInfoForm(f => ({ ...f, backdrop: e.target.value }))}
+                    />
+                    <label className={`flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium cursor-pointer hover:border-orange-400 hover:text-orange-600 transition-colors ${uploadingBackdrop ? "opacity-50 pointer-events-none" : ""}`}>
+                      <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" disabled={uploadingBackdrop} onChange={handleBackdropSelect} />
+                      {uploadingBackdrop ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {uploadingBackdrop ? "Envoi..." : "Importer"}
+                    </label>
+                  </div>
+                );
+              })()}
+            </div>
             <button onClick={saveInfo} disabled={savingInfo} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
               {savingInfo ? "Sauvegarde..." : "Sauvegarder"}
             </button>
@@ -434,6 +538,13 @@ export default function VoteConfig() {
             <p><span className="text-slate-500">Durée pitch :</span> {session.pitch_duration_minutes ?? 5} min</p>
             <p><span className="text-slate-500">Durée Q&amp;R :</span> {session.qa_duration_minutes ?? 5} min</p>
             <p><span className="text-slate-500">Statut :</span> {STATUS_LABEL[session.status]}</p>
+            {session.backdrop && (
+              <p className="flex items-center gap-2">
+                <span className="text-slate-500">Fond scène :</span>
+                <span className="inline-block w-5 h-4 rounded" style={{ background: session.backdrop.startsWith("http") ? `url(${session.backdrop}) center/cover` : session.backdrop }} />
+                <span className="text-slate-400 text-xs truncate max-w-[200px]">{BACKDROP_PRESETS.find(b => b.css === session.backdrop)?.label || "Image personnalisée"}</span>
+              </p>
+            )}
           </div>
         )}
       </section>
@@ -463,7 +574,12 @@ export default function VoteConfig() {
             <div key={p.id} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
               <span className="text-xs font-bold text-slate-400 mt-0.5 w-4">#{i + 1}</span>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm text-slate-800">{p.name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium text-sm text-slate-800">{p.name}</p>
+                  {p.is_female_led && (
+                    <span className="text-[10px] font-semibold bg-pink-100 text-pink-700 rounded-full px-2 py-0.5">♀ Portée par une femme</span>
+                  )}
+                </div>
                 {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
                 {p.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{p.description}</p>}
                 {(p.presentation_url || p.presentation_pdf) && (
@@ -478,12 +594,28 @@ export default function VoteConfig() {
                   </a>
                 )}
               </div>
-              {session.status === "draft" && (
-                <div className="flex gap-1 flex-shrink-0">
-                  <button onClick={() => startEditProject(p)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
-                  <button onClick={() => deleteProject(p.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              )}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Toggle féminin — disponible en draft ET active */}
+                {(session.status === "draft" || session.status === "active") && (
+                  <button
+                    onClick={() => toggleFemaleLed(p)}
+                    title={p.is_female_led ? "Retirer le label féminin" : "Marquer : portée par une femme"}
+                    className={`p-1.5 rounded-lg text-xs font-bold transition-colors ${p.is_female_led ? "bg-pink-100 text-pink-600 hover:bg-pink-200" : "text-slate-300 hover:text-pink-400 hover:bg-pink-50"}`}
+                  >
+                    ♀
+                  </button>
+                )}
+                {session.status === "draft" && (
+                  <>
+                    <div className="flex flex-col">
+                      <button onClick={() => moveProject(i, -1)} disabled={i === 0} className="p-1 rounded hover:bg-slate-200 text-slate-300 hover:text-slate-600 disabled:opacity-30 transition-colors"><ChevronUp className="w-3 h-3" /></button>
+                      <button onClick={() => moveProject(i, 1)} disabled={i === (session.projects?.length - 1)} className="p-1 rounded hover:bg-slate-200 text-slate-300 hover:text-slate-600 disabled:opacity-30 transition-colors"><ChevronDown className="w-3 h-3" /></button>
+                    </div>
+                    <button onClick={() => startEditProject(p)} className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => deleteProject(p.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -503,6 +635,15 @@ export default function VoteConfig() {
               <label className="text-xs font-medium text-slate-600">Description</label>
               <textarea rows={2} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none resize-none" placeholder="Courte description du projet..." value={projForm.description} onChange={e => setProjForm(p => ({ ...p, description: e.target.value }))} />
             </div>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div
+                onClick={() => setProjForm(p => ({ ...p, is_female_led: !p.is_female_led }))}
+                className={`w-10 h-5 rounded-full transition-colors flex-shrink-0 ${projForm.is_female_led ? "bg-pink-500" : "bg-slate-200"}`}
+              >
+                <div className={`w-4 h-4 bg-white rounded-full shadow m-0.5 transition-transform ${projForm.is_female_led ? "translate-x-5" : ""}`} />
+              </div>
+              <span className="text-xs text-slate-600">Projet porté par une femme</span>
+            </label>
             <div>
               <label className="text-xs font-medium text-slate-600">Présentation</label>
               <div className="mt-1 grid grid-cols-2 gap-1.5">

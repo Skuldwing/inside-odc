@@ -440,6 +440,19 @@ pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS projector_video_a
   .then(() => console.log("Migration OK: vote_sessions.projector_video_active"))
   .catch(e => console.warn("Migration projector_video_active:", e.message));
 
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS backdrop TEXT`)
+  .then(() => console.log("Migration OK: vote_sessions.backdrop"))
+  .catch(e => console.warn("Migration backdrop:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_backdrop_files (
+    filename    TEXT PRIMARY KEY,
+    mimetype    TEXT NOT NULL,
+    data        BYTEA NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: vote_backdrop_files")).catch(e => console.warn("Migration vote_backdrop_files:", e.message));
+
 pool.query(`
   CREATE TABLE IF NOT EXISTS vote_guests (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -463,6 +476,24 @@ pool.query(`
     UNIQUE(guest_id, session_id)
   )
 `).then(() => console.log("Migration OK: vote_guest_predictions")).catch(e => console.warn("Migration vote_guest_predictions:", e.message));
+
+pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS is_female_led BOOLEAN DEFAULT FALSE`)
+  .then(() => console.log("Migration OK: vote_projects.is_female_led")).catch(e => console.warn("Migration is_female_led:", e.message));
+
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS coup_de_coeur_active BOOLEAN DEFAULT FALSE`)
+  .then(() => console.log("Migration OK: vote_sessions.coup_de_coeur_active")).catch(e => console.warn("Migration coup_de_coeur_active:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS vote_coup_de_coeur_votes (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id  UUID REFERENCES vote_sessions(id) ON DELETE CASCADE,
+    project_id  UUID REFERENCES vote_projects(id) ON DELETE CASCADE,
+    voter_type  TEXT NOT NULL,
+    voter_id    UUID NOT NULL,
+    voted_at    TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(session_id, voter_type, voter_id)
+  )
+`).then(() => console.log("Migration OK: vote_coup_de_coeur_votes")).catch(e => console.warn("Migration vote_coup_de_coeur_votes:", e.message));
 
 /* ── Index pour les hot paths de polling (auth middleware exécuté à chaque requête) ── */
 pool.query(`CREATE INDEX IF NOT EXISTS idx_vote_jury_token   ON vote_jury(token)`)

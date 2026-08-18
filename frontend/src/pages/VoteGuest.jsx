@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Loader2, CheckCircle2, AlertCircle, Trophy,
-  ListOrdered, ChevronUp, ChevronDown, RotateCcw, Send,
+  ListOrdered, ChevronUp, ChevronDown, RotateCcw, Send, Heart,
 } from "lucide-react";
 import api from "../api";
 
@@ -186,6 +186,8 @@ export default function VoteGuest() {
   const [savingPred, setSavingPred]   = useState(false);
   const [predSaved, setPredSaved]     = useState(false);
   const [guestResults, setGuestResults] = useState(null);
+  const [cdcVoting, setCdcVoting]     = useState(false);
+  const [cdcVoted, setCdcVoted]       = useState(false);
   const intervalRef = useRef(null);
 
   useEffect(() => {
@@ -232,6 +234,20 @@ export default function VoteGuest() {
     }
   }, [status?.session_status, guestInfo, sessionId, guestResults]);
 
+  const handleCdcVote = async (projectId) => {
+    if (!guestInfo?.token || cdcVoting) return;
+    setCdcVoting(true);
+    try {
+      await api.post("/vote/coup-de-coeur/guest-vote", { project_id: projectId }, { headers: { "X-Guest-Token": guestInfo.token } });
+      setStatus(s => ({ ...s, my_cdc_vote: projectId }));
+      setCdcVoted(true);
+      setTimeout(() => setCdcVoted(false), 2000);
+    } catch (err) {
+      setError(err?.response?.data?.error || "Erreur lors du vote.");
+    }
+    setCdcVoting(false);
+  };
+
   const handleSavePrediction = async (ranking) => {
     if (!guestInfo?.token) return;
     setSavingPred(true);
@@ -256,9 +272,8 @@ export default function VoteGuest() {
 
   /* ── Session terminée ── */
   if (status?.session_status === "closed") {
-    const ranking = guestResults?.ranking || [];
     const myPred  = guestResults?.my_prediction;
-    const won     = guestResults?.prediction_correct;
+    const projects = guestResults?.projects || [];
     const medals  = ["🥇", "🥈", "🥉"];
 
     return (
@@ -267,76 +282,57 @@ export default function VoteGuest() {
           <div className="text-center mb-6 anim-fade-in-up">
             <Trophy className="w-14 h-14 text-orange-400 mx-auto mb-3" />
             <p className="text-2xl font-bold text-slate-900 mb-1">Session terminée</p>
-            <p className="text-slate-500 text-sm">Bonjour {guestInfo?.prenom} ! Voici les résultats.</p>
+            <p className="text-slate-500 text-sm">Merci pour votre participation, {guestInfo?.prenom} !</p>
           </div>
 
-          {/* Classement final */}
-          {ranking.length > 0 && (
-            <div className="space-y-3 mb-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Classement final</p>
-              {ranking.map((p, i) => (
-                <div
-                  key={p.id}
-                  className={`flex items-center gap-3 rounded-2xl p-4 border shadow-sm anim-fade-in-up ${
-                    i === 0 ? "bg-orange-50 border-orange-200" : "bg-white border-slate-200"
-                  }`}
-                  style={{ animationDelay: `${i * 80}ms` }}
-                >
-                  <span className="text-2xl">{medals[i] || `#${i + 1}`}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900">{p.name}</p>
-                    {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xl font-bold text-orange-600">{p.weighted_avg}</p>
-                    <p className="text-xs text-slate-400">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Résultat pronostic */}
-          {myPred && (
-            <div className={`rounded-2xl border p-5 mb-5 anim-fade-in-up ${won ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`} style={{ animationDelay: "400ms" }}>
-              <p className="font-semibold text-sm mb-3 text-slate-800">
-                {won ? "🎉 Félicitations ! Votre pronostic est correct !" : "Votre pronostic"}
-              </p>
-              <div className="space-y-1">
-                {myPred.slice(0, 3).map((id, i) => {
-                  const proj = ranking.find(p => p.id === id) || { name: id };
-                  const correct = ranking[i]?.id === id;
+          {/* Pronostic soumis */}
+          {myPred && myPred.length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 mb-4 anim-fade-in-up shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Votre pronostic</p>
+              <div className="space-y-1.5">
+                {myPred.slice(0, 5).map((pid, i) => {
+                  const proj = projects.find(p => p.id === pid);
                   return (
-                    <div key={id} className="flex items-center gap-2 text-sm">
-                      <span>{medals[i] || `#${i + 1}`}</span>
-                      <span className={correct ? "text-green-700 font-semibold" : "text-slate-600"}>{proj.name}</span>
-                      {correct && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+                    <div key={pid} className="flex items-center gap-2 text-sm text-slate-700">
+                      <span className="w-5 text-center">{medals[i] || `#${i + 1}`}</span>
+                      <span className="font-medium">{proj?.name || pid}</span>
                     </div>
                   );
                 })}
               </div>
-              {won && (
-                <p className="mt-3 text-sm text-green-700 font-medium">
-                  Votre classement correspond exactement au jury — vous gagnez des cadeaux ! 🎁
-                </p>
-              )}
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-400 mt-4">Orange Digital Center Sénégal</p>
+          {!myPred && !guestResults && (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-300" />
+            </div>
+          )}
+
+          <div className="rounded-2xl border border-orange-100 bg-orange-50 p-4 anim-fade-in-up">
+            <p className="text-sm text-orange-700 font-medium text-center">
+              Les résultats seront annoncés par les organisateurs.
+            </p>
+          </div>
+
+          <p className="text-center text-xs text-slate-400 mt-6">Orange Digital Center Sénégal</p>
         </div>
       </div>
     );
   }
 
   /* ── Session active ── */
-  const proj     = status?.active_project;
-  const projects = status?.projects || [];
+  const proj          = status?.active_project;
+  const projects      = status?.projects || [];
+  const cdcActive     = status?.coup_de_coeur_active || false;
+  const femaleProjs   = status?.female_projects || [];
+  const myCdcVote     = status?.my_cdc_vote || null;
 
   const TABS = [
     { id: "live",     label: "En direct" },
     { id: "projects", label: `Projets (${projects.length})` },
     { id: "predict",  label: "Mon pronostic" },
+    ...(cdcActive && femaleProjs.length > 0 ? [{ id: "cdc", label: "Coup de cœur ♀" }] : []),
   ];
 
   return (
@@ -492,6 +488,56 @@ export default function VoteGuest() {
                 Si votre pronostic correspond exactement au top 3 du jury, vous remportez des cadeaux Orange Digital Center.
                 Soumettez votre pronostic avant la fin de la session !
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Tab: Coup de cœur féminin */}
+        {activeTab === "cdc" && (
+          <div className="anim-fade-in-up space-y-3">
+            <div className="rounded-2xl bg-pink-50 border border-pink-200 p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Heart className="w-4 h-4 text-pink-500" />
+                <p className="font-semibold text-slate-800 text-sm">Coup de cœur féminin</p>
+              </div>
+              <p className="text-xs text-pink-600">Choisissez votre projet coup de cœur parmi les projets portés par une femme.</p>
+            </div>
+
+            {cdcVoted && (
+              <div className="flex items-center gap-2 text-pink-700 text-sm rounded-xl bg-pink-50 border border-pink-200 px-4 py-3">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                Vote enregistré !
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {femaleProjs.map(p => {
+                const isSelected = myCdcVote === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleCdcVote(p.id)}
+                    disabled={cdcVoting}
+                    className={`w-full text-left rounded-2xl border p-4 transition-all ${
+                      isSelected
+                        ? "border-pink-400 bg-pink-50 shadow-sm"
+                        : "border-slate-200 bg-white hover:border-pink-200 hover:bg-pink-50/30"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSelected ? "border-pink-500 bg-pink-500" : "border-slate-300"}`}>
+                        {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-sm text-slate-800">{p.name}</p>
+                        {p.porteur && <p className="text-xs text-slate-500 mt-0.5">{p.porteur}</p>}
+                      </div>
+                      {isSelected && <Heart className="w-4 h-4 text-pink-500 flex-shrink-0" />}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

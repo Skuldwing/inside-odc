@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, CheckCircle2, AlertCircle, Send, MessageCircleQuestion } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Send, MessageCircleQuestion, Heart } from "lucide-react";
 import api from "../api";
 
 function Avatar({ src, className = "w-10 h-10 rounded-xl" }) {
@@ -185,6 +185,9 @@ export default function VoteJury() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [juryResults, setJuryResults] = useState(null);
+  const [cdcVoting, setCdcVoting]     = useState(false);
+  const [cdcVoted, setCdcVoted]       = useState(false);
+  const [cdcResults, setCdcResults]   = useState(null);
 
   const intervalRef        = useRef(null);
   const currentProjectIdRef = useRef(null);
@@ -280,8 +283,25 @@ export default function VoteJury() {
       api.get(`/vote/sessions/${sessionId}/jury-results`, { headers: { "X-Jury-Token": juryInfo.token } })
         .then(r => setJuryResults(r.data))
         .catch(() => {});
+      api.get(`/vote/sessions/${sessionId}/coup-de-coeur/results`, { headers: { "X-Jury-Token": juryInfo.token } })
+        .then(r => setCdcResults(r.data))
+        .catch(() => {});
     }
   }, [status?.session_status, juryInfo, sessionId, juryResults]);
+
+  const handleCdcVote = async (projectId) => {
+    if (!juryInfo?.token || cdcVoting) return;
+    setCdcVoting(true);
+    try {
+      await api.post("/vote/coup-de-coeur/jury-vote", { project_id: projectId }, { headers: { "X-Jury-Token": juryInfo.token } });
+      setStatus(s => ({ ...s, my_cdc_vote: projectId }));
+      setCdcVoted(true);
+      setTimeout(() => setCdcVoted(false), 2000);
+    } catch (err) {
+      setSubmitError(err?.response?.data?.error || "Erreur vote coup de cœur.");
+    }
+    setCdcVoting(false);
+  };
 
   /* ── Loading ── */
   if (loading) {
@@ -292,7 +312,7 @@ export default function VoteJury() {
     );
   }
 
-  /* ── Session terminée → classement ── */
+  /* ── Session terminée → classement + CDC ── */
   if (status?.session_status === "closed") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
@@ -302,8 +322,10 @@ export default function VoteJury() {
             <p className="text-2xl font-bold text-slate-900 mb-1">Session terminée</p>
             <p className="text-slate-500 text-sm">Merci {juryInfo?.pseudo} ! Voici le classement final.</p>
           </div>
+
+          {/* Classement jury */}
           {juryResults ? (
-            <div className="space-y-3">
+            <div className="space-y-3 mb-6">
               {juryResults.ranking.map((p, i) => (
                 <div
                   key={p.id}
@@ -329,6 +351,29 @@ export default function VoteJury() {
               <Loader2 className="w-6 h-6 animate-spin text-orange-400" />
             </div>
           )}
+
+          {/* Coup de cœur féminin */}
+          {cdcResults && cdcResults.results.length > 0 && (
+            <div className="rounded-2xl border border-pink-200 bg-pink-50 p-4 anim-fade-in-up" style={{ animationDelay: "400ms" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Heart className="w-4 h-4 text-pink-500" />
+                <p className="font-semibold text-slate-800 text-sm">Coup de cœur féminin</p>
+              </div>
+              <div className="space-y-2">
+                {cdcResults.results.map((p, i) => (
+                  <div key={p.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${i === 0 ? "bg-pink-100 border border-pink-300" : "bg-white border border-pink-100"}`}>
+                    <span className="text-lg">{i === 0 ? "💗" : `#${i + 1}`}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-slate-800">{p.name}</p>
+                      {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
+                    </div>
+                    <p className="font-bold text-pink-600">{p.total_votes}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <p className="text-center text-xs text-slate-400 mt-8">Orange Digital Center Sénégal</p>
         </div>
       </div>
@@ -340,6 +385,9 @@ export default function VoteJury() {
     const juryList     = status?.jury_list || [];
     const projectCount = status?.project_count || 0;
     const closedCount  = status?.closed_count || 0;
+    const cdcActive    = status?.coup_de_coeur_active || false;
+    const femaleProjs  = status?.female_projects || [];
+    const myCdcVote    = status?.my_cdc_vote || null;
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 to-white px-4 py-8">
@@ -385,14 +433,65 @@ export default function VoteJury() {
             </div>
           )}
 
-          <div className="text-center anim-fade-in-up" style={{ animationDelay: "240ms" }}>
-            <div className="flex items-center justify-center gap-2 text-slate-500 text-sm">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>En attente du prochain projet...</span>
+          {/* Panel coup de cœur féminin */}
+          {cdcActive && femaleProjs.length > 0 && (
+            <div className="rounded-2xl border border-pink-200 bg-pink-50 p-4 mb-4 anim-fade-in-up" style={{ animationDelay: "200ms" }}>
+              <div className="flex items-center gap-2 mb-3">
+                <Heart className="w-4 h-4 text-pink-500" />
+                <p className="font-semibold text-slate-800 text-sm">Coup de cœur féminin</p>
+              </div>
+              <p className="text-xs text-pink-600 mb-3">Choisissez votre coup de cœur parmi les projets portés par une femme.</p>
+
+              {cdcVoted && (
+                <div className="flex items-center gap-2 text-pink-700 text-xs rounded-xl bg-white border border-pink-200 px-3 py-2 mb-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  Vote coup de cœur enregistré !
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {femaleProjs.map(p => {
+                  const isSelected = myCdcVote === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleCdcVote(p.id)}
+                      disabled={cdcVoting}
+                      className={`w-full text-left rounded-xl border p-3 transition-all ${
+                        isSelected
+                          ? "border-pink-400 bg-white shadow-sm"
+                          : "border-pink-100 bg-white hover:border-pink-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? "border-pink-500 bg-pink-500" : "border-slate-300"}`}>
+                          {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-xs text-slate-800">{p.name}</p>
+                          {p.porteur && <p className="text-[10px] text-slate-500">{p.porteur}</p>}
+                        </div>
+                        {isSelected && <Heart className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-            <p className="text-xs text-slate-400 mt-6">L&apos;administrateur lancera le vote sous peu</p>
-            <p className="mt-2 text-xs text-slate-400">Orange Digital Center Sénégal</p>
-          </div>
+          )}
+
+          {!cdcActive && (
+            <div className="text-center anim-fade-in-up" style={{ animationDelay: "240ms" }}>
+              <div className="flex items-center justify-center gap-2 text-slate-500 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>En attente du prochain projet...</span>
+              </div>
+              <p className="text-xs text-slate-400 mt-6">L&apos;administrateur lancera le vote sous peu</p>
+            </div>
+          )}
+
+          <p className="text-center text-xs text-slate-400 mt-6">Orange Digital Center Sénégal</p>
         </div>
       </div>
     );

@@ -1,26 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Loader2, Award, AlertCircle, Mail, RefreshCw } from "lucide-react";
+import { Loader2, Award, AlertCircle, Mail } from "lucide-react";
 import api from "../api";
-
-const UNISEX_STYLES = [
-  { id: "fun-emoji",          label: "Amusant"  },
-  { id: "bottts-neutral",     label: "Robot"    },
-  { id: "avataaars-neutral",  label: "Personnage" },
-  { id: "notionists-neutral", label: "Minimal"  },
-  { id: "adventurer-neutral", label: "Aventure" },
-  { id: "lorelei-neutral",    label: "Simple"   },
-  { id: "pixel-art-neutral",  label: "Pixel"    },
-  { id: "micah",              label: "Moderne"  },
-];
-
-function dicebearUrl(style, seed) {
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed || "jury")}`;
-}
-
-function randSuffix() {
-  return "_" + Math.random().toString(36).slice(2, 7);
-}
 
 export function AvatarImg({ avatar, className = "w-10 h-10 rounded-xl" }) {
   if (avatar?.startsWith("https://")) {
@@ -36,8 +17,6 @@ export default function VoteJoin() {
   const [loadError, setLoadError]   = useState("");
   const [pseudo, setPseudo]         = useState("");
   const [email, setEmail]           = useState("");
-  const [style, setStyle]           = useState(UNISEX_STYLES[0].id);
-  const [seed, setSeed]             = useState("jury");
   const [joining, setJoining]       = useState(false);
   const [joinError, setJoinError]   = useState("");
 
@@ -57,14 +36,6 @@ export default function VoteJoin() {
       .catch(err => setLoadError(err?.response?.data?.error || "Session introuvable"));
   }, [sessionId, navigate]);
 
-  useEffect(() => {
-    setSeed(pseudo.trim() || "jury");
-  }, [pseudo]);
-
-  const avatarUrl = dicebearUrl(style, seed);
-
-  const handleVariation = () => setSeed((pseudo.trim() || "jury") + randSuffix());
-
   const handleJoin = async (e) => {
     e.preventDefault();
     if (!pseudo.trim()) return;
@@ -73,7 +44,6 @@ export default function VoteJoin() {
     try {
       const r = await api.post(`/vote/join/${sessionId}`, {
         pseudo: pseudo.trim(),
-        avatar: avatarUrl,
         email: email.trim() || undefined,
       });
       localStorage.setItem(`vote_jury_${sessionId}`, JSON.stringify({
@@ -198,55 +168,6 @@ export default function VoteJoin() {
         ) : (
           <form onSubmit={handleJoin} className="space-y-4">
 
-            {/* Sélecteur d'avatar */}
-            <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              {/* Aperçu */}
-              <div className="flex flex-col items-center mb-4">
-                <div className="w-24 h-24 rounded-2xl border-2 border-slate-100 overflow-hidden mb-3 bg-slate-50 flex items-center justify-center">
-                  <img
-                    key={avatarUrl}
-                    src={avatarUrl}
-                    alt="Votre avatar"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleVariation}
-                  className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-orange-500 transition-colors"
-                >
-                  <RefreshCw className="w-3 h-3" />
-                  Autre variation
-                </button>
-              </div>
-
-              {/* Sélecteur de style */}
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
-                Choisissez votre personnage
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {UNISEX_STYLES.map(s => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setStyle(s.id)}
-                    className={`flex flex-col items-center gap-1 rounded-xl py-2 px-1 transition-all ${
-                      style === s.id
-                        ? "bg-orange-50 border-2 border-orange-400 shadow-sm"
-                        : "bg-slate-50 border border-slate-200 hover:border-orange-200"
-                    }`}
-                  >
-                    <img
-                      src={dicebearUrl(s.id, seed)}
-                      alt={s.label}
-                      className="w-10 h-10 rounded-lg"
-                    />
-                    <span className="text-[10px] text-slate-500 font-medium">{s.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Pseudo */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
@@ -290,11 +211,9 @@ export default function VoteJoin() {
 
             {/* Aperçu carte juré */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm flex items-center gap-3">
-              <img
-                src={avatarUrl}
-                alt="avatar"
-                className="w-11 h-11 rounded-xl flex-shrink-0 border border-slate-100"
-              />
+              <div className="w-11 h-11 rounded-xl flex-shrink-0 border border-slate-100 bg-orange-50 flex items-center justify-center">
+                <Award className="w-5 h-5 text-orange-400" />
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-slate-800 text-sm truncate">{pseudo || "Votre pseudo..."}</p>
                 <p className="text-xs text-slate-400">Membre du jury</p>

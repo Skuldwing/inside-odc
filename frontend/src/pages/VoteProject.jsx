@@ -442,13 +442,39 @@ export default function VoteProject() {
             <Loader2 className="w-10 h-10 animate-spin text-orange-400" />
           </div>
         ) : !proj ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 text-slate-600">
-            <Monitor className="w-24 h-24 opacity-10" />
-            <div className="text-center">
-              <p className="text-2xl font-semibold text-slate-500">En attente du prochain projet</p>
-              <p className="text-sm text-slate-600 mt-2">Le contenu apparaîtra automatiquement</p>
-            </div>
-          </div>
+          (() => {
+            const bd = data?.backdrop;
+            const isUrl  = bd?.startsWith("http");
+            const isCss  = bd?.startsWith("linear-gradient") || bd?.startsWith("#");
+            const isFile = bd && !isUrl && !isCss;
+            const imgSrc = isFile ? `${API_BASE}/vote/backdrops/${bd}` : isUrl ? bd : null;
+            const bgStyle = bd
+              ? imgSrc
+                ? { backgroundImage: `url(${imgSrc})`, backgroundSize: "cover", backgroundPosition: "center" }
+                : { background: bd }
+              : {};
+            return (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-6" style={bgStyle}>
+                {bd && <div className="absolute inset-0 bg-black/30" />}
+                <div className="relative z-10 flex flex-col items-center gap-4">
+                  {!bd && <Monitor className="w-24 h-24 opacity-10 text-slate-600" />}
+                  {data?.session_name && bd && (
+                    <p className="text-3xl font-bold text-white/90 text-center drop-shadow-lg px-8">
+                      {data.session_name}
+                    </p>
+                  )}
+                  <div className="text-center">
+                    <p className={`text-xl font-semibold ${bd ? "text-white/70 drop-shadow" : "text-slate-500"}`}>
+                      En attente du prochain projet
+                    </p>
+                    <p className={`text-sm mt-1 ${bd ? "text-white/50" : "text-slate-600"}`}>
+                      Le contenu apparaîtra automatiquement
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()
         ) : videoActive && hasVideo ? (
           /* ── Mode vidéo (déclenché par l'admin) ── */
           <VideoViewer
