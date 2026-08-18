@@ -210,8 +210,14 @@ export default function VoteManage() {
 
   const loadResults = async () => {
     try {
-      const r = await api.get(`/vote/sessions/${id}/results`);
-      setResults(r.data);
+      const [rRes, cdcRes] = await Promise.all([
+        api.get(`/vote/sessions/${id}/results`),
+        femaleProjects.length > 0
+          ? api.get(`/vote/sessions/${id}/coup-de-coeur/results/admin`)
+          : Promise.resolve(null),
+      ]);
+      setResults(rRes.data);
+      if (cdcRes) setCdcResults(cdcRes.data);
       setResultsTab("ranking");
       setShowResults(true);
     } catch { setError("Erreur chargement résultats."); }
@@ -368,9 +374,10 @@ export default function VoteManage() {
                 { key: "ranking",  label: "Classement" },
                 { key: "criteria", label: "Par critère" },
                 { key: "jury",     label: "Par juré" },
+                ...(femaleProjects.length > 0 ? [{ key: "cdc", label: "Coup de cœur ♀" }] : []),
               ].map(t => (
                 <button key={t.key} onClick={() => setResultsTab(t.key)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${resultsTab === t.key ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+                  className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${resultsTab === t.key ? (t.key === "cdc" ? "border-pink-500 text-pink-600" : "border-orange-500 text-orange-600") : "border-transparent text-slate-500 hover:text-slate-700"}`}>
                   {t.label}
                 </button>
               ))}
@@ -486,6 +493,36 @@ export default function VoteManage() {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* ── Onglet Coup de cœur ── */}
+              {resultsTab === "cdc" && (
+                <div>
+                  {!cdcResults ? (
+                    <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
+                  ) : cdcResults.results.length === 0 ? (
+                    <p className="text-sm text-slate-400 italic text-center py-6">Aucun vote enregistré</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {cdcResults.results.map((p, i) => (
+                        <div key={p.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${i === 0 ? "border-pink-200 bg-pink-50" : "border-slate-100 bg-slate-50"}`}>
+                          <span className="text-2xl w-8 text-center">{i === 0 ? "💗" : `#${i + 1}`}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-slate-900 truncate">{p.name}</p>
+                            {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-2xl font-bold text-pink-600">{p.total_votes}</p>
+                            <p className="text-xs text-slate-400">{p.jury_votes} jurés · {p.guest_votes} invités</p>
+                          </div>
+                        </div>
+                      ))}
+                      <p className="text-xs text-slate-400 pt-2 text-right">
+                        {cdcResults.jury_total} jurés · {cdcResults.guest_total} invités ont participé
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -837,28 +874,31 @@ export default function VoteManage() {
                   {cdcActive ? "Vote en cours" : "Inactif"}
                 </span>
               </div>
-              {!cdcResults ? (
-                <div className="flex items-center justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
-              ) : cdcResults.results.length === 0 ? (
-                <p className="text-sm text-slate-400 italic text-center py-4">Aucun projet féminin</p>
+              {femaleProjects.length === 0 ? (
+                <p className="text-sm text-slate-400 italic text-center py-4">
+                  Aucun projet marqué "Portée par une femme" — configurez-les dans la page de configuration.
+                </p>
               ) : (
                 <div className="space-y-2">
-                  {cdcResults.results.map((p, i) => (
-                    <div key={p.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${i === 0 ? "border-pink-200 bg-pink-50" : "border-slate-100 bg-slate-50"}`}>
-                      <span className="text-xl w-6">{i === 0 ? "💗" : `#${i + 1}`}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm text-slate-800">{p.name}</p>
-                        {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
-                      </div>
-                      <div className="text-right text-xs flex-shrink-0">
-                        <p className="font-bold text-pink-600 text-base">{p.total_votes}</p>
-                        <p className="text-slate-400">{p.jury_votes}j · {p.guest_votes}i</p>
-                      </div>
-                    </div>
-                  ))}
-                  <p className="text-xs text-slate-400 mt-2">
-                    {cdcResults.jury_total} jurés · {cdcResults.guest_total} invités ont participé
-                  </p>
+                  {[...femaleProjects]
+                    .sort((a, b) => (b.cdc_votes_total || 0) - (a.cdc_votes_total || 0))
+                    .map((p, i) => {
+                      const total = p.cdc_votes_total || 0;
+                      return (
+                        <div key={p.id} className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${i === 0 && total > 0 ? "border-pink-200 bg-pink-50" : "border-slate-100 bg-slate-50"}`}>
+                          <span className="text-xl w-6">{i === 0 && total > 0 ? "💗" : `#${i + 1}`}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-slate-800">{p.name}</p>
+                            {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
+                          </div>
+                          <div className="text-right text-xs flex-shrink-0">
+                            <p className="font-bold text-pink-600 text-base">{total}</p>
+                            <p className="text-slate-400">{p.cdc_votes_jury || 0}j · {p.cdc_votes_guest || 0}i</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  <p className="text-xs text-slate-400 mt-2 text-right">Mise à jour automatique toutes les 3s</p>
                 </div>
               )}
             </div>
