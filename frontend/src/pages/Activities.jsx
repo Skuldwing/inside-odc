@@ -896,7 +896,7 @@ export default function Activities({
                 <span className="text-xs text-slate-600 flex-1 truncate">{editForm.report_filename}</span>
                 <button
                   type="button"
-                  onClick={() => handleDownloadReport(editForm.id)}
+                  onClick={() => handlePreviewReport(editForm.id)}
                   className="btn-ghost border text-xs flex items-center gap-1"
                 >
                   <Download className="w-3 h-3" /> Télécharger
@@ -994,6 +994,30 @@ export default function Activities({
                 <ColumnMappingInfo result={importDirectResult} />
               </div>
             )}
+          </div>
+
+          {/* Photos */}
+          <div className="mt-5 pt-5 border-t border-slate-200">
+            <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Camera className="w-4 h-4 text-slate-400" />
+              Photos de l&apos;activité
+              {activities.find(a => a.id === editForm.id)?.photo_count > 0 && (
+                <span className="text-xs font-normal text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
+                  {activities.find(a => a.id === editForm.id)?.photo_count} photo{activities.find(a => a.id === editForm.id)?.photo_count > 1 ? "s" : ""}
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                const act = activities.find(a => a.id === editForm.id);
+                if (act) handleOpenGallery(act);
+              }}
+              className="btn-secondary text-sm flex items-center gap-2 w-full justify-center"
+            >
+              <Camera className="w-4 h-4" />
+              Voir / ajouter des photos
+            </button>
           </div>
         </ActivityModal>
       )}
