@@ -441,28 +441,42 @@ router.get("/:id/report", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const actRes = await pool.query(
-      "SELECT report_filename, report_data, partner_id, coach_id FROM activities WHERE id = $1",
+    // Sélectionner les métadonnées d'abord pour éviter de charger le BYTEA inutilement
+    const metaRes = await pool.query(
+      "SELECT report_filename, partner_id, coach_id, octet_length(report_data) AS data_size FROM activities WHERE id = $1",
       [id]
     );
-    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!metaRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
 
-    const activity = actRes.rows[0];
-    if (!activity.report_data) return res.status(404).json({ error: "Aucun rapport disponible" });
+    const meta = metaRes.rows[0];
+    if (!meta.data_size) return res.status(404).json({ error: "Aucun rapport disponible" });
 
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
-    if (!isOwner(req, activity)) return res.status(403).json({ error: "Accès refusé" });
+    if (!isOwner(req, meta)) return res.status(403).json({ error: "Accès refusé" });
 
-    const filename = activity.report_filename
-      ? (activity.report_filename.toLowerCase().endsWith(".pdf") ? activity.report_filename : activity.report_filename + ".pdf")
+    // Charger les données binaires seulement si autorisé
+    const dataRes = await pool.query(
+      "SELECT report_data FROM activities WHERE id = $1",
+      [id]
+    );
+    const rawData = dataRes.rows[0]?.report_data;
+    if (!rawData) return res.status(404).json({ error: "Aucun rapport disponible" });
+
+    const buffer = Buffer.isBuffer(rawData) ? rawData : Buffer.from(rawData);
+
+    const filename = meta.report_filename
+      ? (meta.report_filename.toLowerCase().endsWith(".pdf") ? meta.report_filename : meta.report_filename + ".pdf")
       : "rapport.pdf";
     const disposition = req.query.inline === "1" ? "inline" : "attachment";
-    res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+
     res.setHeader("Content-Type", "application/pdf");
-    res.send(activity.report_data);
+    res.setHeader("Content-Disposition", `${disposition}; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "no-store");
+    res.end(buffer);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erreur serveur" });
+    console.error("[REPORT]", err);
+    if (!res.headersSent) res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
