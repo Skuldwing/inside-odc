@@ -213,15 +213,22 @@ function findHeaderRowIndex(rawRows) {
   return bestIdx;
 }
 
-function buildColumnMapping(headerRow) {
+function buildColumnMapping(headerRow, manualMapping = {}) {
   const usedFields = new Set();
   return headerRow.map((cell) => {
-    const field = resolveField(String(cell ?? ""));
+    const original = String(cell ?? "").trim();
+    // Priorité au mapping manuel fourni par l'utilisateur
+    const manualField = manualMapping[original];
+    if (manualField && !usedFields.has(manualField)) {
+      usedFields.add(manualField);
+      return { field: manualField, original };
+    }
+    const field = resolveField(original);
     if (field && !usedFields.has(field)) {
       usedFields.add(field);
-      return { field, original: String(cell ?? "").trim() };
+      return { field, original };
     }
-    return { field: null, original: String(cell ?? "").trim() };
+    return { field: null, original };
   });
 }
 
@@ -250,7 +257,7 @@ function splitNomComplet(full) {
 
 /* ===== LECTURE DU FICHIER EXCEL ===== */
 
-function parseRowsFromSheet(sheet) {
+function parseRowsFromSheet(sheet, manualMapping = {}) {
   const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null });
   if (rawRows.length === 0) {
     return { rows: [], headerRowIndex: 0, recognizedColumns: {}, unrecognizedColumns: [] };
@@ -258,7 +265,7 @@ function parseRowsFromSheet(sheet) {
 
   const headerIdx = findHeaderRowIndex(rawRows);
   const headerRow = rawRows[headerIdx].map((c) => (c != null ? String(c) : ""));
-  const colMapping = buildColumnMapping(headerRow);
+  const colMapping = buildColumnMapping(headerRow, manualMapping);
 
   // Rapport des colonnes reconnues / non reconnues
   const recognizedColumns = {};
@@ -539,6 +546,62 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   return { imported, skippedMissingName, duplicatesInActivity };
 }
 
+/* ===== CHAMPS DISPONIBLES POUR LE MAPPING MANUEL ===== */
+const AVAILABLE_FIELDS = [
+  { value: "nom",         label: "Nom" },
+  { value: "prenom",      label: "Prénom" },
+  { value: "nom_complet", label: "Nom complet" },
+  { value: "genre",       label: "Genre / Sexe" },
+  { value: "email",       label: "Email" },
+  { value: "telephone",   label: "Téléphone" },
+  { value: "structure",   label: "Structure / École" },
+  { value: "tranche_age", label: "Tranche d'âge" },
+  { value: "statut",      label: "Statut / Catégorie" },
+];
+
+/* ===== PREVIEW — analyse sans import ===== */
+router.post("/preview", authMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "Fichier requis" });
+
+    const workbook = xlsx.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+    if (rawRows.length === 0) return res.status(400).json({ error: "Fichier vide" });
+
+    const headerIdx = findHeaderRowIndex(rawRows);
+    const headerRow = rawRows[headerIdx].map(c => c != null ? String(c) : "");
+    const dataRows = rawRows.slice(headerIdx + 1).filter(
+      row => Array.isArray(row) && row.some(c => c != null && String(c).trim() !== "")
+    );
+
+    // Construire colonnes avec exemples de valeurs (3 premières lignes)
+    const columns = headerRow
+      .map((original, colIdx) => {
+        if (!original.trim()) return null;
+        const field = resolveField(original);
+        const samples = dataRows.slice(0, 3)
+          .map(r => r[colIdx] != null ? String(r[colIdx]).trim() : "")
+          .filter(Boolean);
+        return { original, field, samples };
+      })
+      .filter(Boolean);
+
+    res.json({
+      columns,
+      total_rows: dataRows.length,
+      header_row: headerIdx + 1,
+      available_fields: AVAILABLE_FIELDS,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur analyse fichier" });
+  } finally {
+    safeUnlink(req.file?.path);
+  }
+});
+
 /* ===== DOWNLOAD TEMPLATE XLSX ===== */
 router.get("/template", authMiddleware, (req, res) => {
   const wb = xlsx.utils.book_new();
@@ -577,7 +640,8 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
 
     const workbook = xlsx.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const { rows, headerRowIndex, recognizedColumns, unrecognizedColumns } = parseRowsFromSheet(sheet);
+    const manualMapping = req.body.manual_mapping ? JSON.parse(req.body.manual_mapping) : {};
+    const { rows, headerRowIndex, recognizedColumns, unrecognizedColumns } = parseRowsFromSheet(sheet, manualMapping);
 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
@@ -647,7 +711,8 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
 
     const workbook = xlsx.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const { rows, headerRowIndex, recognizedColumns, unrecognizedColumns } = parseRowsFromSheet(sheet);
+    const manualMapping = req.body.manual_mapping ? JSON.parse(req.body.manual_mapping) : {};
+    const { rows, headerRowIndex, recognizedColumns, unrecognizedColumns } = parseRowsFromSheet(sheet, manualMapping);
 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
@@ -709,7 +774,8 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
 
     const workbook = xlsx.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const { rows, headerRowIndex, recognizedColumns, unrecognizedColumns } = parseRowsFromSheet(sheet);
+    const manualMapping = req.body.manual_mapping ? JSON.parse(req.body.manual_mapping) : {};
+    const { rows, headerRowIndex, recognizedColumns, unrecognizedColumns } = parseRowsFromSheet(sheet, manualMapping);
 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 

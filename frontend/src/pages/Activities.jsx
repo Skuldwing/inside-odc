@@ -57,6 +57,9 @@ export default function Activities({
   const [importing, setImporting] = useState(false);
   const [importDirectResult, setImportDirectResult] = useState(null);
   const [importDirectError, setImportDirectError] = useState("");
+  const [importPreview, setImportPreview] = useState(null);   // données analyse
+  const [importMapping, setImportMapping] = useState({});     // {original: field} overrides
+  const [previewing, setPreviewing] = useState(false);
 
   const [editForm, setEditForm] = useState({
     id: null,
@@ -345,6 +348,26 @@ export default function Activities({
     a.click();
   };
 
+  const handlePreview = async () => {
+    if (!importFile) return;
+    setPreviewing(true);
+    setImportDirectError("");
+    setImportPreview(null);
+    setImportMapping({});
+    try {
+      const fd = new FormData();
+      fd.append("file", importFile);
+      const res = await api.post("/import/preview", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setImportPreview(res.data);
+    } catch (err) {
+      setImportDirectError(err?.response?.data?.error || "Erreur lors de l'analyse.");
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const handleDirectImport = async () => {
     if (!importFile) return;
     setImporting(true);
@@ -352,10 +375,14 @@ export default function Activities({
     try {
       const fd = new FormData();
       fd.append("file", importFile);
+      if (Object.keys(importMapping).length > 0)
+        fd.append("manual_mapping", JSON.stringify(importMapping));
       const res = await api.post(`/import/direct/${editForm.id}`, fd, {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setImportDirectResult(res.data);
+      setImportPreview(null);
+      setImportMapping({});
       setEditForm(f => ({ ...f, participants_manual: "" }));
       fetchActivities();
     } catch (err) {
@@ -839,20 +866,41 @@ export default function Activities({
                 <input
                   type="file"
                   accept=".xlsx,.xls"
-                  onChange={e => { setImportFile(e.target.files[0] || null); setImportDirectError(""); }}
+                  onChange={e => {
+                    setImportFile(e.target.files[0] || null);
+                    setImportDirectError("");
+                    setImportPreview(null);
+                    setImportMapping({});
+                  }}
                   className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
                 />
                 {importDirectError && (
                   <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{importDirectError}</p>
                 )}
-                <button
-                  type="button"
-                  disabled={!importFile || importing}
-                  onClick={handleDirectImport}
-                  className="btn-primary text-sm disabled:opacity-50"
-                >
-                  {importing ? "Import en cours..." : "Importer"}
-                </button>
+
+                {/* Bouton Analyser */}
+                {!importPreview && (
+                  <button
+                    type="button"
+                    disabled={!importFile || previewing}
+                    onClick={handlePreview}
+                    className="btn-secondary text-sm disabled:opacity-50"
+                  >
+                    {previewing ? "Analyse en cours..." : "Analyser le fichier"}
+                  </button>
+                )}
+
+                {/* Prévisualisation du mapping */}
+                {importPreview && (
+                  <ImportPreviewPanel
+                    preview={importPreview}
+                    mapping={importMapping}
+                    onMappingChange={setImportMapping}
+                    onReset={() => { setImportPreview(null); setImportMapping({}); }}
+                    onConfirm={handleDirectImport}
+                    importing={importing}
+                  />
+                )}
               </div>
             ) : (
               <div className="space-y-2">
@@ -967,6 +1015,116 @@ const FIELD_LABELS = {
   telephone: "Téléphone", structure: "Structure",
   tranche_age: "Tranche d'âge", statut: "Statut", nom_complet: "Nom complet",
 };
+
+function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConfirm, importing }) {
+  const { columns = [], total_rows = 0, header_row = 1, available_fields = [] } = preview;
+
+  const effectiveField = (col) => mapping[col.original] || col.field;
+
+  const recognized = columns.filter(c => effectiveField(c));
+  const unrecognized = columns.filter(c => !effectiveField(c));
+  const hasName = recognized.some(c => ["nom", "prenom", "nom_complet"].includes(effectiveField(c)));
+
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+      {/* Résumé */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">
+            {total_rows} ligne{total_rows !== 1 ? "s" : ""} détectée{total_rows !== 1 ? "s" : ""}
+          </p>
+          {header_row > 1 && (
+            <p className="text-xs text-amber-600 mt-0.5">En-tête détecté à la ligne {header_row}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onReset}
+          className="text-xs text-slate-500 hover:text-slate-700 underline"
+        >
+          Changer de fichier
+        </button>
+      </div>
+
+      {/* Colonnes reconnues */}
+      {recognized.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-600 mb-2">
+            ✓ Colonnes reconnues ({recognized.length})
+          </p>
+          <div className="space-y-1.5">
+            {recognized.map(col => (
+              <div key={col.original} className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-1.5">
+                <span className="text-xs font-medium text-emerald-700 w-24 flex-shrink-0">
+                  {FIELD_LABELS[effectiveField(col)] ?? effectiveField(col)}
+                </span>
+                <span className="text-xs text-slate-500">←</span>
+                <span className="text-xs text-slate-700 font-mono">{col.original}</span>
+                {col.samples.length > 0 && (
+                  <span className="ml-auto text-xs text-slate-400 truncate max-w-[120px]">
+                    ex : {col.samples[0]}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Colonnes non reconnues → dropdown */}
+      {unrecognized.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-slate-600 mb-2">
+            Colonnes non reconnues — assigner manuellement
+          </p>
+          <div className="space-y-1.5">
+            {unrecognized.map(col => (
+              <div key={col.original} className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5">
+                <span className="text-xs text-slate-700 font-mono flex-shrink-0 w-32 truncate">{col.original}</span>
+                {col.samples.length > 0 && (
+                  <span className="text-xs text-slate-400 truncate flex-1">ex : {col.samples[0]}</span>
+                )}
+                <select
+                  className="ml-auto text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-700"
+                  value={mapping[col.original] || ""}
+                  onChange={e => {
+                    const val = e.target.value;
+                    onMappingChange(prev => {
+                      const next = { ...prev };
+                      if (val) next[col.original] = val;
+                      else delete next[col.original];
+                      return next;
+                    });
+                  }}
+                >
+                  <option value="">— Ignorer —</option>
+                  {available_fields.map(f => (
+                    <option key={f.value} value={f.value}>{f.label}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!hasName && (
+        <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          Aucune colonne nom/prénom détectée. Assignez au moins le nom et le prénom pour importer.
+        </p>
+      )}
+
+      <button
+        type="button"
+        disabled={!hasName || importing}
+        onClick={onConfirm}
+        className="btn-primary text-sm w-full disabled:opacity-50"
+      >
+        {importing ? "Import en cours..." : `Confirmer l'import (${total_rows} lignes)`}
+      </button>
+    </div>
+  );
+}
 
 function ColumnMappingInfo({ result }) {
   const recognized = result?.colonnes_reconnues ?? {};
