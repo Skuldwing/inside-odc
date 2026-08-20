@@ -18,6 +18,9 @@ import {
   X,
   FileText,
   Upload,
+  Camera,
+  ImageIcon,
+  ZoomIn,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
@@ -145,6 +148,7 @@ export default function Activities({
           participants_manual: a.participants_manual ?? null,
           date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
           report_filename: a.report_filename || null,
+          photo_count: a.photo_count ?? 0,
           mode: a.mode || "presentiel",
           status: statusValue,
           statusLabel:
@@ -318,10 +322,75 @@ export default function Activities({
   };
 
   const handlePreviewReport = (activityId) => {
-    // Ouvrir directement via URL (navigation = pas de CORS, cookie SameSite=None envoyé auto)
     const base = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
-    const url = `${base}/activities/${activityId}/report?inline=1`;
-    window.open(url, "_blank");
+    window.open(`${base}/activities/${activityId}/report?inline=1`, "_blank");
+  };
+
+  /* ===== GALERIE PHOTOS ===== */
+  const API_URL = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+  const [galleryActivity, setGalleryActivity] = useState(null);
+  const [galleryPhotos, setGalleryPhotos] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryUploading, setGalleryUploading] = useState(false);
+  const [galleryError, setGalleryError] = useState("");
+  const [lightboxIdx, setLightboxIdx] = useState(null);
+
+  const fetchPhotos = async (activityId) => {
+    setGalleryLoading(true);
+    setGalleryError("");
+    try {
+      const res = await api.get(`/activities/${activityId}/photos`);
+      setGalleryPhotos(res.data);
+    } catch {
+      setGalleryError("Erreur lors du chargement des photos.");
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  const handleOpenGallery = (activity) => {
+    setGalleryActivity(activity);
+    setGalleryPhotos([]);
+    setLightboxIdx(null);
+    setGalleryError("");
+    fetchPhotos(activity.id);
+  };
+
+  const handleUploadPhotos = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length || !galleryActivity) return;
+    setGalleryUploading(true);
+    setGalleryError("");
+    try {
+      const fd = new FormData();
+      files.forEach(f => fd.append("photos", f));
+      await api.post(`/activities/${galleryActivity.id}/photos`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      await fetchPhotos(galleryActivity.id);
+      fetchActivities();
+    } catch (err) {
+      setGalleryError(err?.response?.data?.error || "Erreur lors de l'upload.");
+    } finally {
+      setGalleryUploading(false);
+    }
+  };
+
+  const handleDeletePhoto = async (photoId) => {
+    if (!galleryActivity) return;
+    try {
+      await api.delete(`/activities/${galleryActivity.id}/photos/${photoId}`);
+      const updated = galleryPhotos.filter(p => p.id !== photoId);
+      setGalleryPhotos(updated);
+      if (lightboxIdx !== null) {
+        if (updated.length === 0) setLightboxIdx(null);
+        else if (lightboxIdx >= updated.length) setLightboxIdx(updated.length - 1);
+      }
+      fetchActivities();
+    } catch (err) {
+      setGalleryError(err?.response?.data?.error || "Erreur suppression.");
+    }
   };
 
   const handlePreview = async () => {
@@ -636,6 +705,7 @@ export default function Activities({
           onQrCode={setQrActivity}
           onExport={handleExportActivity}
           onDownloadReport={handlePreviewReport}
+          onOpenGallery={handleOpenGallery}
           showQrCode={role !== "partner" && role !== "coach"}
         />
       ) : (
@@ -654,6 +724,7 @@ export default function Activities({
               onQrCode={() => setQrActivity(activity)}
               onExport={() => handleExportActivity(activity)}
               onDownloadReport={() => handlePreviewReport(activity.id)}
+              onOpenGallery={() => handleOpenGallery(activity)}
               showQrCode={role !== "partner" && role !== "coach"}
             />
           ))}
@@ -895,6 +966,129 @@ export default function Activities({
             )}
           </div>
         </ActivityModal>
+      )}
+
+      {/* ===== GALERIE PHOTOS ===== */}
+      {galleryActivity && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl" style={{ height: "90vh" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+              <div>
+                <p className="font-semibold text-slate-900 flex items-center gap-2">
+                  <Camera className="w-4 h-4 text-orange-500" />
+                  {galleryActivity.title}
+                </p>
+                <p className="text-xs text-slate-400 mt-0.5">{galleryPhotos.length} photo{galleryPhotos.length > 1 ? "s" : ""}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {!isViewer && (
+                  <label className={`btn-primary text-sm flex items-center gap-2 cursor-pointer ${galleryUploading ? "opacity-60 pointer-events-none" : ""}`}>
+                    <Camera className="w-4 h-4" />
+                    {galleryUploading ? "Upload..." : "Ajouter des photos"}
+                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleUploadPhotos} disabled={galleryUploading} />
+                  </label>
+                )}
+                <button
+                  onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Corps */}
+            <div className="flex-1 overflow-y-auto p-5">
+              {galleryError && (
+                <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{galleryError}</div>
+              )}
+              {galleryLoading ? (
+                <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Chargement...</div>
+              ) : galleryPhotos.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-48 text-slate-400 gap-3">
+                  <ImageIcon className="w-12 h-12 opacity-25" />
+                  <p className="text-sm">Aucune photo pour cette activité</p>
+                  {!isViewer && <p className="text-xs">Cliquez sur « Ajouter des photos » pour commencer</p>}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {galleryPhotos.map((photo, idx) => (
+                    <div
+                      key={photo.id}
+                      className="relative group aspect-square rounded-xl overflow-hidden bg-slate-100 cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+                      onClick={() => setLightboxIdx(idx)}
+                    >
+                      <img
+                        src={`${API_URL}/activities/${galleryActivity.id}/photos/${photo.id}`}
+                        alt={photo.filename}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                        <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                      {(role === "admin" || photo.uploaded_by === user?.id) && !isViewer && (
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
+                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== LIGHTBOX ===== */}
+      {galleryActivity && lightboxIdx !== null && galleryPhotos[lightboxIdx] && (
+        <div
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/95"
+          onClick={() => setLightboxIdx(null)}
+        >
+          <img
+            src={`${API_URL}/activities/${galleryActivity.id}/photos/${galleryPhotos[lightboxIdx].id}`}
+            alt={galleryPhotos[lightboxIdx].filename}
+            className="max-w-full max-h-full object-contain select-none"
+            onClick={e => e.stopPropagation()}
+            draggable={false}
+          />
+          {/* Compteur */}
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full">
+            {lightboxIdx + 1} / {galleryPhotos.length}
+          </div>
+          {/* Précédent */}
+          {lightboxIdx > 0 && (
+            <button
+              onClick={e => { e.stopPropagation(); setLightboxIdx(i => i - 1); }}
+              className="absolute left-4 p-3 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          )}
+          {/* Suivant */}
+          {lightboxIdx < galleryPhotos.length - 1 && (
+            <button
+              onClick={e => { e.stopPropagation(); setLightboxIdx(i => i + 1); }}
+              className="absolute right-4 p-3 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          )}
+          {/* Fermer */}
+          <button
+            onClick={() => setLightboxIdx(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
       )}
 
     </div>
@@ -1244,7 +1438,7 @@ const STATUS_COLORS = {
   completed: { bg: "bg-emerald-100", text: "text-emerald-700", dot: "bg-emerald-500" },
 };
 
-function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, showQrCode }) {
+function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, onOpenGallery, showQrCode }) {
   const [selectedDay, setSelectedDay] = useState(null);
 
   const monthStart = startOfMonth(calendarDate);
@@ -1384,6 +1578,7 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
                   onQrCode={() => onQrCode && onQrCode(activity)}
                   onExport={() => onExport && onExport(activity)}
                   onDownloadReport={() => onDownloadReport && onDownloadReport(activity.id)}
+                  onOpenGallery={() => onOpenGallery && onOpenGallery(activity)}
                   showQrCode={showQrCode}
                 />
               ))}
@@ -1539,7 +1734,7 @@ function QrModal({ activity, onClose }) {
   );
 }
 
-function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, showQrCode = true }) {
+function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, onOpenGallery, showQrCode = true }) {
   const statusColors = {
     planned: "bg-blue-100 border-blue-200 text-blue-700",
     ongoing: "bg-orange-100 border-orange-200 text-orange-700",
@@ -1627,6 +1822,17 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
             </span>
           )}
 
+          {activity.photo_count > 0 && (
+            <button
+              onClick={onOpenGallery}
+              className="badge bg-violet-50 border-violet-200 text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer flex items-center gap-1"
+              title={`${activity.photo_count} photo${activity.photo_count > 1 ? "s" : ""}`}
+            >
+              <Camera className="w-3 h-3" />
+              {activity.photo_count} photo{activity.photo_count > 1 ? "s" : ""}
+            </button>
+          )}
+
           <div className="flex items-center gap-2">
             {showQrCode && (
               <button
@@ -1635,6 +1841,15 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
                 title="QR Code d'émargement"
               >
                 <QrCode className="w-4 h-4" />
+              </button>
+            )}
+            {onOpenGallery && (
+              <button
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-violet-600 hover:bg-violet-50"
+                onClick={onOpenGallery}
+                title="Photos de l'activité"
+              >
+                <Camera className="w-4 h-4" />
               </button>
             )}
             {activity.participants > 0 && (

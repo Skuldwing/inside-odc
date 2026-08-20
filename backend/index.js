@@ -527,6 +527,19 @@ pool.query(`
   )
 `).then(() => console.log("Migration OK: vote_video_files")).catch(e => console.warn("Migration vote_video_files:", e.message));
 
+/* Migration : photos d'activités */
+pool.query(`
+  CREATE TABLE IF NOT EXISTS activity_photos (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    activity_id  INTEGER REFERENCES activities(id) ON DELETE CASCADE,
+    filename     TEXT NOT NULL,
+    mime_type    TEXT NOT NULL DEFAULT 'image/jpeg',
+    data         BYTEA NOT NULL,
+    uploaded_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: activity_photos")).catch(e => console.warn("Migration activity_photos:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

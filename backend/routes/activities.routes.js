@@ -15,6 +15,15 @@ const reportUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Seules les images sont acceptées"));
+  },
+});
+
 function requireWriteAccess(req, res, next) {
   if (req.user.role === "viewer") {
     return res.status(403).json({ error: "Accès refusé" });
@@ -36,7 +45,8 @@ router.get("/", authMiddleware, async (req, res) => {
              p.name AS partner_name,
              d.name AS device_name,
              u.full_name AS coach_name,
-             COALESCE(ap.participants_count, 0) AS participants_count
+             COALESCE(ap.participants_count, 0) AS participants_count,
+             COALESCE(ph.photo_count, 0) AS photo_count
       FROM activities a
       LEFT JOIN partners p ON a.partner_id = p.id
       LEFT JOIN devices d ON a.device_id = d.id
@@ -46,6 +56,11 @@ router.get("/", authMiddleware, async (req, res) => {
         FROM activity_participants
         GROUP BY activity_id
       ) ap ON ap.activity_id = a.id
+      LEFT JOIN (
+        SELECT activity_id, COUNT(*)::int AS photo_count
+        FROM activity_photos
+        GROUP BY activity_id
+      ) ph ON ph.activity_id = a.id
     `;
 
     const params = [];
@@ -520,6 +535,87 @@ router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
     res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== PHOTOS D'ACTIVITÉ ===== */
+
+/* Liste des métadonnées (sans BYTEA) */
+router.get("/:id/photos", authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, filename, mime_type, uploaded_by, created_at
+       FROM activity_photos WHERE activity_id = $1 ORDER BY created_at ASC`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("[PHOTOS LIST]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Upload (plusieurs fichiers) */
+router.post("/:id/photos", authMiddleware, requireWriteAccess, photoUpload.array("photos", 20), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0)
+      return res.status(400).json({ error: "Aucun fichier" });
+
+    const inserted = [];
+    for (const file of req.files) {
+      const r = await pool.query(
+        `INSERT INTO activity_photos (activity_id, filename, mime_type, data, uploaded_by)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, filename, mime_type, uploaded_by, created_at`,
+        [req.params.id, file.originalname, file.mimetype, file.buffer, req.user.id]
+      );
+      inserted.push(r.rows[0]);
+    }
+    res.json({ inserted });
+  } catch (err) {
+    console.error("[PHOTOS UPLOAD]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Servir une photo (image binaire) */
+router.get("/:id/photos/:photoId", authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT filename, mime_type, data FROM activity_photos WHERE id = $1 AND activity_id = $2`,
+      [req.params.photoId, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Photo introuvable" });
+
+    const { filename, mime_type, data } = r.rows[0];
+    const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    res.setHeader("Content-Type", mime_type || "image/jpeg");
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.end(buffer);
+  } catch (err) {
+    console.error("[PHOTO SERVE]", err);
+    if (!res.headersSent) res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Supprimer une photo (uploader ou admin) */
+router.delete("/:id/photos/:photoId", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT uploaded_by FROM activity_photos WHERE id = $1 AND activity_id = $2`,
+      [req.params.photoId, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Photo introuvable" });
+
+    if (req.user.role !== "admin" && r.rows[0].uploaded_by !== req.user.id)
+      return res.status(403).json({ error: "Accès refusé" });
+
+    await pool.query(`DELETE FROM activity_photos WHERE id = $1`, [req.params.photoId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[PHOTO DELETE]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
