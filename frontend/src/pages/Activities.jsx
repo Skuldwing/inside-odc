@@ -337,8 +337,19 @@ export default function Activities({
         a.click();
       }
       setTimeout(() => URL.revokeObjectURL(url), 30000);
-    } catch {
-      alert("Erreur lors du chargement du rapport.");
+    } catch (err) {
+      // responseType:"blob" wraps error bodies as Blob — read it to get real message
+      try {
+        if (err?.response?.data instanceof Blob) {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          alert(`Erreur ${err.response.status} : ${json.error || text}`);
+        } else {
+          alert(`Erreur lors du chargement du rapport (${err?.response?.status ?? "réseau"}).`);
+        }
+      } catch {
+        alert("Erreur lors du chargement du rapport.");
+      }
     }
   };
 
