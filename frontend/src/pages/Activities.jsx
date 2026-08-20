@@ -38,6 +38,8 @@ export default function Activities({
   const [status, setStatus] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 25;
   const [activities, setActivities] = useState([]);
   const [devices, setDevices] = useState([]);
   const [partners, setPartners] = useState([]);
@@ -220,6 +222,7 @@ export default function Activities({
   }, [devices, activities]);
 
   const filteredActivities = useMemo(() => {
+    setCurrentPage(1);
     const q = search.trim().toLowerCase();
     return activities.filter((a) => {
       if (role === "admin" && partnerFilter) {
@@ -708,28 +711,55 @@ export default function Activities({
           onOpenGallery={handleOpenGallery}
           showQrCode={role !== "partner" && role !== "coach"}
         />
-      ) : (
-        <div className="space-y-4">
-          {loading && <div className="card p-6 text-center text-slate-500">Chargement...</div>}
-          {!loading && filteredActivities.length === 0 && (
-            <div className="card p-6 text-center text-slate-500">Aucune activité trouvée</div>
-          )}
-          {filteredActivities.map((activity) => (
-            <ActivityCard
-              key={activity.id}
-              activity={activity}
-              canEdit={!isViewer}
-              onEdit={() => openEdit(activity)}
-              onDelete={() => handleDelete(activity.id)}
-              onQrCode={() => setQrActivity(activity)}
-              onExport={() => handleExportActivity(activity)}
-              onDownloadReport={() => handlePreviewReport(activity.id)}
-              onOpenGallery={() => handleOpenGallery(activity)}
-              showQrCode={role !== "partner" && role !== "coach"}
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const totalPages = Math.ceil(filteredActivities.length / ITEMS_PER_PAGE);
+        const paginated = filteredActivities.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+        return (
+          <div className="space-y-4">
+            {loading && <div className="card p-6 text-center text-slate-500">Chargement...</div>}
+            {!loading && filteredActivities.length === 0 && (
+              <div className="card p-6 text-center text-slate-500">Aucune activité trouvée</div>
+            )}
+            {paginated.map((activity) => (
+              <ActivityCard
+                key={activity.id}
+                activity={activity}
+                canEdit={!isViewer}
+                onEdit={() => openEdit(activity)}
+                onDelete={() => handleDelete(activity.id)}
+                onQrCode={() => setQrActivity(activity)}
+                onExport={() => handleExportActivity(activity)}
+                onDownloadReport={() => handlePreviewReport(activity.id)}
+                onOpenGallery={() => handleOpenGallery(activity)}
+                showQrCode={role !== "partner" && role !== "coach"}
+              />
+            ))}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-sm text-slate-500">
+                  {filteredActivities.length} activités — page {currentPage} / {totalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => { setCurrentPage(p => p - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 disabled:opacity-40 hover:bg-slate-50 transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Précédent
+                  </button>
+                  <button
+                    disabled={currentPage === totalPages}
+                    onClick={() => { setCurrentPage(p => p + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600 disabled:opacity-40 hover:bg-slate-50 transition-colors"
+                  >
+                    Suivant <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {openUpload && (
         <ActivityModal
@@ -971,52 +1001,51 @@ export default function Activities({
       {/* ===== GALERIE PHOTOS ===== */}
       {galleryActivity && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-5xl" style={{ height: "90vh" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
-              <div>
-                <p className="font-semibold text-slate-900 flex items-center gap-2">
-                  <Camera className="w-4 h-4 text-orange-500" />
-                  {galleryActivity.title}
-                </p>
-                <p className="text-xs text-slate-400 mt-0.5">{galleryPhotos.length} photo{galleryPhotos.length > 1 ? "s" : ""}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {!isViewer && (
-                  <label className={`btn-primary text-sm flex items-center gap-2 cursor-pointer ${galleryUploading ? "opacity-60 pointer-events-none" : ""}`}>
-                    <Camera className="w-4 h-4" />
-                    {galleryUploading ? "Upload..." : "Ajouter des photos"}
-                    <input type="file" multiple accept="image/*" className="hidden" onChange={handleUploadPhotos} disabled={galleryUploading} />
-                  </label>
-                )}
-                <button
-                  onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-2xl" style={{ maxHeight: "min(680px, 90vh)" }}>
+            {/* Header compact */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
+              <p className="font-semibold text-slate-800 text-sm flex items-center gap-2 truncate">
+                <Camera className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                <span className="truncate">{galleryActivity.title}</span>
+                <span className="text-slate-400 font-normal text-xs flex-shrink-0">— {galleryPhotos.length} photo{galleryPhotos.length > 1 ? "s" : ""}</span>
+              </p>
+              <button
+                onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
+                className="ml-3 flex-shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {/* Corps */}
-            <div className="flex-1 overflow-y-auto p-5">
-              {galleryError && (
-                <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{galleryError}</div>
-              )}
+            {/* Zone upload — toujours visible */}
+            {!isViewer && (
+              <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0">
+                <label className={`flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-colors cursor-pointer py-3 text-sm font-medium text-violet-700 ${galleryUploading ? "opacity-60 pointer-events-none" : ""}`}>
+                  <Camera className="w-4 h-4" />
+                  {galleryUploading ? "Chargement en cours..." : "Cliquer pour ajouter des photos (jpg, png, webp — 5 Mo max)"}
+                  <input type="file" multiple accept="image/*" className="hidden" onChange={handleUploadPhotos} disabled={galleryUploading} />
+                </label>
+                {galleryError && (
+                  <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{galleryError}</p>
+                )}
+              </div>
+            )}
+
+            {/* Grille scrollable */}
+            <div className="flex-1 overflow-y-auto p-4">
               {galleryLoading ? (
-                <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Chargement...</div>
+                <div className="flex items-center justify-center h-32 text-slate-400 text-sm">Chargement...</div>
               ) : galleryPhotos.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-slate-400 gap-3">
-                  <ImageIcon className="w-12 h-12 opacity-25" />
-                  <p className="text-sm">Aucune photo pour cette activité</p>
-                  {!isViewer && <p className="text-xs">Cliquez sur « Ajouter des photos » pour commencer</p>}
+                <div className="flex flex-col items-center justify-center h-32 text-slate-400 gap-2">
+                  <ImageIcon className="w-10 h-10 opacity-20" />
+                  <p className="text-sm">Aucune photo</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {galleryPhotos.map((photo, idx) => (
                     <div
                       key={photo.id}
-                      className="relative group aspect-square rounded-xl overflow-hidden bg-slate-100 cursor-pointer shadow-sm hover:shadow-md transition-shadow"
+                      className="relative group aspect-square rounded-lg overflow-hidden bg-slate-100 cursor-pointer hover:ring-2 hover:ring-violet-400 transition-all"
                       onClick={() => setLightboxIdx(idx)}
                     >
                       <img
@@ -1025,13 +1054,11 @@ export default function Activities({
                         className="w-full h-full object-cover"
                         loading="lazy"
                       />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                        <ZoomIn className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                       {(role === "admin" || photo.uploaded_by === user?.id) && !isViewer && (
                         <button
                           onClick={e => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
-                          className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                          className="absolute top-1 right-1 p-1 rounded-md bg-red-500 hover:bg-red-600 text-white opacity-0 group-hover:opacity-100 transition-opacity shadow"
                           title="Supprimer"
                         >
                           <Trash2 className="w-3 h-3" />
@@ -1049,7 +1076,8 @@ export default function Activities({
       {/* ===== LIGHTBOX ===== */}
       {galleryActivity && lightboxIdx !== null && galleryPhotos[lightboxIdx] && (
         <div
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/95"
+          className="fixed inset-0 flex items-center justify-center bg-black/95"
+          style={{ zIndex: 9999 }}
           onClick={() => setLightboxIdx(null)}
         >
           <img
@@ -1059,11 +1087,9 @@ export default function Activities({
             onClick={e => e.stopPropagation()}
             draggable={false}
           />
-          {/* Compteur */}
           <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full">
             {lightboxIdx + 1} / {galleryPhotos.length}
           </div>
-          {/* Précédent */}
           {lightboxIdx > 0 && (
             <button
               onClick={e => { e.stopPropagation(); setLightboxIdx(i => i - 1); }}
@@ -1072,7 +1098,6 @@ export default function Activities({
               <ChevronLeft className="w-6 h-6" />
             </button>
           )}
-          {/* Suivant */}
           {lightboxIdx < galleryPhotos.length - 1 && (
             <button
               onClick={e => { e.stopPropagation(); setLightboxIdx(i => i + 1); }}
@@ -1081,7 +1106,6 @@ export default function Activities({
               <ChevronRight className="w-6 h-6" />
             </button>
           )}
-          {/* Fermer */}
           <button
             onClick={() => setLightboxIdx(null)}
             className="absolute top-4 right-4 p-2 rounded-full bg-white/15 hover:bg-white/25 text-white transition-colors"
