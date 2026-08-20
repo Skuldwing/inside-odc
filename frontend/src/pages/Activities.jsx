@@ -317,40 +317,11 @@ export default function Activities({
     }
   };
 
-  const handlePreviewReport = async (activityId) => {
-    const act = activities.find(a => a.id === activityId);
-    const raw = act?.report_filename || `rapport_activite_${activityId}.pdf`;
-    const filename = raw.toLowerCase().endsWith(".pdf") ? raw : raw + ".pdf";
-    try {
-      const res = await api.get(`/activities/${activityId}/report`, {
-        params: { inline: "1" },
-        responseType: "blob",
-      });
-      const blob = new Blob([res.data], { type: "application/pdf" });
-      const url = URL.createObjectURL(blob);
-      const win = window.open(url, "_blank");
-      if (!win) {
-        // Popup blocked — fallback to download
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        a.click();
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-    } catch (err) {
-      // responseType:"blob" wraps error bodies as Blob — read it to get real message
-      try {
-        if (err?.response?.data instanceof Blob) {
-          const text = await err.response.data.text();
-          const json = JSON.parse(text);
-          alert(`Erreur ${err.response.status} : ${json.error || text}`);
-        } else {
-          alert(`Erreur lors du chargement du rapport (${err?.response?.status ?? "réseau"}).`);
-        }
-      } catch {
-        alert("Erreur lors du chargement du rapport.");
-      }
-    }
+  const handlePreviewReport = (activityId) => {
+    // Ouvrir directement via URL (navigation = pas de CORS, cookie SameSite=None envoyé auto)
+    const base = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+    const url = `${base}/activities/${activityId}/report?inline=1`;
+    window.open(url, "_blank");
   };
 
   const handlePreview = async () => {
