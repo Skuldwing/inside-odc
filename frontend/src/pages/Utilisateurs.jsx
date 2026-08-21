@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
   Plus, User, Mail, Shield, Building2, Link2, Pencil, Trash2,
@@ -424,7 +425,7 @@ export default function Utilisateurs() {
         )}
 
         {/* Mini-modale lien existant */}
-        {(linkModal || linkLoading) && (
+        {(linkModal || linkLoading) && createPortal(
           <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
               <div className="flex items-center justify-between mb-4">
@@ -476,7 +477,8 @@ export default function Utilisateurs() {
                 </div>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Table */}

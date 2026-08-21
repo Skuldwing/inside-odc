@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Plus, Trash2, Edit2, Check, X, Loader2, QrCode, Copy, ExternalLink,
@@ -985,7 +986,7 @@ export default function VoteConfig() {
     </div>
 
     {/* ── Mode projection plein écran ── */}
-    {projecting && (
+    {projecting && createPortal(
       <div
         className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center cursor-pointer select-none"
         onClick={() => setProjecting(false)}
@@ -1006,7 +1007,8 @@ export default function VoteConfig() {
         )}
         <p className="text-sm text-slate-300 font-mono mt-6">{joinUrl}</p>
         <p className="text-xs text-slate-200 mt-10">Appuyez sur Échap ou cliquez pour fermer</p>
-      </div>
+      </div>,
+      document.body
     )}
     </>
   );

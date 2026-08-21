@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { X, FileDown, Loader2 } from "lucide-react";
@@ -343,7 +344,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 bg-black/60 flex items-start justify-center overflow-y-auto py-6 px-4">
       <div className="w-full max-w-4xl">
         {/* Toolbar */}
@@ -385,6 +386,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

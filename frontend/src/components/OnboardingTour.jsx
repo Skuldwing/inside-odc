@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/useAuth";
 import { X, ChevronRight } from "lucide-react";
 
@@ -103,7 +104,7 @@ export default function OnboardingTour() {
   const tooltipLeft = spotRight + 16;
   const fitsRight   = tooltipLeft + 308 < window.innerWidth;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[9999] pointer-events-none">
 
       {/* ── Overlay ── */}
@@ -170,7 +171,8 @@ export default function OnboardingTour() {
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   );
 }
 

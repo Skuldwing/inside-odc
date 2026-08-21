@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import { Loader2, CheckCircle2, AlertCircle, Send, MessageCircleQuestion, Heart } from "lucide-react";
 import api from "../api";
@@ -143,7 +144,7 @@ function ScoreInput({ value, scale, onChange }) {
 
 /* Overlay flash de succès */
 function SuccessFlash({ pseudo }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm pointer-events-none">
       <div className="anim-success-pop flex flex-col items-center">
         <svg className="w-28 h-28" viewBox="0 0 100 100">
@@ -166,7 +167,8 @@ function SuccessFlash({ pseudo }) {
         <p className="text-xl font-bold text-slate-800 mt-2">Notes envoyées !</p>
         <p className="text-sm text-slate-400 mt-1">Bien joué {pseudo}</p>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

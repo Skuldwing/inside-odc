@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { TextAlign } from "@tiptap/extension-text-align";
@@ -272,7 +273,7 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3">
       <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-6xl" style={{ height: "94vh" }}>
 
@@ -505,7 +506,8 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -974,7 +976,7 @@ export default function Campagnes() {
           )}
 
           {/* Modal confirmation envoi */}
-          {confirmSend && (
+          {confirmSend && createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
                 <div className="flex items-center gap-3 mb-4">
@@ -1003,11 +1005,12 @@ export default function Campagnes() {
                   </button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* Modal résultat envoi */}
-          {sendResult && (
+          {sendResult && createPortal(
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
                 <div className="flex items-center gap-3 mb-4">
@@ -1037,7 +1040,8 @@ export default function Campagnes() {
                   <button onClick={() => setSendResult(null)} className="btn-primary">Fermer</button>
                 </div>
               </div>
-            </div>
+            </div>,
+            document.body
           )}
 
           {/* Liste des campagnes */}

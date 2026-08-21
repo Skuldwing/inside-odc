@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import api from "../api";
 import PageLoader from "./PageLoader";
@@ -50,7 +51,7 @@ export default function AdminPinGate({ children }) {
 
   if (verified) return children;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
       <div className="anim-modal-panel card-solid w-full max-w-sm p-6">
         <h2 className="text-xl font-semibold mb-2">Code PIN requis</h2>
@@ -99,6 +100,7 @@ export default function AdminPinGate({ children }) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

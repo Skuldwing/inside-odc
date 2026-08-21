@@ -1,5 +1,7 @@
+import { createPortal } from "react-dom";
+
 export default function AdminModal({ title, onClose, children, maxWidth = "max-w-lg" }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto px-4 py-6 sm:py-8">
       <div className={`anim-modal-panel card-solid w-full ${maxWidth} mx-auto flex flex-col`} style={{ height: "calc(100dvh - 3rem)", maxHeight: "calc(100dvh - 3rem)" }}>
         {/* Header fixe */}
@@ -14,6 +16,7 @@ export default function AdminModal({ title, onClose, children, maxWidth = "max-w
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

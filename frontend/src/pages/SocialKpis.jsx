@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Pencil, Trash2, Megaphone } from "lucide-react";
 import api from "../api";
 
@@ -245,7 +246,7 @@ export default function SocialKpis() {
           </table>
         </div>
 
-        {open && (
+        {open && createPortal(
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
             <div className="card-solid w-full max-w-2xl p-6">
               <h2 className="text-xl font-semibold mb-4">
@@ -321,7 +322,8 @@ export default function SocialKpis() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
   );
