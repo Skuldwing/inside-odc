@@ -1001,11 +1001,14 @@ export default function Activities({
             <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
               <Camera className="w-4 h-4 text-slate-400" />
               Photos de l&apos;activité
-              {activities.find(a => a.id === editForm.id)?.photo_count > 0 && (
-                <span className="text-xs font-normal text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5">
-                  {activities.find(a => a.id === editForm.id)?.photo_count} photo{activities.find(a => a.id === editForm.id)?.photo_count > 1 ? "s" : ""}
-                </span>
-              )}
+              {(() => {
+                const count = activities.find(a => a.id === editForm.id)?.photo_count ?? 0;
+                return (
+                  <span className={`text-xs font-normal rounded-full px-2 py-0.5 border ${count >= 8 ? "text-red-600 bg-red-50 border-red-200" : count > 0 ? "text-violet-600 bg-violet-50 border-violet-200" : "text-slate-400 bg-slate-50 border-slate-200"}`}>
+                    {count}/8 photo{count !== 1 ? "s" : ""}
+                  </span>
+                );
+              })()}
             </p>
             <button
               type="button"
@@ -1041,11 +1044,9 @@ export default function Activities({
               <p className="font-semibold text-slate-800 text-sm flex items-center gap-2 min-w-0">
                 <Camera className="w-4 h-4 text-violet-500 flex-shrink-0" />
                 <span className="truncate">{galleryActivity.title}</span>
-                {galleryPhotos.length > 0 && (
-                  <span className="text-xs font-normal text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5 flex-shrink-0">
-                    {galleryPhotos.length} photo{galleryPhotos.length > 1 ? "s" : ""}
-                  </span>
-                )}
+                <span className={`text-xs font-normal rounded-full px-2 py-0.5 flex-shrink-0 border ${galleryPhotos.length >= 8 ? "text-red-600 bg-red-50 border-red-200" : "text-violet-600 bg-violet-50 border-violet-200"}`}>
+                  {galleryPhotos.length}/8 photo{galleryPhotos.length > 1 ? "s" : ""}
+                </span>
               </p>
               <button
                 onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
@@ -1058,18 +1059,25 @@ export default function Activities({
             {/* Zone upload */}
             {!isViewer && (
               <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0">
-                <label className={`flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-colors cursor-pointer py-3 text-sm font-medium text-violet-700 ${galleryUploading ? "opacity-60 pointer-events-none" : ""}`}>
-                  <Camera className="w-4 h-4" />
-                  {galleryUploading ? "Envoi en cours…" : "Cliquer pour ajouter des photos (5 Mo max)"}
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleUploadPhotos}
-                    disabled={galleryUploading}
-                  />
-                </label>
+                {galleryPhotos.length >= 8 ? (
+                  <div className="flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-red-200 bg-red-50 py-3 text-sm font-medium text-red-500">
+                    <Camera className="w-4 h-4" />
+                    Limite atteinte — 8 photos max par activité
+                  </div>
+                ) : (
+                  <label className={`flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-colors cursor-pointer py-3 text-sm font-medium text-violet-700 ${galleryUploading ? "opacity-60 pointer-events-none" : ""}`}>
+                    <Camera className="w-4 h-4" />
+                    {galleryUploading ? "Envoi en cours…" : `Ajouter des photos — ${8 - galleryPhotos.length} emplacement${8 - galleryPhotos.length > 1 ? "s" : ""} restant (3 Mo max)`}
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleUploadPhotos}
+                      disabled={galleryUploading}
+                    />
+                  </label>
+                )}
                 {galleryError && (
                   <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{galleryError}</p>
                 )}

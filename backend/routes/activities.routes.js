@@ -15,9 +15,11 @@ const reportUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
 });
 
+const PHOTO_MAX_PER_ACTIVITY = 8;
+
 const photoUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 3 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) cb(null, true);
     else cb(new Error("Seules les images sont acceptées"));
@@ -557,13 +559,25 @@ router.get("/:id/photos", authMiddleware, async (req, res) => {
 });
 
 /* Upload (plusieurs fichiers) */
-router.post("/:id/photos", authMiddleware, requireWriteAccess, photoUpload.array("photos", 20), async (req, res) => {
+router.post("/:id/photos", authMiddleware, requireWriteAccess, photoUpload.array("photos", PHOTO_MAX_PER_ACTIVITY), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0)
       return res.status(400).json({ error: "Aucun fichier" });
 
+    const countRes = await pool.query(
+      "SELECT COUNT(*)::int AS total FROM activity_photos WHERE activity_id = $1",
+      [req.params.id]
+    );
+    const current = countRes.rows[0].total;
+    const slots = PHOTO_MAX_PER_ACTIVITY - current;
+
+    if (slots <= 0)
+      return res.status(400).json({ error: `Limite atteinte : ${PHOTO_MAX_PER_ACTIVITY} photos max par activité.` });
+
+    const filesToInsert = req.files.slice(0, slots);
+
     const inserted = [];
-    for (const file of req.files) {
+    for (const file of filesToInsert) {
       const r = await pool.query(
         `INSERT INTO activity_photos (activity_id, filename, mime_type, data, uploaded_by)
          VALUES ($1, $2, $3, $4, $5)
@@ -572,7 +586,7 @@ router.post("/:id/photos", authMiddleware, requireWriteAccess, photoUpload.array
       );
       inserted.push(r.rows[0]);
     }
-    res.json({ inserted });
+    res.json({ inserted, skipped: req.files.length - filesToInsert.length });
   } catch (err) {
     console.error("[PHOTOS UPLOAD]", err);
     res.status(500).json({ error: "Erreur serveur" });
