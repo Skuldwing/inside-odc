@@ -1022,32 +1022,53 @@ export default function Activities({
         </ActivityModal>
       )}
 
-      {/* ===== GALERIE PHOTOS ===== */}
-      {galleryActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-2xl" style={{ maxHeight: "min(680px, 90vh)" }}>
-            {/* Header compact */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 flex-shrink-0">
-              <p className="font-semibold text-slate-800 text-sm flex items-center gap-2 truncate">
+      {/* ===== GALERIE PHOTOS — PANNEAU LATÉRAL (portal → hors stacking context) ===== */}
+      {galleryActivity && createPortal(
+        <>
+          {/* Fond sombre cliquable */}
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+            style={{ zIndex: 9000 }}
+            onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
+          />
+          {/* Panneau latéral droit */}
+          <div
+            className="fixed right-0 top-0 h-full bg-white shadow-2xl flex flex-col w-full max-w-md"
+            style={{ zIndex: 9001 }}
+          >
+            {/* En-tête */}
+            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-100 flex-shrink-0">
+              <p className="font-semibold text-slate-800 text-sm flex items-center gap-2 min-w-0">
                 <Camera className="w-4 h-4 text-violet-500 flex-shrink-0" />
                 <span className="truncate">{galleryActivity.title}</span>
-                <span className="text-slate-400 font-normal text-xs flex-shrink-0">— {galleryPhotos.length} photo{galleryPhotos.length > 1 ? "s" : ""}</span>
+                {galleryPhotos.length > 0 && (
+                  <span className="text-xs font-normal text-violet-600 bg-violet-50 border border-violet-200 rounded-full px-2 py-0.5 flex-shrink-0">
+                    {galleryPhotos.length} photo{galleryPhotos.length > 1 ? "s" : ""}
+                  </span>
+                )}
               </p>
               <button
                 onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
-                className="ml-3 flex-shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="ml-3 flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Zone upload — toujours visible */}
+            {/* Zone upload */}
             {!isViewer && (
               <div className="px-4 py-3 border-b border-slate-100 flex-shrink-0">
                 <label className={`flex items-center justify-center gap-2 w-full rounded-xl border-2 border-dashed border-violet-200 bg-violet-50 hover:bg-violet-100 hover:border-violet-400 transition-colors cursor-pointer py-3 text-sm font-medium text-violet-700 ${galleryUploading ? "opacity-60 pointer-events-none" : ""}`}>
                   <Camera className="w-4 h-4" />
-                  {galleryUploading ? "Chargement en cours..." : "Cliquer pour ajouter des photos (jpg, png, webp — 5 Mo max)"}
-                  <input type="file" multiple accept="image/*" className="hidden" onChange={handleUploadPhotos} disabled={galleryUploading} />
+                  {galleryUploading ? "Envoi en cours…" : "Cliquer pour ajouter des photos (5 Mo max)"}
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleUploadPhotos}
+                    disabled={galleryUploading}
+                  />
                 </label>
                 {galleryError && (
                   <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{galleryError}</p>
@@ -1055,17 +1076,17 @@ export default function Activities({
               </div>
             )}
 
-            {/* Grille scrollable */}
+            {/* Grille de photos */}
             <div className="flex-1 overflow-y-auto p-4">
               {galleryLoading ? (
-                <div className="flex items-center justify-center h-32 text-slate-400 text-sm">Chargement...</div>
+                <div className="flex items-center justify-center h-32 text-slate-400 text-sm">Chargement…</div>
               ) : galleryPhotos.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-32 text-slate-400 gap-2">
                   <ImageIcon className="w-10 h-10 opacity-20" />
-                  <p className="text-sm">Aucune photo</p>
+                  <p className="text-sm">Aucune photo pour le moment</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {galleryPhotos.map((photo, idx) => (
                     <div
                       key={photo.id}
@@ -1079,6 +1100,9 @@ export default function Activities({
                         loading="lazy"
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                        <ZoomIn className="w-6 h-6 text-white drop-shadow" />
+                      </div>
                       {(role === "admin" || photo.uploaded_by === user?.id) && !isViewer && (
                         <button
                           onClick={e => { e.stopPropagation(); handleDeletePhoto(photo.id); }}
@@ -1094,11 +1118,12 @@ export default function Activities({
               )}
             </div>
           </div>
-        </div>
+        </>,
+        document.body
       )}
 
-      {/* ===== LIGHTBOX ===== */}
-      {galleryActivity && lightboxIdx !== null && galleryPhotos[lightboxIdx] && (
+      {/* ===== LIGHTBOX (portal → hors stacking context) ===== */}
+      {galleryActivity && lightboxIdx !== null && galleryPhotos[lightboxIdx] && createPortal(
         <div
           className="fixed inset-0 flex items-center justify-center bg-black/95"
           style={{ zIndex: 9999 }}
@@ -1136,7 +1161,8 @@ export default function Activities({
           >
             <X className="w-5 h-5" />
           </button>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
