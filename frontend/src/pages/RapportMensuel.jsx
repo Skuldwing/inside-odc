@@ -448,19 +448,29 @@ export default function RapportMensuelModal({ summary, filters, partners, device
         logging: false,
       });
 
-      const imgData = canvas.toDataURL("image/png");
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
 
-      const imgW = pageW;
-      const imgH = (canvas.height * imgW) / canvas.width;
-      let y = 0;
+      // Pixels par mm selon le canvas
+      const pxPerMm = canvas.width / pageW;
+      const pageHeightPx = Math.floor(pageH * pxPerMm);
 
-      while (y < imgH) {
-        if (y > 0) pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, -y, imgW, imgH);
-        y += pageH;
+      // Découper le canvas en tranches A4
+      const sliceCanvas = document.createElement("canvas");
+      sliceCanvas.width = canvas.width;
+      sliceCanvas.height = pageHeightPx;
+      const sliceCtx = sliceCanvas.getContext("2d");
+
+      let offsetY = 0;
+      while (offsetY < canvas.height) {
+        sliceCtx.fillStyle = "#ffffff";
+        sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+        sliceCtx.drawImage(canvas, 0, -offsetY);
+
+        if (offsetY > 0) pdf.addPage();
+        pdf.addImage(sliceCanvas.toDataURL("image/png"), "PNG", 0, 0, pageW, pageH);
+        offsetY += pageHeightPx;
       }
 
       const fileLabel = filters.date_from && filters.date_to
