@@ -33,7 +33,7 @@ function buildFilters(req) {
 
   const params = [from, to];
   let idx = 3;
-  let where = "a.activity_date BETWEEN $1 AND $2";
+  let where = "a.activity_date BETWEEN $1 AND LEAST($2::date, CURRENT_DATE)";
 
   if (coachId) {
     where += ` AND a.coach_id = $${idx++}`;
@@ -120,6 +120,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
           END AS effective_count
         FROM base
         GROUP BY activity_id
+        HAVING COUNT(participant_id) > 0 OR COALESCE(MAX(participants_manual), 0) > 0
       )
     `;
 
