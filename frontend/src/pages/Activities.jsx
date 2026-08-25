@@ -285,6 +285,7 @@ export default function Activities({
     setImportDirectError("");
     setReportFile(null);
     setReportError("");
+    setClearParticipantsConfirm(false);
     setReportSuccess(false);
     setEditForm({
       id: activity.id,
@@ -327,6 +328,28 @@ export default function Activities({
   const handlePreviewReport = (activityId) => {
     const base = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
     window.open(`${base}/activities/${activityId}/report?inline=1`, "_blank");
+  };
+
+  /* ===== SUPPRESSION LISTE PARTICIPANTS ===== */
+  const [clearingParticipants, setClearingParticipants] = useState(false);
+  const [clearParticipantsConfirm, setClearParticipantsConfirm] = useState(false);
+
+  const handleClearParticipants = async () => {
+    if (!editForm?.id) return;
+    setClearingParticipants(true);
+    try {
+      await api.delete(`/activities/${editForm.id}/participants`);
+      setEditForm(f => ({ ...f, participants: 0, participants_manual: null }));
+      setImportDirectResult(null);
+      setImportFile(null);
+      setImportPreview(null);
+      setClearParticipantsConfirm(false);
+      fetchActivities();
+    } catch (err) {
+      alert(err?.response?.data?.error || "Erreur lors de la suppression.");
+    } finally {
+      setClearingParticipants(false);
+    }
   };
 
   /* ===== GALERIE PHOTOS ===== */
@@ -930,7 +953,56 @@ export default function Activities({
 
           {/* Import liste de présences */}
           <div className="mt-5 pt-5 border-t border-slate-200">
-            <p className="text-sm font-semibold text-slate-700 mb-3">Importer la liste de présences Excel</p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-slate-700">Liste de présences</p>
+              {(editForm.participants > 0) && !clearParticipantsConfirm && (
+                <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">
+                  {editForm.participants} participant{editForm.participants > 1 ? "s" : ""} enregistré{editForm.participants > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+
+            {/* Bloc suppression avec confirmation inline */}
+            {editForm.participants > 0 && (
+              <div className="mb-3">
+                {!clearParticipantsConfirm ? (
+                  <button
+                    type="button"
+                    onClick={() => setClearParticipantsConfirm(true)}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-2 text-xs font-medium text-red-600 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Supprimer la liste existante et recommencer
+                  </button>
+                ) : (
+                  <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 space-y-2">
+                    <p className="text-xs font-semibold text-red-700">
+                      Supprimer les {editForm.participants} participants enregistrés pour cette activité ?
+                    </p>
+                    <p className="text-xs text-red-500">Cette action est irréversible. Les participants resteront dans la base globale.</p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setClearParticipantsConfirm(false)}
+                        className="btn-ghost border text-xs"
+                        disabled={clearingParticipants}
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearParticipants}
+                        disabled={clearingParticipants}
+                        className="flex items-center gap-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-medium px-3 py-1.5 disabled:opacity-60 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        {clearingParticipants ? "Suppression..." : "Confirmer la suppression"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {editForm.participants_manual !== "" && editForm.participants_manual !== null && !importDirectResult && (
               <div className="mb-3 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">

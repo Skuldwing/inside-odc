@@ -317,6 +317,42 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== SUPPRIMER LA LISTE DE PARTICIPANTS ===== */
+router.delete("/:id/participants", authMiddleware, requireWriteAccess, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const actRes = await pool.query(
+      "SELECT partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const del = await client.query(
+        "DELETE FROM activity_participants WHERE activity_id = $1",
+        [id]
+      );
+      await client.query(
+        "UPDATE activities SET participants_manual = NULL WHERE id = $1",
+        [id]
+      );
+      await client.query("COMMIT");
+      res.json({ deleted: del.rowCount });
+    } catch (txErr) {
+      await client.query("ROLLBACK");
+      throw txErr;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    console.error("[PARTICIPANTS DELETE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== SEND ATTESTATIONS ===== */
 router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
