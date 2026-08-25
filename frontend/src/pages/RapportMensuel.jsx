@@ -73,7 +73,9 @@ function RapportContent({ summary, filters, partners, devices, role }) {
       <div style={{ background: "linear-gradient(135deg,#f97316 0%,#ea580c 100%)", padding: "48px 48px 36px", color: "#fff" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 48, objectFit: "contain", marginBottom: 10 }} />
+            <div style={{ display: "inline-block", background: "#fff", borderRadius: 10, padding: "6px 14px", marginBottom: 10 }}>
+              <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 40, objectFit: "contain", display: "block" }} />
+            </div>
             <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", opacity: 0.85 }}>
               Orange Digital Center · Senegal
             </div>
@@ -338,7 +340,9 @@ function RapportDispositif({ summary, filters, devices }) {
       <div style={{ background: "linear-gradient(135deg,#f97316 0%,#ea580c 100%)", padding: "36px 48px 28px", color: "#fff" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 52, objectFit: "contain" }} />
+            <div style={{ display: "inline-block", background: "#fff", borderRadius: 10, padding: "6px 14px" }}>
+            <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 42, objectFit: "contain", display: "block" }} />
+          </div>
             <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", opacity: 0.85, marginTop: 10 }}>
               Orange Digital Center · Sénégal
             </div>
