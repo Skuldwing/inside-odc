@@ -237,6 +237,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       SELECT
         CASE WHEN mode = 'ligne' THEN 'Ligne' ELSE 'Présentiel' END AS name,
         COALESCE(SUM(effective_count), 0)::int AS value,
+        COUNT(DISTINCT activity_id)::int AS activities_count,
         CASE WHEN mode = 'ligne' THEN '#6366f1' ELSE '#f97316' END AS color
       FROM eff
       GROUP BY mode
