@@ -297,6 +297,7 @@ export default function Activities({
       location: activity.location === "-" ? "" : activity.location || "",
       device_id: activity.device_id || "",
       partner_id: activity.partner_id || "",
+      participants: activity.participants || 0,
       participants_manual: activity.participants_manual ?? "",
       report_filename: activity.report_filename || null,
       mode: activity.mode || "presentiel",
