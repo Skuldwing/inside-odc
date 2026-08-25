@@ -81,6 +81,8 @@ export default function Dashboard() {
     partner_id: "",
     device_id: "",
     gender: "",
+    date_from: "",
+    date_to: "",
   });
 
   useEffect(() => {
@@ -104,7 +106,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     const params = { year: filters.year };
-    if (filters.month) params.month = filters.month;
+    if (filters.date_from && filters.date_to) {
+      params.from = filters.date_from;
+      params.to = filters.date_to;
+    } else {
+      if (filters.month) params.month = filters.month;
+    }
     if (filters.partner_id) params.partner_id = filters.partner_id;
     if (filters.device_id) params.device_id = filters.device_id;
     if (filters.gender) params.gender = filters.gender;
@@ -382,6 +389,24 @@ export default function Dashboard() {
               <option value="H">Hommes</option>
               <option value="F">Femmes</option>
             </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Depuis le</label>
+            <input
+              type="date"
+              className="select mt-1"
+              value={filters.date_from}
+              onChange={(e) => setFilters({ ...filters, date_from: e.target.value, month: "" })}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Jusqu'au</label>
+            <input
+              type="date"
+              className="select mt-1"
+              value={filters.date_to}
+              onChange={(e) => setFilters({ ...filters, date_to: e.target.value, month: "" })}
+            />
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">

@@ -24,12 +24,17 @@ function RapportContent({ summary, filters, partners, devices, role }) {
   const isCoach = role === "coach";
   const isAdmin = role === "admin";
   const now = new Date();
-  const monthLabel = filters.month
-    ? format(new Date(filters.year, Number(filters.month) - 1, 1), "MMMM yyyy", { locale: fr })
-    : `Annee ${filters.year}`;
-  const periodLabel = filters.month
-    ? format(new Date(filters.year, Number(filters.month) - 1, 1), "MMMM yyyy", { locale: fr })
-    : `Janvier – Decembre ${filters.year}`;
+  const hasCustomRange = filters.date_from && filters.date_to;
+  const monthLabel = hasCustomRange
+    ? `${format(new Date(filters.date_from), "dd MMM yyyy", { locale: fr })} — ${format(new Date(filters.date_to), "dd MMM yyyy", { locale: fr })}`
+    : filters.month
+      ? format(new Date(filters.year, Number(filters.month) - 1, 1), "MMMM yyyy", { locale: fr })
+      : `Annee ${filters.year}`;
+  const periodLabel = hasCustomRange
+    ? `${format(new Date(filters.date_from), "dd/MM/yyyy")} – ${format(new Date(filters.date_to), "dd/MM/yyyy")}`
+    : filters.month
+      ? format(new Date(filters.year, Number(filters.month) - 1, 1), "MMMM yyyy", { locale: fr })
+      : `Janvier – Decembre ${filters.year}`;
 
   const totals = summary?.totals || {};
   const gender = summary?.gender || [];
@@ -332,10 +337,12 @@ export default function RapportMensuelModal({ summary, filters, partners, device
         y += pageH;
       }
 
-      const monthLabel = filters.month
-        ? format(new Date(filters.year, Number(filters.month) - 1, 1), "yyyy-MM", { locale: fr })
-        : String(filters.year);
-      pdf.save(`rapport-odc-${monthLabel}.pdf`);
+      const fileLabel = filters.date_from && filters.date_to
+        ? `${filters.date_from}_${filters.date_to}`
+        : filters.month
+          ? format(new Date(filters.year, Number(filters.month) - 1, 1), "yyyy-MM", { locale: fr })
+          : String(filters.year);
+      pdf.save(`rapport-odc-${fileLabel}.pdf`);
     } catch (err) {
       console.error("Erreur PDF:", err);
       alert("Erreur lors de la generation du PDF.");
