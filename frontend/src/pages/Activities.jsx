@@ -21,6 +21,8 @@ import {
   Camera,
   ImageIcon,
   ZoomIn,
+  AlertTriangle,
+  ScanSearch,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
@@ -65,6 +67,10 @@ export default function Activities({
   const [importPreview, setImportPreview] = useState(null);   // données analyse
   const [importMapping, setImportMapping] = useState({});     // {original: field} overrides
   const [previewing, setPreviewing] = useState(false);
+  const [createImportPreview, setCreateImportPreview] = useState(null);
+  const [createImportMapping, setCreateImportMapping] = useState({});
+  const [createPreviewing, setCreatePreviewing] = useState(false);
+  const [createPreviewError, setCreatePreviewError] = useState("");
 
   const [editForm, setEditForm] = useState({
     id: null,
@@ -264,6 +270,9 @@ export default function Activities({
     setUploadResult(null);
     setImportStep(1);
     setCreateReportFile(null);
+    setCreateImportPreview(null);
+    setCreateImportMapping({});
+    setCreatePreviewError("");
   };
 
   const openUploadModal = () => {
@@ -277,6 +286,9 @@ export default function Activities({
     setUploadResult(null);
     setImportStep(0);
     setCreateReportFile(null);
+    setCreateImportPreview(null);
+    setCreateImportMapping({});
+    setCreatePreviewError("");
   };
 
   const openEdit = (activity) => {
@@ -442,6 +454,26 @@ export default function Activities({
     }
   };
 
+  const handleCreatePreview = async () => {
+    if (!form.file) return;
+    setCreatePreviewing(true);
+    setCreatePreviewError("");
+    setCreateImportPreview(null);
+    setCreateImportMapping({});
+    try {
+      const fd = new FormData();
+      fd.append("file", form.file);
+      const res = await api.post("/import/preview", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      setCreateImportPreview(res.data);
+    } catch (err) {
+      setCreatePreviewError(err?.response?.data?.error || "Erreur lors de l'analyse.");
+    } finally {
+      setCreatePreviewing(false);
+    }
+  };
+
   const handleDirectImport = async () => {
     if (!importFile) return;
     setImporting(true);
@@ -548,6 +580,9 @@ export default function Activities({
         }
         if (form.participants_manual !== "") fd.append("participants_manual", form.participants_manual);
         fd.append("file", form.file);
+        if (Object.keys(createImportMapping).length > 0) {
+          fd.append("manual_mapping", JSON.stringify(createImportMapping));
+        }
         const res = await api.post("/import/activity", fd, {
           headers: { "Content-Type": "multipart/form-data" },
         });
@@ -844,8 +879,38 @@ export default function Activities({
                   type="file"
                   accept=".xlsx,.xls"
                   className="mt-1"
-                  onChange={(e) => setForm({ ...form, file: e.target.files?.[0] || null })}
+                  onChange={(e) => {
+                    setForm({ ...form, file: e.target.files?.[0] || null });
+                    setCreateImportPreview(null);
+                    setCreateImportMapping({});
+                    setCreatePreviewError("");
+                  }}
                 />
+                {createPreviewError && (
+                  <p className="mt-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{createPreviewError}</p>
+                )}
+                {form.file && !createImportPreview && (
+                  <button
+                    type="button"
+                    disabled={createPreviewing}
+                    onClick={handleCreatePreview}
+                    className="btn-secondary text-sm mt-2 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <ScanSearch className="w-4 h-4" />
+                    {createPreviewing ? "Analyse en cours..." : "Analyser le fichier"}
+                  </button>
+                )}
+                {createImportPreview && (
+                  <div className="mt-2">
+                    <ImportPreviewPanel
+                      preview={createImportPreview}
+                      mapping={createImportMapping}
+                      onMappingChange={setCreateImportMapping}
+                      onReset={() => { setCreateImportPreview(null); setCreateImportMapping({}); }}
+                      showConfirmButton={false}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 pt-4">
@@ -1030,14 +1095,25 @@ export default function Activities({
                   <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{importDirectError}</p>
                 )}
 
+                {importFile && !importPreview && (
+                  <div className="flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Fichier sélectionné mais pas encore importé. Cliquez sur <strong>« Analyser le fichier »</strong>{" "}
+                      ci-dessous — le bouton <strong>« Enregistrer »</strong> en haut de la fiche ne traite pas ce fichier.
+                    </span>
+                  </div>
+                )}
+
                 {/* Bouton Analyser */}
                 {!importPreview && (
                   <button
                     type="button"
                     disabled={!importFile || previewing}
                     onClick={handlePreview}
-                    className="btn-secondary text-sm disabled:opacity-50"
+                    className="btn-primary text-sm w-full disabled:opacity-50 flex items-center justify-center gap-2"
                   >
+                    <ScanSearch className="w-4 h-4" />
                     {previewing ? "Analyse en cours..." : "Analyser le fichier"}
                   </button>
                 )}
@@ -1302,7 +1378,7 @@ const FIELD_LABELS = {
   tranche_age: "Tranche d'âge", statut: "Statut", nom_complet: "Nom complet",
 };
 
-function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConfirm, importing }) {
+function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConfirm, importing, showConfirmButton = true }) {
   const { columns = [], total_rows = 0, header_row = 1, available_fields = [] } = preview;
 
   const effectiveField = (col) => mapping[col.original] || col.field;
@@ -1400,14 +1476,22 @@ function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConf
         </p>
       )}
 
-      <button
-        type="button"
-        disabled={!hasName || importing}
-        onClick={onConfirm}
-        className="btn-primary text-sm w-full disabled:opacity-50"
-      >
-        {importing ? "Import en cours..." : `Confirmer l'import (${total_rows} lignes)`}
-      </button>
+      {showConfirmButton ? (
+        <button
+          type="button"
+          disabled={!hasName || importing}
+          onClick={onConfirm}
+          className="btn-primary text-sm w-full disabled:opacity-50"
+        >
+          {importing ? "Import en cours..." : `Confirmer l'import (${total_rows} lignes)`}
+        </button>
+      ) : (
+        !hasName ? null : (
+          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+            Mapping vérifié — sera importé avec le reste du formulaire.
+          </p>
+        )
+      )}
     </div>
   );
 }
