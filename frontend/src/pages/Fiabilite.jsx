@@ -12,6 +12,8 @@ import {
   FileCheck,
   ListChecks,
   Clock,
+  AlertTriangle,
+  Table,
 } from "lucide-react";
 import api from "../api";
 
@@ -35,6 +37,28 @@ function scoreTextColor(score) {
   if (score >= 70) return "text-emerald-600";
   if (score >= 40) return "text-amber-600";
   return "text-red-600";
+}
+
+function ParticipantsCriterionNote({ c }) {
+  if (!c.has_real_list) {
+    return (
+      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-amber-600">
+        <AlertTriangle className="w-3 h-3 shrink-0" />
+        Effectif estimé — aucune liste réelle importée
+      </p>
+    );
+  }
+  const gaps = [];
+  if (c.missing_email > 0) gaps.push(`${c.missing_email} sans email`);
+  if (c.missing_telephone > 0) gaps.push(`${c.missing_telephone} sans téléphone`);
+  if (c.missing_genre > 0) gaps.push(`${c.missing_genre} sans genre`);
+  if (c.missing_structure > 0) gaps.push(`${c.missing_structure} sans structure`);
+  if (gaps.length === 0) return null;
+  return (
+    <p className="mt-1 text-[11px] text-slate-500">
+      Sur {c.real_count} participant{c.real_count !== 1 ? "s" : ""} : {gaps.join(" · ")}
+    </p>
+  );
 }
 
 function ScoreBreakdown({ details }) {
@@ -62,6 +86,7 @@ function ScoreBreakdown({ details }) {
                 style={{ width: `${c.score}%` }}
               />
             </div>
+            {key === "participants" && <ParticipantsCriterionNote c={c} />}
           </div>
         );
       })}
@@ -69,9 +94,71 @@ function ScoreBreakdown({ details }) {
   );
 }
 
+function ParticipantsList({ activityId }) {
+  const [participants, setParticipants] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    api
+      .get(`/reliability/${activityId}/participants`)
+      .then((res) => { if (mounted) setParticipants(res.data); })
+      .catch(() => { if (mounted) setParticipants([]); })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [activityId]);
+
+  if (loading) {
+    return <p className="text-xs text-slate-400 py-2">Chargement de la liste...</p>;
+  }
+
+  if (!participants || participants.length === 0) {
+    return (
+      <p className="text-xs text-slate-400 py-2">
+        Aucune liste nominative importée pour cette activité — uniquement un effectif estimé.
+      </p>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="table text-xs">
+        <thead className="table-head">
+          <tr>
+            <th className="px-2 py-1.5">Nom</th>
+            <th className="px-2 py-1.5">Téléphone</th>
+            <th className="px-2 py-1.5">Email</th>
+            <th className="px-2 py-1.5">Structure</th>
+          </tr>
+        </thead>
+        <tbody>
+          {participants.map((p) => (
+            <tr key={p.id} className="table-row">
+              <td className="px-2 py-1.5 text-slate-700">{p.prenom} {p.nom}</td>
+              <td className="px-2 py-1.5">
+                {p.telephone
+                  ? <span className="text-slate-600">{p.telephone}</span>
+                  : <span className="text-red-500 italic">manquant</span>}
+              </td>
+              <td className="px-2 py-1.5">
+                {p.email
+                  ? <span className="text-slate-600">{p.email}</span>
+                  : <span className="text-red-500 italic">manquant</span>}
+              </td>
+              <td className="px-2 py-1.5 text-slate-500">{p.structure || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ActivityRow({ activity, onValidate, onReject, busy }) {
   const [expanded, setExpanded] = useState(false);
+  const [showList, setShowList] = useState(false);
   const score = Number(activity.reliability_score ?? 0);
+  const hasRealList = activity.reliability_details?.criteria?.participants?.has_real_list;
 
   return (
     <div className="anim-fade-in-up card-solid p-4">
@@ -82,6 +169,14 @@ function ActivityRow({ activity, onValidate, onReject, busy }) {
             <span className="badge bg-slate-100 border-slate-200 text-slate-600 text-[11px]">
               {activity.mode === "ligne" ? "En ligne" : "Présentiel"}
             </span>
+            {hasRealList === false && (
+              <span
+                className="badge bg-amber-50 border-amber-200 text-amber-700 text-[11px]"
+                title="Aucune liste nominative importée — effectif estimé uniquement"
+              >
+                Effectif estimé{activity.participants_manual != null ? ` (~${activity.participants_manual})` : ""}
+              </span>
+            )}
             {activity.duplicate_of && (
               <span
                 className="badge bg-violet-50 border-violet-200 text-violet-700 text-[11px]"
@@ -98,15 +193,29 @@ function ActivityRow({ activity, onValidate, onReject, busy }) {
               : "—"}{" "}
             · {activity.participants_count} participant{activity.participants_count !== 1 ? "s" : ""}
           </p>
-          <button
-            onClick={() => setExpanded((e) => !e)}
-            className="mt-2 text-xs text-orange-600 hover:text-orange-700 font-medium"
-          >
-            {expanded ? "Masquer le détail" : "Voir le détail du score"}
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setExpanded((e) => !e)}
+              className="text-xs text-orange-600 hover:text-orange-700 font-medium"
+            >
+              {expanded ? "Masquer le détail" : "Voir le détail du score"}
+            </button>
+            <button
+              onClick={() => setShowList((s) => !s)}
+              className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
+            >
+              <Table className="w-3 h-3" />
+              {showList ? "Masquer la liste" : "Voir la liste des participants"}
+            </button>
+          </div>
           {expanded && (
             <div className="mt-3 max-w-md rounded-xl border border-slate-200 bg-slate-50/60 p-3">
               <ScoreBreakdown details={activity.reliability_details} />
+            </div>
+          )}
+          {showList && (
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <ParticipantsList activityId={activity.id} />
             </div>
           )}
         </div>

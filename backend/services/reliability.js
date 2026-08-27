@@ -72,14 +72,25 @@ async function computeAndStoreReliability(activityId) {
 
   const participantsRes = await pool.query(
     `SELECT COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE p.email IS NULL AND p.telephone IS NULL)::int AS missing_contact
+            COUNT(*) FILTER (WHERE p.email IS NULL AND p.telephone IS NULL)::int AS missing_contact,
+            COUNT(*) FILTER (WHERE p.email IS NULL)::int AS missing_email,
+            COUNT(*) FILTER (WHERE p.telephone IS NULL)::int AS missing_telephone,
+            COUNT(*) FILTER (WHERE p.genre IS NULL)::int AS missing_genre,
+            COUNT(*) FILTER (WHERE p.structure IS NULL OR p.structure = '')::int AS missing_structure
      FROM activity_participants ap
      JOIN participants p ON p.id = ap.participant_id
      WHERE ap.activity_id = $1`,
     [activityId]
   );
-  const realCount = participantsRes.rows[0].total;
-  const missingContact = participantsRes.rows[0].missing_contact;
+  const {
+    total: realCount,
+    missing_contact: missingContact,
+    missing_email: missingEmail,
+    missing_telephone: missingTelephone,
+    missing_genre: missingGenre,
+    missing_structure: missingStructure,
+  } = participantsRes.rows[0];
+  const hasRealList = realCount > 0;
 
   const participantsScore =
     realCount > 0 ? Math.round(((realCount - missingContact) / realCount) * 100) : 20;
@@ -113,7 +124,17 @@ async function computeAndStoreReliability(activityId) {
   const details = {
     threshold,
     criteria: {
-      participants: { score: participantsScore, weight: WEIGHTS.participants, real_count: realCount, missing_contact: missingContact },
+      participants: {
+        score: participantsScore,
+        weight: WEIGHTS.participants,
+        real_count: realCount,
+        has_real_list: hasRealList,
+        missing_contact: missingContact,
+        missing_email: missingEmail,
+        missing_telephone: missingTelephone,
+        missing_genre: missingGenre,
+        missing_structure: missingStructure,
+      },
       proof: { score: proofScore, weight: WEIGHTS.proof, has_report: Boolean(activity.report_filename) },
       metadata: { score: metadataScore, weight: WEIGHTS.metadata, filled: filledMeta, total: metaFields.length },
       duplicates: { score: duplicatesScore, weight: WEIGHTS.duplicates, duplicate_of: duplicateOfId },
