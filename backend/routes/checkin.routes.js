@@ -125,7 +125,7 @@ router.post("/:activityId", async (req, res) => {
       participant_id: participantId,
       via: "checkin_public",
     });
-    computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
+    await computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
 
     res.json({
       ok: true,
