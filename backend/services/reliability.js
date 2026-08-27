@@ -1,11 +1,10 @@
 const pool = require("../db");
 
 const WEIGHTS = {
-  participants: 0.35,
+  participants: 0.45,
   proof: 0.25,
   metadata: 0.15,
   duplicates: 0.15,
-  timeliness: 0.10,
 };
 
 const DEFAULT_THRESHOLD = 60;
@@ -50,19 +49,9 @@ async function findDuplicateActivity(activity) {
   return result.rows[0]?.id ?? null;
 }
 
-function scoreTimeliness(activityDate, createdAt) {
-  const diffDays = Math.floor(
-    (new Date(createdAt) - new Date(activityDate)) / (1000 * 60 * 60 * 24)
-  );
-  if (diffDays <= 0) return { score: 100, days_late: Math.max(diffDays, 0) };
-  if (diffDays <= 7) return { score: 70, days_late: diffDays };
-  if (diffDays <= 30) return { score: 40, days_late: diffDays };
-  return { score: 10, days_late: diffDays };
-}
-
 async function computeAndStoreReliability(activityId) {
   const activityRes = await pool.query(
-    `SELECT id, activity_date, created_at, device_id, partner_id, coach_id, location,
+    `SELECT id, activity_date, device_id, partner_id, coach_id, location,
             duration_hours, report_filename, reliability_manual_override, reliability_status
      FROM activities WHERE id = $1`,
     [activityId]
@@ -109,14 +98,11 @@ async function computeAndStoreReliability(activityId) {
   const duplicateOfId = await findDuplicateActivity(activity);
   const duplicatesScore = duplicateOfId ? 0 : 100;
 
-  const timeliness = scoreTimeliness(activity.activity_date, activity.created_at);
-
   const rawScore =
     participantsScore * WEIGHTS.participants +
     proofScore * WEIGHTS.proof +
     metadataScore * WEIGHTS.metadata +
-    duplicatesScore * WEIGHTS.duplicates +
-    timeliness.score * WEIGHTS.timeliness;
+    duplicatesScore * WEIGHTS.duplicates;
   const score = Math.round(rawScore * 100) / 100;
 
   const threshold = await getReliabilityThreshold();
@@ -138,7 +124,6 @@ async function computeAndStoreReliability(activityId) {
       proof: { score: proofScore, weight: WEIGHTS.proof, has_report: Boolean(activity.report_filename) },
       metadata: { score: metadataScore, weight: WEIGHTS.metadata, filled: filledMeta, total: metaFields.length },
       duplicates: { score: duplicatesScore, weight: WEIGHTS.duplicates, duplicate_of: duplicateOfId },
-      timeliness: { score: timeliness.score, weight: WEIGHTS.timeliness, days_late: timeliness.days_late },
     },
   };
 

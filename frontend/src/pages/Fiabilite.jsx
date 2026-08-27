@@ -11,7 +11,6 @@ import {
   Users,
   FileCheck,
   ListChecks,
-  Clock,
   AlertTriangle,
   Table,
 } from "lucide-react";
@@ -22,10 +21,9 @@ const CRITERIA_META = {
   proof: { label: "Preuve justificative", icon: FileCheck },
   metadata: { label: "Métadonnées", icon: ListChecks },
   duplicates: { label: "Absence de doublons", icon: Copy },
-  timeliness: { label: "Délai de déclaration", icon: Clock },
 };
 
-const CRITERIA_ORDER = ["participants", "proof", "metadata", "duplicates", "timeliness"];
+const CRITERIA_ORDER = ["participants", "proof", "metadata", "duplicates"];
 
 function scoreColor(score) {
   if (score >= 70) return "bg-emerald-500";
