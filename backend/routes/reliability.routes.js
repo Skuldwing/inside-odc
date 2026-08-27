@@ -13,7 +13,8 @@ router.use(authMiddleware, requireAdmin);
 router.get("/queue", async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT a.id, a.title, a.activity_date, a.mode, a.reliability_score, a.reliability_status,
+      SELECT a.id, a.title, a.activity_date, a.mode, a.participants_manual,
+             a.reliability_score, a.reliability_status,
              a.reliability_details, a.duplicate_of, dup.title AS duplicate_of_title,
              p.name AS partner_name, u.full_name AS coach_name,
              COALESCE(ap.participants_count, 0)::int AS participants_count
@@ -28,6 +29,25 @@ router.get("/queue", async (req, res) => {
       WHERE a.reliability_status = 'a_verifier'
       ORDER BY a.reliability_score ASC NULLS FIRST, a.activity_date DESC
     `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== VOIR LA LISTE DE PARTICIPANTS D'UNE ACTIVITÉ ===== */
+router.get("/:id/participants", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `SELECT p.id, p.prenom, p.nom, p.telephone, p.email, p.genre, p.age_range, p.structure
+       FROM participants p
+       JOIN activity_participants ap ON ap.participant_id = p.id
+       WHERE ap.activity_id = $1
+       ORDER BY p.nom, p.prenom`,
+      [id]
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
