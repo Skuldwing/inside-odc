@@ -6,6 +6,7 @@ const path = require("path");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
+const { computeAndStoreReliability } = require("../services/reliability");
 
 const router = express.Router();
 
@@ -666,6 +667,7 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
       participants_importes: stats.imported,
       via: "import_excel",
     });
+    computeAndStoreReliability(activity.id).catch((e) => console.warn("Reliability:", e.message));
 
     res.status(201).json({
       message: "Import termine",
@@ -728,6 +730,7 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
       action: "import_participants",
       participants_importes: stats.imported,
     });
+    computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
 
     res.json({
       message: "Import termine avec succes",
@@ -796,6 +799,7 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       action: "import_participants",
       participants_importes: stats.imported,
     });
+    computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
 
     res.json({
       message: "Import termine avec succes",

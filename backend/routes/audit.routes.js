@@ -102,7 +102,7 @@ router.get("/notifications", async (req, res) => {
     const lastSeen = userRes.rows[0]?.notifications_last_seen_at ?? null;
 
     const params = [];
-    const conditions = ["user_role != 'admin'"];
+    const conditions = ["(user_role IS NULL OR user_role != 'admin')"];
 
     // Si jamais vu : limiter aux 7 derniers jours pour ne pas surcharger
     const since = lastSeen ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();

@@ -12,6 +12,7 @@ import {
   Bot,
   Award,
   ShieldCheck,
+  ShieldAlert,
   X,
   ChevronLeft,
   ChevronRight,
@@ -93,6 +94,12 @@ const managementNavigation = [
     path: "/vote",
     roles: ["admin"],
     matchPrefix: true,
+  },
+  {
+    name: "Fiabilité",
+    icon: ShieldAlert,
+    path: "/fiabilite",
+    roles: ["admin"],
   },
   {
     name: "Journaux d'audit",

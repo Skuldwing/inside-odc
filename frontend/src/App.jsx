@@ -30,6 +30,7 @@ const Vote = lazy(() => import("./pages/Vote"));
 const VoteConfig = lazy(() => import("./pages/VoteConfig"));
 const VoteManage = lazy(() => import("./pages/VoteManage"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
+const Fiabilite = lazy(() => import("./pages/Fiabilite"));
 
 export default function App() {
   return (
@@ -255,6 +256,16 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <AuditLogs />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="fiabilite"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <Fiabilite />
               </Suspense>
             </AdminRoute>
           }
