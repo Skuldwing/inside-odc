@@ -59,7 +59,18 @@ function ParticipantsCriterionNote({ c }) {
   );
 }
 
-function ScoreBreakdown({ details }) {
+function DuplicatesCriterionNote({ c, duplicateOfTitle }) {
+  if (!c.duplicate_of) return null;
+  return (
+    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-red-600">
+      <AlertTriangle className="w-3 h-3 shrink-0" />
+      Doublon potentiel avec « {duplicateOfTitle || `activité #${c.duplicate_of}`} » —
+      même partenaire/coach, même date
+    </p>
+  );
+}
+
+function ScoreBreakdown({ details, duplicateOfTitle }) {
   const criteria = details?.criteria || {};
   return (
     <div className="space-y-2.5">
@@ -85,6 +96,7 @@ function ScoreBreakdown({ details }) {
               />
             </div>
             {key === "participants" && <ParticipantsCriterionNote c={c} />}
+            {key === "duplicates" && <DuplicatesCriterionNote c={c} duplicateOfTitle={duplicateOfTitle} />}
           </div>
         );
       })}
@@ -208,7 +220,7 @@ function ActivityRow({ activity, onValidate, onReject, busy }) {
           </div>
           {expanded && (
             <div className="mt-3 max-w-md rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-              <ScoreBreakdown details={activity.reliability_details} />
+              <ScoreBreakdown details={activity.reliability_details} duplicateOfTitle={activity.duplicate_of_title} />
             </div>
           )}
           {showList && (
