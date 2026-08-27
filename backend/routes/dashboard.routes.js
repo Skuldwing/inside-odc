@@ -102,7 +102,10 @@ router.get("/summary", authMiddleware, async (req, res) => {
         LEFT JOIN participants part ON part.id = ap.participant_id
         WHERE ${where}
       )
-      /* Effectifs par activite : vrais participants si disponibles, sinon participants_manual */
+      /* Effectifs par activite : uniquement les vrais participants importes.
+         Un effectif manuel (participants_manual) n'est qu'une estimation non
+         verifiee ; il ne compte pas dans les KPIs tant qu'aucune liste reelle
+         n'a ete importee, meme si l'activite reste comptee comme realisee. */
       , eff AS (
         SELECT
           activity_id,
@@ -116,7 +119,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
           MAX(mode)           AS mode,
           CASE WHEN COUNT(participant_id) > 0
                THEN COUNT(participant_id)::int
-               ELSE COALESCE(MAX(participants_manual), 0)::int
+               ELSE 0
           END AS effective_count
         FROM base
         GROUP BY activity_id
@@ -496,7 +499,7 @@ router.get("/export", authMiddleware, async (req, res) => {
         SELECT partner_id,
                CASE WHEN COUNT(participant_id) > 0
                     THEN COUNT(participant_id)::int
-                    ELSE COALESCE(MAX(participants_manual), 0)::int
+                    ELSE 0
                END AS effective_count
         FROM base
         GROUP BY activity_id, partner_id
