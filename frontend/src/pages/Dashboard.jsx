@@ -437,15 +437,22 @@ export default function Dashboard() {
 
       <section
         ref={kpiRef}
-        className={`grid grid-cols-1 gap-4 ${isAdmin ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"}`}
+        className={`grid grid-cols-1 gap-4 ${isAdmin ? "md:grid-cols-2 xl:grid-cols-5" : "md:grid-cols-4"}`}
       >
         <HeroKpiCard
-          label="Participants"
+          label="Bénéficiaires enregistrés"
           value={totals.participants ?? 0}
           icon={Users}
           accent="from-emerald-500 to-emerald-600"
-          hint="Bénéficiaires consolidés"
+          hint="Liste nominative importée"
           prominent
+        />
+        <HeroKpiCard
+          label="Bénéficiaires estimés"
+          value={totals.participants_estimated ?? 0}
+          icon={Users}
+          accent="from-teal-400 to-teal-500"
+          hint="Enregistrés + effectifs estimés"
         />
         <HeroKpiCard
           label="Activités"

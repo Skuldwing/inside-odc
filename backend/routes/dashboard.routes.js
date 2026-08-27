@@ -120,7 +120,11 @@ router.get("/summary", authMiddleware, async (req, res) => {
           CASE WHEN COUNT(participant_id) > 0
                THEN COUNT(participant_id)::int
                ELSE 0
-          END AS effective_count
+          END AS effective_count,
+          CASE WHEN COUNT(participant_id) > 0
+               THEN COUNT(participant_id)::int
+               ELSE COALESCE(MAX(participants_manual), 0)::int
+          END AS estimated_count
         FROM base
         GROUP BY activity_id
         HAVING COUNT(participant_id) > 0 OR COALESCE(MAX(participants_manual), 0) > 0
@@ -130,9 +134,10 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const totalsQuery = `
       ${baseCte}
       SELECT
-        COUNT(*)::int                              AS activities,
-        COALESCE(SUM(effective_count), 0)::int    AS participants,
-        COALESCE(SUM(duration_hours), 0)::int     AS hours
+        COUNT(*)::int                                AS activities,
+        COALESCE(SUM(effective_count), 0)::int      AS participants,
+        COALESCE(SUM(estimated_count), 0)::int      AS participants_estimated,
+        COALESCE(SUM(duration_hours), 0)::int       AS hours
       FROM eff
     `;
 
@@ -353,6 +358,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const totals = totalsRes.rows[0] || {
       activities: 0,
       participants: 0,
+      participants_estimated: 0,
       hours: 0,
     };
 
@@ -445,6 +451,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       totals: {
         activities: totals.activities,
         participants: totals.participants,
+        participants_estimated: totals.participants_estimated,
         hours: totals.hours,
         partners_active: partnersActive,
       },
