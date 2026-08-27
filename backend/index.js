@@ -24,6 +24,7 @@ const checkinRoutes = require("./routes/checkin.routes");
 const voteRoutes = require("./routes/vote.routes");
 const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes");
 const auditRoutes = require("./routes/audit.routes");
+const reliabilityRoutes = require("./routes/reliability.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -149,6 +150,7 @@ app.use("/checkin", checkinRoutes);
 app.use("/vote", voteRoutes);
 app.use("/email-templates", emailTemplatesRoutes);
 app.use("/audit-logs", auditRoutes);
+app.use("/reliability", reliabilityRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -539,6 +541,47 @@ pool.query(`
     created_at   TIMESTAMPTZ DEFAULT NOW()
   )
 `).then(() => console.log("Migration OK: activity_photos")).catch(e => console.warn("Migration activity_photos:", e.message));
+
+/* ── Fiabilité des données KPI partenaires ── */
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key         TEXT PRIMARY KEY,
+        value       JSONB NOT NULL,
+        updated_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      INSERT INTO app_settings (key, value)
+      VALUES ('reliability_threshold', '{"threshold": 60}'::jsonb)
+      ON CONFLICT (key) DO NOTHING
+    `);
+    await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS reliability_score NUMERIC(5,2)`);
+    await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS reliability_status TEXT DEFAULT 'a_verifier' CHECK (reliability_status IN ('a_verifier','validee','rejetee'))`);
+    await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS reliability_details JSONB DEFAULT '{}'::jsonb`);
+    await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS reliability_manual_override BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE activities ADD COLUMN IF NOT EXISTS duplicate_of INTEGER REFERENCES activities(id) ON DELETE SET NULL`);
+    console.log("Migration OK: fiabilité (app_settings + colonnes activities)");
+
+    /* Backfill : calcule le score des activités qui n'en ont pas encore */
+    const { rows } = await pool.query(
+      `SELECT id FROM activities WHERE reliability_score IS NULL ORDER BY id ASC`
+    );
+    if (rows.length === 0) return;
+
+    const { computeAndStoreReliability } = require("./services/reliability");
+    console.log(`Backfill fiabilité : ${rows.length} activité(s) à scorer...`);
+    for (const row of rows) {
+      await computeAndStoreReliability(row.id).catch((e) =>
+        console.warn(`Backfill fiabilité activité ${row.id}:`, e.message)
+      );
+    }
+    console.log("Backfill fiabilité terminé.");
+  } catch (e) {
+    console.warn("Migration fiabilité:", e.message);
+  }
+})();
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;

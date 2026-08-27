@@ -1,5 +1,7 @@
 const express = require("express");
 const pool = require("../db");
+const { logAudit } = require("../services/audit");
+const { computeAndStoreReliability } = require("../services/reliability");
 
 const router = express.Router();
 
@@ -118,6 +120,12 @@ router.post("/:activityId", async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    logAudit(req, "CHECKIN", "activities", activityId, actRes.rows[0].title, {
+      participant_id: participantId,
+      via: "checkin_public",
+    });
+    computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
 
     res.json({
       ok: true,

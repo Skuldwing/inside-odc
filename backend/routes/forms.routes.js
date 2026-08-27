@@ -3,6 +3,7 @@ const XLSX = require("xlsx");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
+const { logAudit } = require("../services/audit");
 
 const router = express.Router();
 
@@ -392,7 +393,7 @@ router.post("/public/:slug/submissions", async (req, res) => {
   try {
     const { slug } = req.params;
     const formRes = await pool.query(
-      `SELECT id, fields, settings, status FROM forms WHERE slug = $1 LIMIT 1`,
+      `SELECT id, title, fields, settings, status FROM forms WHERE slug = $1 LIMIT 1`,
       [slug]
     );
     const form = formRes.rows[0];
@@ -452,6 +453,7 @@ router.post("/public/:slug/submissions", async (req, res) => {
       `INSERT INTO form_submissions (form_id, values, source, ip, user_agent) VALUES ($1, $2::jsonb, $3, $4, $5)`,
       [form.id, JSON.stringify(values), "public", req.ip || null, req.headers["user-agent"] || null]
     );
+    logAudit(req, "SUBMIT", "forms", form.id, form.title, { via: "public_form" });
 
     return res.status(201).json({
       success: true,

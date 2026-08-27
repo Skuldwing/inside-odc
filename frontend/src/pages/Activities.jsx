@@ -152,6 +152,8 @@ export default function Activities({
           report_filename: a.report_filename || null,
           photo_count: a.photo_count ?? 0,
           mode: a.mode || "presentiel",
+          reliability_score: a.reliability_score != null ? Number(a.reliability_score) : null,
+          reliability_status: a.reliability_status || null,
           status: statusValue,
           statusLabel:
             statusValue === "completed"
@@ -1974,6 +1976,21 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
           {activity.participants === 0 && (
             <span className="badge bg-amber-50 border-amber-200 text-amber-700" title="Aucune liste de présences importée">
               Sans liste
+            </span>
+          )}
+
+          {activity.reliability_score != null && (
+            <span
+              className={`badge text-xs ${
+                activity.reliability_status === "validee"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  : activity.reliability_status === "rejetee"
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : "bg-amber-50 border-amber-200 text-amber-700"
+              }`}
+              title="Score de fiabilité des données"
+            >
+              Fiabilité {activity.reliability_score.toFixed(0)}%
             </span>
           )}
 

@@ -7,6 +7,7 @@ const { sendEmail } = require("../services/mail");
 const { generateAttestationPDF } = require("../services/attestation");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
+const { computeAndStoreReliability } = require("../services/reliability");
 
 const router = express.Router();
 
@@ -151,6 +152,7 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
       duree_heures: created.duration_hours || null,
       participants_manuels: created.participants_manual || null,
     });
+    computeAndStoreReliability(created.id).catch((e) => console.warn("Reliability:", e.message));
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -247,6 +249,7 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
       modifications: Object.keys(modifications).length > 0 ? modifications : undefined,
       date: updated.activity_date,
     });
+    computeAndStoreReliability(updated.id).catch((e) => console.warn("Reliability:", e.message));
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -481,6 +484,7 @@ router.post("/:id/report", authMiddleware, requireWriteAccess, reportUpload.sing
       "UPDATE activities SET report_filename = $1, report_data = $2 WHERE id = $3",
       [req.file.originalname, req.file.buffer, id]
     );
+    computeAndStoreReliability(id).catch((e) => console.warn("Reliability:", e.message));
 
     res.json({ success: true, filename: req.file.originalname });
   } catch (err) {
