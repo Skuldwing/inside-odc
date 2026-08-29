@@ -24,6 +24,15 @@ async function setReliabilityThreshold(threshold) {
      ON CONFLICT (key) DO UPDATE SET value = $1::jsonb, updated_at = NOW()`,
     [JSON.stringify({ threshold })]
   );
+
+  // Réévalue le statut de toutes les activités non forcées manuellement,
+  // pour que le changement de seuil s'applique aussi aux scores déjà calculés.
+  await pool.query(
+    `UPDATE activities
+     SET reliability_status = CASE WHEN reliability_score >= $1 THEN 'validee' ELSE 'a_verifier' END
+     WHERE reliability_manual_override = FALSE AND reliability_score IS NOT NULL`,
+    [threshold]
+  );
 }
 
 /* Repère une activité déclarée par le même partenaire/coach, le même jour :

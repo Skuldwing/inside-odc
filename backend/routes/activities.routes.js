@@ -343,6 +343,7 @@ router.delete("/:id/participants", authMiddleware, requireWriteAccess, async (re
         [id]
       );
       await client.query("COMMIT");
+      await computeAndStoreReliability(id).catch((e) => console.warn("Reliability:", e.message));
       res.json({ deleted: del.rowCount });
     } catch (txErr) {
       await client.query("ROLLBACK");
@@ -556,6 +557,13 @@ router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
 
     const deletedActivity = existing.rows[0];
 
+    // Activités qui pointaient vers celle-ci comme doublon potentiel : leur
+    // fiabilité doit être recalculée une fois cette activité supprimée.
+    const dependentRes = await pool.query(
+      "SELECT id FROM activities WHERE duplicate_of = $1",
+      [id]
+    );
+
     const client = await pool.connect();
     let result;
     try {
@@ -574,6 +582,9 @@ router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
       date: deletedActivity.activity_date,
       partner_id: deletedActivity.partner_id,
     });
+    for (const dep of dependentRes.rows) {
+      await computeAndStoreReliability(dep.id).catch((e) => console.warn("Reliability:", e.message));
+    }
     res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
     console.error(err);

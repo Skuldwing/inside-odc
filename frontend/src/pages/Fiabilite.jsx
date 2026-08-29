@@ -13,8 +13,22 @@ import {
   ListChecks,
   AlertTriangle,
   Table,
+  RotateCcw,
 } from "lucide-react";
 import api from "../api";
+
+const TABS = [
+  { key: "a_verifier", label: "À vérifier" },
+  { key: "validee", label: "Validées" },
+  { key: "rejetee", label: "Rejetées" },
+  { key: "all", label: "Toutes" },
+];
+
+const STATUS_BADGE = {
+  validee: { label: "Validée", className: "bg-emerald-50 border-emerald-200 text-emerald-700" },
+  rejetee: { label: "Rejetée", className: "bg-red-50 border-red-200 text-red-700" },
+  a_verifier: { label: "À vérifier", className: "bg-amber-50 border-amber-200 text-amber-700" },
+};
 
 const CRITERIA_META = {
   participants: { label: "Liste participants", icon: Users },
@@ -164,11 +178,13 @@ function ParticipantsList({ activityId }) {
   );
 }
 
-function ActivityRow({ activity, onValidate, onReject, busy }) {
+function ActivityRow({ activity, onValidate, onReject, onReset, busy }) {
   const [expanded, setExpanded] = useState(false);
   const [showList, setShowList] = useState(false);
   const score = Number(activity.reliability_score ?? 0);
   const hasRealList = activity.reliability_details?.criteria?.participants?.has_real_list;
+  const status = activity.reliability_status;
+  const statusMeta = STATUS_BADGE[status];
 
   return (
     <div className="anim-fade-in-up card-solid p-4">
@@ -179,6 +195,12 @@ function ActivityRow({ activity, onValidate, onReject, busy }) {
             <span className="badge bg-slate-100 border-slate-200 text-slate-600 text-[11px]">
               {activity.mode === "ligne" ? "En ligne" : "Présentiel"}
             </span>
+            {status !== "a_verifier" && statusMeta && (
+              <span className={`badge text-[11px] ${statusMeta.className}`}>
+                {statusMeta.label}
+                {activity.reliability_manual_override ? " (manuel)" : ""}
+              </span>
+            )}
             {hasRealList === false && (
               <span
                 className="badge bg-amber-50 border-amber-200 text-amber-700 text-[11px]"
@@ -236,22 +258,38 @@ function ActivityRow({ activity, onValidate, onReject, busy }) {
             <p className="text-xs text-slate-400">Fiabilité</p>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => onValidate(activity.id)}
-              disabled={busy}
-              className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
-            >
-              <CheckCircle2 className="w-4 h-4" />
-              Valider
-            </button>
-            <button
-              onClick={() => onReject(activity.id)}
-              disabled={busy}
-              className="btn bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
-            >
-              <XCircle className="w-4 h-4" />
-              Rejeter
-            </button>
+            {status === "a_verifier" ? (
+              <>
+                <button
+                  onClick={() => onValidate(activity.id)}
+                  disabled={busy}
+                  className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Valider
+                </button>
+                <button
+                  onClick={() => onReject(activity.id)}
+                  disabled={busy}
+                  className="btn bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Rejeter
+                </button>
+              </>
+            ) : (
+              (activity.reliability_manual_override || status === "rejetee") && (
+                <button
+                  onClick={() => onReset(activity.id)}
+                  disabled={busy}
+                  className="btn btn-ghost border disabled:opacity-50"
+                  title="Annule la décision manuelle et repasse en évaluation automatique"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Réinitialiser
+                </button>
+              )
+            )}
           </div>
         </div>
       </div>
@@ -260,6 +298,7 @@ function ActivityRow({ activity, onValidate, onReject, busy }) {
 }
 
 export default function Fiabilite() {
+  const [activeTab, setActiveTab] = useState("a_verifier");
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
@@ -270,14 +309,14 @@ export default function Fiabilite() {
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/reliability/queue");
+      const res = await api.get("/reliability/queue", { params: { status: activeTab } });
       setQueue(res.data);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeTab]);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -291,14 +330,17 @@ export default function Fiabilite() {
 
   useEffect(() => {
     fetchQueue();
+  }, [fetchQueue]);
+
+  useEffect(() => {
     fetchSettings();
-  }, [fetchQueue, fetchSettings]);
+  }, [fetchSettings]);
 
   const handleValidate = async (id) => {
     setBusyId(id);
     try {
       await api.patch(`/reliability/${id}/validate`);
-      setQueue((q) => q.filter((a) => a.id !== id));
+      await fetchQueue();
     } catch (err) {
       console.error(err);
     } finally {
@@ -310,7 +352,19 @@ export default function Fiabilite() {
     setBusyId(id);
     try {
       await api.patch(`/reliability/${id}/reject`);
-      setQueue((q) => q.filter((a) => a.id !== id));
+      await fetchQueue();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleReset = async (id) => {
+    setBusyId(id);
+    try {
+      await api.patch(`/reliability/${id}/reset`);
+      await fetchQueue();
     } catch (err) {
       console.error(err);
     } finally {
@@ -378,16 +432,32 @@ export default function Fiabilite() {
         </div>
       </div>
 
+      <div className="flex gap-1 border-b border-slate-200">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === tab.key
+                ? "border-orange-500 text-orange-600"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <p className="text-sm text-slate-500">
-        {loading
-          ? "Chargement..."
-          : `${queue.length} activité${queue.length !== 1 ? "s" : ""} à vérifier`}
+        {loading ? "Chargement..." : `${queue.length} activité${queue.length !== 1 ? "s" : ""}`}
       </p>
 
       <div className="space-y-3">
         {!loading && queue.length === 0 && (
           <div className="card-solid p-12 text-center text-sm text-slate-400">
-            Rien à vérifier — toutes les activités déclarées sont au-dessus du seuil de fiabilité.
+            {activeTab === "a_verifier"
+              ? "Rien à vérifier — toutes les activités déclarées sont au-dessus du seuil de fiabilité."
+              : "Aucune activité dans cette catégorie."}
           </div>
         )}
         {queue.map((activity) => (
@@ -396,6 +466,7 @@ export default function Fiabilite() {
             activity={activity}
             onValidate={handleValidate}
             onReject={handleReject}
+            onReset={handleReset}
             busy={busyId === activity.id}
           />
         ))}
