@@ -9,12 +9,23 @@ const router = express.Router();
 
 router.use(authMiddleware, requireAdmin);
 
-/* ===== FILE DE VÉRIFICATION ===== */
+/* ===== FILE DE VÉRIFICATION (?status=a_verifier|validee|rejetee|all, défaut a_verifier) ===== */
 router.get("/queue", async (req, res) => {
   try {
-    const result = await pool.query(`
+    const status = req.query.status || "a_verifier";
+    const validStatuses = ["a_verifier", "validee", "rejetee"];
+    const where =
+      status === "all"
+        ? ""
+        : validStatuses.includes(status)
+          ? "WHERE a.reliability_status = $1"
+          : "WHERE a.reliability_status = 'a_verifier'";
+    const params = status !== "all" && validStatuses.includes(status) ? [status] : [];
+
+    const result = await pool.query(
+      `
       SELECT a.id, a.title, a.activity_date, a.mode, a.participants_manual,
-             a.reliability_score, a.reliability_status,
+             a.reliability_score, a.reliability_status, a.reliability_manual_override,
              a.reliability_details, a.duplicate_of, dup.title AS duplicate_of_title,
              p.name AS partner_name, u.full_name AS coach_name,
              COALESCE(ap.participants_count, 0)::int AS participants_count
@@ -26,9 +37,11 @@ router.get("/queue", async (req, res) => {
         SELECT activity_id, COUNT(*)::int AS participants_count
         FROM activity_participants GROUP BY activity_id
       ) ap ON ap.activity_id = a.id
-      WHERE a.reliability_status = 'a_verifier'
+      ${where}
       ORDER BY a.reliability_score ASC NULLS FIRST, a.activity_date DESC
-    `);
+      `,
+      params
+    );
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -104,15 +117,13 @@ router.patch("/:id/reject", async (req, res) => {
 router.patch("/:id/reset", async (req, res) => {
   try {
     const { id } = req.params;
+    const threshold = await getReliabilityThreshold();
     const result = await pool.query(
       `UPDATE activities
        SET reliability_manual_override = FALSE,
-           reliability_status = CASE
-             WHEN reliability_score >= (SELECT (value->>'threshold')::numeric FROM app_settings WHERE key = 'reliability_threshold')
-             THEN 'validee' ELSE 'a_verifier'
-           END
-       WHERE id = $1 RETURNING id, title`,
-      [id]
+           reliability_status = CASE WHEN reliability_score >= $1 THEN 'validee' ELSE 'a_verifier' END
+       WHERE id = $2 RETURNING id, title`,
+      [threshold, id]
     );
     if (!result.rows.length) return res.status(404).json({ error: "Activité introuvable" });
 
