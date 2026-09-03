@@ -538,6 +538,38 @@ router.get("/:id/report", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== SUPPRIMER RAPPORT ===== */
+router.delete("/:id/report", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const actRes = await pool.query(
+      "SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    const activity = actRes.rows[0];
+    if (!isOwner(req, activity)) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    await pool.query(
+      "UPDATE activities SET report_filename = NULL, report_data = NULL WHERE id = $1",
+      [id]
+    );
+    await computeAndStoreReliability(id).catch((e) => console.warn("Reliability:", e.message));
+
+    logAudit(req, "UPDATE", "activities", id, activity.title, {
+      action: "report_delete",
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[REPORT DELETE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== DELETE ACTIVITY ===== */
 router.delete("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
   try {

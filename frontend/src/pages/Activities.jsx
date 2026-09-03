@@ -90,6 +90,7 @@ export default function Activities({
   const [reportUploading, setReportUploading] = useState(false);
   const [reportError, setReportError] = useState("");
   const [reportSuccess, setReportSuccess] = useState(false);
+  const [reportDeleting, setReportDeleting] = useState(false);
 
   const [createReportFile, setCreateReportFile] = useState(null);
 
@@ -343,6 +344,24 @@ export default function Activities({
   const handlePreviewReport = (activityId) => {
     const base = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
     window.open(`${base}/activities/${activityId}/report?inline=1`, "_blank");
+  };
+
+  const handleDeleteReport = async () => {
+    if (!editForm?.id) return;
+    if (!confirm("Supprimer le rapport de cette activité ?")) return;
+    setReportDeleting(true);
+    setReportError("");
+    try {
+      await api.delete(`/activities/${editForm.id}/report`);
+      setEditForm(f => ({ ...f, report_filename: null }));
+      setReportSuccess(false);
+      setReportFile(null);
+      fetchActivities();
+    } catch (err) {
+      setReportError(err?.response?.data?.error || "Erreur lors de la suppression.");
+    } finally {
+      setReportDeleting(false);
+    }
   };
 
   /* ===== SUPPRESSION LISTE PARTICIPANTS ===== */
@@ -992,9 +1011,20 @@ export default function Activities({
                 >
                   <Download className="w-3 h-3" /> Télécharger
                 </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteReport}
+                  disabled={reportDeleting}
+                  className="btn-ghost border border-red-200 text-red-600 hover:bg-red-50 text-xs flex items-center gap-1 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3 h-3" /> {reportDeleting ? "Suppression..." : "Supprimer"}
+                </button>
               </div>
             )}
             <div className="space-y-2">
+              <label className="text-xs text-slate-500">
+                {editForm.report_filename ? "Remplacer le rapport :" : "Ajouter un rapport :"}
+              </label>
               <input
                 type="file"
                 accept=".pdf"
