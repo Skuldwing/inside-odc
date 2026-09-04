@@ -14,6 +14,7 @@ const Participants = lazy(() => import("./pages/Participants"));
 const Campagnes = lazy(() => import("./pages/Campagnes"));
 const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
+const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
 const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
@@ -176,6 +177,16 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <Partenaires />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="partenaires/:id"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <PartenaireDetail />
               </Suspense>
             </AdminRoute>
           }

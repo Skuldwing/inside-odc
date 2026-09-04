@@ -123,7 +123,29 @@ router.get("/notifications", async (req, res) => {
       params
     );
 
-    res.json({ count: countRes.rows[0].total, items: itemsRes.rows });
+    // Tâches de suivi partenaire arrivées à échéance (ou en retard), non terminées.
+    const taskRes = await pool.query(
+      `SELECT pt.id, pt.title, pt.due_date, p.id AS partner_id, p.name AS partner_name
+       FROM partner_tasks pt
+       JOIN partners p ON p.id = pt.partner_id
+       WHERE pt.completed = FALSE AND pt.due_date IS NOT NULL AND pt.due_date <= CURRENT_DATE
+       ORDER BY pt.due_date ASC LIMIT 15`
+    );
+
+    const auditItems = itemsRes.rows.map((r) => ({ ...r, type: "audit" }));
+    const taskItems = taskRes.rows.map((r) => ({
+      id: `task-${r.id}`,
+      type: "partner_task",
+      title: r.title,
+      due_date: r.due_date,
+      partner_id: r.partner_id,
+      partner_name: r.partner_name,
+    }));
+
+    res.json({
+      count: countRes.rows[0].total + taskRes.rows.length,
+      items: [...taskItems, ...auditItems],
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
