@@ -74,6 +74,8 @@ export function AuthProvider({ children }) {
         isPartner: role === "partner",
         isCoach: role === "coach",
         isViewer: role === "viewer",
+        // Acces Mbootay : les admins l'ont d'office, les autres via le drapeau.
+        isTeamOdc: role === "admin" || !!user?.is_team_odc,
         login,
         logout,
       }}

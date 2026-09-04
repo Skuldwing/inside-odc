@@ -11,7 +11,11 @@ export default function Layout() {
   );
   const location = useLocation();
 
-  const currentPageName = location.pathname.replace("/", "") || "Dashboard";
+  // La fiche projet Mbootay est une sous-route : on garde "Mbootay" en titre
+  // plutôt que le slug brut "mbootay/12".
+  const currentPageName = location.pathname.startsWith("/mbootay")
+    ? "Mbootay"
+    : location.pathname.replace("/", "") || "Dashboard";
 
   const toggleCollapsed = () => {
     const next = !collapsed;

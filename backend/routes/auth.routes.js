@@ -66,6 +66,7 @@ router.post("/login", async (req, res) => {
         full_name: user.full_name,
         role: user.role,
         partner_id: user.partner_id,
+        is_team_odc: user.is_team_odc ?? false,
       },
     });
   } catch (err) {
@@ -90,7 +91,8 @@ router.get("/me", authMiddleware, async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, email, full_name, role, partner_id
+      SELECT id, email, full_name, role, partner_id,
+             COALESCE(is_team_odc, false) AS is_team_odc
       FROM users
       WHERE id = $1
       LIMIT 1

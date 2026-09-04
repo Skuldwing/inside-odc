@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Plus, User, Mail, Shield, Building2, Link2, Pencil, Trash2,
   Search, UsersRound, Copy, Check, X, AlertCircle, Loader2, Target, Wifi,
+  KanbanSquare,
 } from "lucide-react";
 
 /* Un utilisateur est "en ligne" si last_seen_at < ONLINE_THRESHOLD ms */
@@ -33,7 +34,7 @@ const ROLES = [
   { value: "viewer",  label: "Lecteur",          cls: "bg-slate-100 text-slate-600 border-slate-200" },
 ];
 
-const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active", objective_beneficiaries: "" };
+const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false };
 
 export default function Utilisateurs() {
   const [searchParams] = useSearchParams();
@@ -97,7 +98,7 @@ export default function Utilisateurs() {
   };
 
   const openEdit = (u) => {
-    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "" });
+    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc });
     setEditing(u.id);
     setFormError("");
     setInviteData(null);
@@ -406,6 +407,32 @@ export default function Utilisateurs() {
                   </select>
                 </div>
 
+                {/* Mbootay : reserve aux profils internes, les admins l'ont d'office */}
+                {form.role !== "partner" && (
+                  <div className="rounded-xl border border-slate-200 px-4 py-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-orange-500 mt-0.5"
+                        checked={form.role === "admin" ? true : !!form.is_team_odc}
+                        disabled={form.role === "admin"}
+                        onChange={e => setForm(f => ({ ...f, is_team_odc: e.target.checked }))}
+                      />
+                      <span>
+                        <span className="text-sm font-medium flex items-center gap-1.5">
+                          <KanbanSquare className="w-4 h-4 text-orange-500" />
+                          Accès Mbootay
+                        </span>
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          {form.role === "admin"
+                            ? "Les administrateurs accèdent à Mbootay d'office."
+                            : "Donne accès à l'espace de projets internes de l'équipe ODC."}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 {!editing && (
                   <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
                     Après création, un lien d'invitation sera généré pour que l'utilisateur définisse son mot de passe.
@@ -520,6 +547,15 @@ export default function Utilisateurs() {
                         <Shield className="w-3 h-3" />
                         {roleMeta?.label || u.role}
                       </span>
+                      {(u.role === "admin" || u.is_team_odc) && (
+                        <span
+                          title="Accès Mbootay"
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700"
+                        >
+                          <KanbanSquare className="w-3 h-3" />
+                          Mbootay
+                        </span>
+                      )}
                     </td>
 
                     <td className="px-4 py-3 text-sm">

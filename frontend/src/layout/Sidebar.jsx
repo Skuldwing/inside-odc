@@ -13,6 +13,7 @@ import {
   Award,
   ShieldCheck,
   ShieldAlert,
+  KanbanSquare,
   X,
   ChevronLeft,
   ChevronRight,
@@ -54,6 +55,16 @@ const navigation = [
     path: "/participants",
     roles: ["admin", "partner", "coach", "viewer"],
     tourId: "nav-participants",
+  },
+];
+
+/* Espace collaboratif interne : visible pour les admins et l'equipe ODC. */
+const teamNavigation = [
+  {
+    name: "Mbootay",
+    icon: KanbanSquare,
+    path: "/mbootay",
+    matchPrefix: true,
   },
 ];
 
@@ -140,7 +151,7 @@ function NavLink({ item, collapsed, location, onClick, index = 0 }) {
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onToggle }) {
   const location = useLocation();
-  const { role } = useAuth();
+  const { role, isTeamOdc } = useAuth();
   const safeRole = role || "viewer";
 
   const roleLabel =
@@ -238,6 +249,33 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
                 />
               ))}
           </div>
+
+          {isTeamOdc && (
+            <div className={collapsed ? "pt-2" : "pt-5"}>
+              {collapsed ? (
+                <div className="h-px bg-white/10 mx-1 mb-2" />
+              ) : (
+                <>
+                  <div className="px-3"><div className="h-px bg-white/10" /></div>
+                  <p className="px-3 mt-4 mb-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                    Équipe ODC
+                  </p>
+                </>
+              )}
+              <div className="space-y-0.5">
+                {teamNavigation.map((item, index) => (
+                  <NavLink
+                    key={item.name}
+                    item={item}
+                    collapsed={collapsed}
+                    location={location}
+                    onClick={() => setSidebarOpen(false)}
+                    index={index + navigation.length}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {managementNavigation.some((item) => item.roles.includes(safeRole)) && (
             <div className={collapsed ? "pt-2" : "pt-5"}>

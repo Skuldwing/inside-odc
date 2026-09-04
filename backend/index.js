@@ -25,6 +25,7 @@ const voteRoutes = require("./routes/vote.routes");
 const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes");
 const auditRoutes = require("./routes/audit.routes");
 const reliabilityRoutes = require("./routes/reliability.routes");
+const mbootayRoutes = require("./routes/mbootay.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -151,6 +152,7 @@ app.use("/vote", voteRoutes);
 app.use("/email-templates", emailTemplatesRoutes);
 app.use("/audit-logs", auditRoutes);
 app.use("/reliability", reliabilityRoutes);
+app.use("/mbootay", mbootayRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -610,6 +612,67 @@ pool.query(`
     created_at    TIMESTAMPTZ DEFAULT NOW()
   )
 `).then(() => console.log("Migration OK: partner_tasks")).catch(e => console.warn("Migration partner_tasks:", e.message));
+
+/* ── Mbootay : espace collaboratif interne de l'équipe ODC ──
+   Séquencé : mbootay_members et mbootay_tasks référencent mbootay_projects,
+   elles ne peuvent donc pas être créées en parallèle de la table parente. */
+(async () => {
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_team_odc BOOLEAN DEFAULT FALSE`);
+    console.log("Migration OK: users.is_team_odc");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mbootay_projects (
+        id            SERIAL PRIMARY KEY,
+        title         TEXT NOT NULL,
+        description   TEXT,
+        status        TEXT DEFAULT 'en_cours' CHECK (status IN ('non_demarre','en_cours','en_pause','termine')),
+        owner_id      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        partner_id    INTEGER REFERENCES partners(id) ON DELETE SET NULL,
+        device_id     INTEGER REFERENCES devices(id) ON DELETE SET NULL,
+        start_date    DATE,
+        due_date      DATE,
+        created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log("Migration OK: mbootay_projects");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mbootay_members (
+        project_id  INTEGER NOT NULL REFERENCES mbootay_projects(id) ON DELETE CASCADE,
+        user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        added_at    TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (project_id, user_id)
+      )
+    `);
+    console.log("Migration OK: mbootay_members");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mbootay_tasks (
+        id            SERIAL PRIMARY KEY,
+        project_id    INTEGER NOT NULL REFERENCES mbootay_projects(id) ON DELETE CASCADE,
+        title         TEXT NOT NULL,
+        description   TEXT,
+        status        TEXT DEFAULT 'a_faire' CHECK (status IN ('a_faire','en_cours','termine')),
+        priority      TEXT DEFAULT 'normale' CHECK (priority IN ('basse','normale','haute')),
+        assigned_to   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        due_date      DATE,
+        position      INTEGER DEFAULT 0,
+        created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        completed_at  TIMESTAMPTZ
+      )
+    `);
+    console.log("Migration OK: mbootay_tasks");
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_mbootay_tasks_project ON mbootay_tasks(project_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_mbootay_tasks_assigned ON mbootay_tasks(assigned_to)`);
+    console.log("Migration OK: index Mbootay");
+  } catch (e) {
+    console.warn("Migration Mbootay:", e.message);
+  }
+})();
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
