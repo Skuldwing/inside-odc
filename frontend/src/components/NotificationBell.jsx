@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, CheckCheck, CalendarPlus, Pencil, Trash2, Upload } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Bell, CheckCheck, CalendarPlus, Pencil, Trash2, Upload, ListChecks } from "lucide-react";
+import { formatDistanceToNow, isPast, isToday, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
@@ -115,6 +115,31 @@ export default function NotificationBell() {
               </div>
             ) : (
               items.map((item) => {
+                if (item.type === "partner_task") {
+                  const due = item.due_date ? parseISO(item.due_date) : null;
+                  const overdue = due && isPast(due) && !isToday(due);
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => { setOpen(false); navigate(`/partenaires/${item.partner_id}`); }}
+                      className="flex gap-3 px-4 py-3 hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${overdue ? "text-red-500 bg-red-50" : "text-violet-600 bg-violet-50"}`}>
+                        <ListChecks className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{item.title}</p>
+                        <p className="text-xs text-slate-600 mt-0.5">
+                          Tâche de suivi · {item.partner_name}
+                        </p>
+                        <p className={`text-[10px] mt-0.5 ${overdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                          {overdue ? "En retard" : "Échéance aujourd'hui"}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
                 const cfg = ACTION_CFG[item.action] ?? ACTION_CFG.UPDATE;
                 const Icon = cfg.Icon;
                 const roleLabel = ROLE_LABELS[item.user_role] || item.user_role;

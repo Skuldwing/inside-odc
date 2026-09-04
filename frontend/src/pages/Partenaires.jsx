@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Plus,
   Building2,
@@ -9,12 +10,22 @@ import {
   Trash2,
   Layers,
   Users,
+  LayoutGrid,
+  Columns3,
+  ArrowUpRight,
 } from "lucide-react";
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
 import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
+
+const PIPELINE_STAGES = [
+  { key: "prospect", label: "Prospect", dot: "bg-slate-400" },
+  { key: "actif", label: "Actif", dot: "bg-emerald-500" },
+  { key: "a_relancer", label: "À relancer", dot: "bg-amber-500" },
+  { key: "dormant", label: "Dormant", dot: "bg-slate-300" },
+];
 
 export default function Partenaires() {
   const [open, setOpen] = useState(false);
@@ -23,6 +34,8 @@ export default function Partenaires() {
   const [allDevices, setAllDevices] = useState([]);
   const [coaches, setCoaches] = useState([]);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState("cartes");
+  const [draggedId, setDraggedId] = useState(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -129,6 +142,19 @@ export default function Partenaires() {
     }
   };
 
+  const handlePipelineStageChange = async (partnerId, pipeline_stage) => {
+    const previous = partners;
+    setPartners((prev) =>
+      prev.map((p) => (p.id === partnerId ? { ...p, pipeline_stage } : p))
+    );
+    try {
+      await api.patch(`/partners/${partnerId}/pipeline-stage`, { pipeline_stage });
+    } catch (err) {
+      console.error("Erreur changement de stade", err);
+      setPartners(previous);
+    }
+  };
+
   const toggleDevice = (deviceId) => {
     setSelectedDeviceIds((prev) =>
       prev.includes(deviceId)
@@ -160,6 +186,27 @@ export default function Partenaires() {
             setOpen(true);
           }}
         />
+
+        <div className="inline-flex rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <button
+            onClick={() => setViewMode("cartes")}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${
+              viewMode === "cartes" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            Cartes
+          </button>
+          <button
+            onClick={() => setViewMode("kanban")}
+            className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${
+              viewMode === "kanban" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"
+            }`}
+          >
+            <Columns3 className="w-4 h-4" />
+            Pipeline
+          </button>
+        </div>
 
         {open && (
           <AdminModal
@@ -321,6 +368,16 @@ export default function Partenaires() {
           </div>
         )}
 
+        {viewMode === "kanban" && filteredPartners.length > 0 && (
+          <PartnersKanban
+            partners={filteredPartners}
+            draggedId={draggedId}
+            setDraggedId={setDraggedId}
+            onStageChange={handlePipelineStageChange}
+          />
+        )}
+
+        {viewMode === "cartes" && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredPartners.map((p) => {
             const objective = Number(p.objective_beneficiaries || 0);
@@ -344,18 +401,33 @@ export default function Partenaires() {
                     </div>
                     <div>
                       <p className="font-semibold text-slate-900">{p.name}</p>
-                      <span
-                        className={`badge mt-1 ${
-                          p.status === "active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-slate-200 text-slate-700"
-                        }`}
-                      >
-                        {p.status === "active" ? "Actif" : "Inactif"}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                        <span
+                          className={`badge ${
+                            p.status === "active"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          {p.status === "active" ? "Actif" : "Inactif"}
+                        </span>
+                        <span className="badge bg-slate-100 text-slate-600 flex items-center gap-1">
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            PIPELINE_STAGES.find((s) => s.key === p.pipeline_stage)?.dot || "bg-slate-400"
+                          }`} />
+                          {PIPELINE_STAGES.find((s) => s.key === p.pipeline_stage)?.label || "Actif"}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Link
+                      to={`/partenaires/${p.id}`}
+                      title="Voir la fiche"
+                      className="text-slate-500 hover:text-orange-500"
+                    >
+                      <ArrowUpRight className="w-4 h-4" />
+                    </Link>
                     <button
                       onClick={() => handleEdit(p)}
                       className="text-slate-500 hover:text-orange-500"
@@ -495,7 +567,69 @@ export default function Partenaires() {
             );
           })}
         </div>
+        )}
       </div>
     </AdminPinGate>
+  );
+}
+
+function PartnersKanban({ partners, draggedId, setDraggedId, onStageChange }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      {PIPELINE_STAGES.map((stage) => {
+        const stagePartners = partners.filter(
+          (p) => (p.pipeline_stage || "actif") === stage.key
+        );
+        return (
+          <div
+            key={stage.key}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (draggedId != null) onStageChange(draggedId, stage.key);
+              setDraggedId(null);
+            }}
+            className="rounded-2xl border border-slate-200 bg-slate-50/60 p-3 min-h-[200px]"
+          >
+            <div className="flex items-center gap-2 px-1 mb-3">
+              <span className={`w-2 h-2 rounded-full ${stage.dot}`} />
+              <p className="text-sm font-semibold text-slate-700">{stage.label}</p>
+              <span className="ml-auto text-xs text-slate-400">{stagePartners.length}</span>
+            </div>
+            <div className="space-y-2">
+              {stagePartners.map((p) => (
+                <div
+                  key={p.id}
+                  draggable
+                  onDragStart={() => setDraggedId(p.id)}
+                  onDragEnd={() => setDraggedId(null)}
+                  className={`card-solid p-3 cursor-grab active:cursor-grabbing transition-opacity ${
+                    draggedId === p.id ? "opacity-40" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-slate-800 truncate">{p.name}</p>
+                    <Link
+                      to={`/partenaires/${p.id}`}
+                      className="text-slate-400 hover:text-orange-500 shrink-0"
+                      title="Voir la fiche"
+                    >
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {Number(p.activities_count || 0)} activité{Number(p.activities_count || 0) !== 1 ? "s" : ""} ·{" "}
+                    {Number(p.beneficiaries_count || 0)} bénéficiaires
+                  </p>
+                </div>
+              ))}
+              {stagePartners.length === 0 && (
+                <p className="text-xs text-slate-400 text-center py-6">Aucun partenaire</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

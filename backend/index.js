@@ -583,6 +583,34 @@ pool.query(`
   }
 })();
 
+/* ── CRM 360° partenaire ── */
+pool.query(`ALTER TABLE partners ADD COLUMN IF NOT EXISTS pipeline_stage TEXT DEFAULT 'actif' CHECK (pipeline_stage IN ('prospect','actif','a_relancer','dormant'))`)
+  .then(() => console.log("Migration OK: partners.pipeline_stage")).catch(e => console.warn("Migration pipeline_stage:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS partner_notes (
+    id          SERIAL PRIMARY KEY,
+    partner_id  INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+    author_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    content     TEXT NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: partner_notes")).catch(e => console.warn("Migration partner_notes:", e.message));
+
+pool.query(`
+  CREATE TABLE IF NOT EXISTS partner_tasks (
+    id            SERIAL PRIMARY KEY,
+    partner_id    INTEGER NOT NULL REFERENCES partners(id) ON DELETE CASCADE,
+    title         TEXT NOT NULL,
+    due_date      DATE,
+    assigned_to   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    completed     BOOLEAN DEFAULT FALSE,
+    completed_at  TIMESTAMPTZ,
+    created_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
+  )
+`).then(() => console.log("Migration OK: partner_tasks")).catch(e => console.warn("Migration partner_tasks:", e.message));
+
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
