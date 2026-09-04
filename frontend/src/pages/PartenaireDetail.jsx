@@ -126,6 +126,7 @@ export default function PartenaireDetail() {
   const [tasks, setTasks] = useState([]);
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDue, setNewTaskDue] = useState("");
   const [newNote, setNewNote] = useState("");
@@ -134,21 +135,29 @@ export default function PartenaireDetail() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [partnerRes, timelineRes, tasksRes, notesRes] = await Promise.all([
-        api.get(`/partners/${id}`),
-        api.get(`/partners/${id}/timeline`),
-        api.get(`/partners/${id}/tasks`),
-        api.get(`/partners/${id}/notes`),
-      ]);
+      const partnerRes = await api.get(`/partners/${id}`);
       setPartner(partnerRes.data);
-      setTimeline(timelineRes.data);
-      setTasks(tasksRes.data);
-      setNotes(notesRes.data);
+      setNotFound(false);
     } catch (err) {
-      console.error(err);
-    } finally {
+      console.error("Erreur chargement partenaire:", err);
+      if (err?.response?.status === 404) setNotFound(true);
       setLoading(false);
+      return;
     }
+
+    const [timelineRes, tasksRes, notesRes] = await Promise.allSettled([
+      api.get(`/partners/${id}/timeline`),
+      api.get(`/partners/${id}/tasks`),
+      api.get(`/partners/${id}/notes`),
+    ]);
+    if (timelineRes.status === "fulfilled") setTimeline(timelineRes.value.data);
+    else console.error("Erreur chargement historique:", timelineRes.reason);
+    if (tasksRes.status === "fulfilled") setTasks(tasksRes.value.data);
+    else console.error("Erreur chargement tâches:", tasksRes.reason);
+    if (notesRes.status === "fulfilled") setNotes(notesRes.value.data);
+    else console.error("Erreur chargement notes:", notesRes.reason);
+
+    setLoading(false);
   }, [id]);
 
   useEffect(() => {
@@ -224,8 +233,16 @@ export default function PartenaireDetail() {
     return <div className="min-h-[50vh] flex items-center justify-center text-slate-400">Chargement...</div>;
   }
 
-  if (!partner) {
+  if (notFound) {
     return <div className="card p-8 text-center text-slate-500">Partenaire introuvable.</div>;
+  }
+
+  if (!partner) {
+    return (
+      <div className="card p-8 text-center text-slate-500">
+        Erreur de chargement du partenaire. Vérifiez la console pour le détail, ou réessayez.
+      </div>
+    );
   }
 
   const objective = Number(partner.objective_beneficiaries || 0);
