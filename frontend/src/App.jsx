@@ -7,6 +7,7 @@ import PageLoader from "./components/PageLoader";
 
 import PrivateRoute from "./routes/PrivateRoute";
 import AdminRoute from "./routes/AdminRoute";
+import TeamOdcRoute from "./routes/TeamOdcRoute";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const OperationsHub = lazy(() => import("./pages/OperationsHub"));
@@ -32,6 +33,8 @@ const VoteConfig = lazy(() => import("./pages/VoteConfig"));
 const VoteManage = lazy(() => import("./pages/VoteManage"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Fiabilite = lazy(() => import("./pages/Fiabilite"));
+const Mbootay = lazy(() => import("./pages/Mbootay"));
+const MbootayProjet = lazy(() => import("./pages/MbootayProjet"));
 
 export default function App() {
   return (
@@ -127,6 +130,28 @@ export default function App() {
             <Suspense fallback={<PageLoader />}>
               <Participants />
             </Suspense>
+          }
+        />
+
+        {/* ===== ESPACE EQUIPE ODC ===== */}
+        <Route
+          path="mbootay"
+          element={
+            <TeamOdcRoute>
+              <Suspense fallback={<PageLoader />}>
+                <Mbootay />
+              </Suspense>
+            </TeamOdcRoute>
+          }
+        />
+        <Route
+          path="mbootay/:id"
+          element={
+            <TeamOdcRoute>
+              <Suspense fallback={<PageLoader />}>
+                <MbootayProjet />
+              </Suspense>
+            </TeamOdcRoute>
           }
         />
 

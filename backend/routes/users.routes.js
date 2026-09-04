@@ -35,6 +35,7 @@ router.get("/", async (req, res) => {
       `SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
               u.objective_beneficiaries,
               u.last_seen_at,
+              COALESCE(u.is_team_odc, false) AS is_team_odc,
               p.name AS partner,
               ${statusExpr} AS status
        FROM users u
@@ -58,11 +59,15 @@ router.post("/", async (req, res) => {
       partner_id = null,
       partner = null,
       status = "active",
+      is_team_odc = false,
     } = req.body;
 
     if (!email) {
       return res.status(400).json({ error: "Email requis" });
     }
+
+    // L'acces Mbootay est reserve aux profils internes : jamais un partenaire.
+    const teamOdc = role !== "partner" && Boolean(is_team_odc);
 
     let resolvedPartnerId = partner_id || null;
     if (!resolvedPartnerId && partner) {
@@ -81,19 +86,19 @@ router.post("/", async (req, res) => {
     const result = hasIsActive
       ? await pool.query(
           `
-          INSERT INTO users (email, password, role, partner_id, full_name, is_active)
-          VALUES ($1,$2,$3,$4,$5,$6)
-          RETURNING id, email, role, full_name, partner_id
+          INSERT INTO users (email, password, role, partner_id, full_name, is_active, is_team_odc)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)
+          RETURNING id, email, role, full_name, partner_id, is_team_odc
           `,
-          [email, hash, role, resolvedPartnerId, full_name || null, isActive]
+          [email, hash, role, resolvedPartnerId, full_name || null, isActive, teamOdc]
         )
       : await pool.query(
           `
-          INSERT INTO users (email, password, role, partner_id, full_name)
-          VALUES ($1,$2,$3,$4,$5)
-          RETURNING id, email, role, full_name, partner_id
+          INSERT INTO users (email, password, role, partner_id, full_name, is_team_odc)
+          VALUES ($1,$2,$3,$4,$5,$6)
+          RETURNING id, email, role, full_name, partner_id, is_team_odc
           `,
-          [email, hash, role, resolvedPartnerId, full_name || null]
+          [email, hash, role, resolvedPartnerId, full_name || null, teamOdc]
         );
 
     const createdUser = result.rows[0];
@@ -141,11 +146,15 @@ router.put("/:id", async (req, res) => {
       partner = null,
       status = "active",
       objective_beneficiaries = null,
+      is_team_odc = false,
     } = req.body;
 
     if (!email) {
       return res.status(400).json({ error: "Email requis" });
     }
+
+    // L'acces Mbootay est reserve aux profils internes : jamais un partenaire.
+    const teamOdc = role !== "partner" && Boolean(is_team_odc);
 
     let resolvedPartnerId = partner_id || null;
     if (!resolvedPartnerId && partner) {
@@ -168,18 +177,18 @@ router.put("/:id", async (req, res) => {
       ? await pool.query(
           `UPDATE users
            SET email = $1, role = $2, partner_id = $3, full_name = $4,
-               is_active = $5, objective_beneficiaries = $6
-           WHERE id = $7
-           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries`,
-          [email, role, resolvedPartnerId, full_name || null, isActive, coachObjective, id]
+               is_active = $5, objective_beneficiaries = $6, is_team_odc = $7
+           WHERE id = $8
+           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries, is_team_odc`,
+          [email, role, resolvedPartnerId, full_name || null, isActive, coachObjective, teamOdc, id]
         )
       : await pool.query(
           `UPDATE users
            SET email = $1, role = $2, partner_id = $3, full_name = $4,
-               objective_beneficiaries = $5
-           WHERE id = $6
-           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries`,
-          [email, role, resolvedPartnerId, full_name || null, coachObjective, id]
+               objective_beneficiaries = $5, is_team_odc = $6
+           WHERE id = $7
+           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries, is_team_odc`,
+          [email, role, resolvedPartnerId, full_name || null, coachObjective, teamOdc, id]
         );
 
     if (result.rows.length === 0) {
@@ -191,6 +200,7 @@ router.put("/:id", async (req, res) => {
       email: updatedUser.email,
       role: updatedUser.role,
       status,
+      is_team_odc: updatedUser.is_team_odc,
     });
     res.json(updatedUser);
   } catch (err) {
