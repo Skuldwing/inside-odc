@@ -724,7 +724,7 @@ export default function Activities({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-shrink-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
+            <div role="group" aria-label="Mode d'affichage" className="flex flex-shrink-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
               <button
                 type="button"
                 onClick={() => setViewMode("liste")}
