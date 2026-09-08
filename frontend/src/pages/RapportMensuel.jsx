@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { X, FileDown, Loader2 } from "lucide-react";
 import { ODC_LOGO_B64 } from "../components/branding/odcLogoB64.js";
+import { useToast } from "../components/ui";
 
 /* ── Utilitaires ── */
 function percent(value, total) {
@@ -429,6 +430,7 @@ function RapportDispositif({ summary, filters, devices }) {
 
 /* ── Modal principal ── */
 export default function RapportMensuelModal({ summary, filters, partners, devices, role, onClose }) {
+  const toast = useToast();
   const contentRef = useRef(null);
   const [generating, setGenerating] = useState(false);
 
@@ -481,7 +483,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
       pdf.save(`rapport-odc-${fileLabel}.pdf`);
     } catch (err) {
       console.error("Erreur PDF:", err);
-      alert("Erreur lors de la génération du PDF.");
+      toast.error("La génération du PDF a échoué.");
     } finally {
       setGenerating(false);
     }

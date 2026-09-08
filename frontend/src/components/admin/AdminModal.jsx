@@ -1,22 +1,20 @@
-import { createPortal } from "react-dom";
+import Modal from "../ui/Modal";
 
+/**
+ * Conserve pour ne pas toucher aux cinq pages qui l'utilisent : ce n'est plus
+ * qu'une facade au-dessus de <Modal>, qui apporte Echap, le piege de focus,
+ * la restitution du focus et les roles ARIA.
+ *
+ * Corrige au passage un defaut de l'ancienne version : elle imposait
+ * `height: calc(100dvh - 3rem)`, ce qui etirait une petite fiche sur toute la
+ * hauteur de l'ecran. La hauteur suit desormais le contenu.
+ *
+ * Les nouveaux ecrans utilisent directement <Modal>.
+ */
 export default function AdminModal({ title, onClose, children, maxWidth = "max-w-lg" }) {
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto px-4 py-6 sm:py-8">
-      <div className={`anim-modal-panel card-solid w-full ${maxWidth} mx-auto flex flex-col`} style={{ height: "calc(100dvh - 3rem)", maxHeight: "calc(100dvh - 3rem)" }}>
-        {/* Header fixe */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-6 py-4 rounded-t-2xl">
-          <h2 className="text-xl font-semibold">{title}</h2>
-          <button type="button" onClick={onClose} className="btn-ghost border">
-            Fermer
-          </button>
-        </div>
-        {/* Corps scrollable */}
-        <div className="flex-1 overflow-y-auto min-h-0 p-6">
-          {children}
-        </div>
-      </div>
-    </div>,
-    document.body
+  return (
+    <Modal open onClose={onClose} title={title} maxWidth={maxWidth}>
+      {children}
+    </Modal>
   );
 }

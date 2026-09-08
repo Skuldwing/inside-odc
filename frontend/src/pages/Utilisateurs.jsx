@@ -26,6 +26,7 @@ function OnlineDot({ online }) {
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
+import { useToast, useConfirm } from "../components/ui";
 
 const ROLES = [
   { value: "admin",   label: "Administrateur",  cls: "bg-orange-100 text-orange-700 border-orange-200" },
@@ -37,6 +38,8 @@ const ROLES = [
 const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false };
 
 export default function Utilisateurs() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [searchParams] = useSearchParams();
   const [users, setUsers]       = useState([]);
   const [partners, setPartners] = useState([]);
@@ -154,7 +157,7 @@ export default function Utilisateurs() {
       const res = await api.post(`/users/${u.id}/reset-link`);
       setLinkModal({ link: res.data.link, full_name: res.data.full_name || u.full_name, email: res.data.email || u.email, userId: u.id });
     } catch {
-      alert("Erreur lors de la génération du lien.");
+      toast.error("La génération du lien a échoué.");
     } finally {
       setLinkLoading(false);
     }
@@ -166,17 +169,22 @@ export default function Utilisateurs() {
       await api.post(`/users/${linkModal.userId}/reset-password`);
       setEmailSent(true);
     } catch {
-      alert("Erreur lors de l'envoi de l'email.");
+      toast.error("L'envoi de l'email a échoué.");
     }
   };
 
   /* ── supprimer ── */
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer définitivement cet utilisateur ?")) return;
+    const ok = await confirm({
+      title: "Supprimer cet utilisateur ?",
+      body: "Son compte sera désactivé et il perdra l'accès à la plateforme.",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/users/${id}/hard-delete`);
       fetchUsers();
-    } catch { alert("Erreur lors de la suppression."); }
+    } catch { toast.error("La suppression a échoué."); }
   };
 
   const stats = useMemo(() => ({

@@ -28,6 +28,7 @@ import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
+import { useToast, useConfirm } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
 export default function Activities({
@@ -348,7 +349,12 @@ export default function Activities({
 
   const handleDeleteReport = async () => {
     if (!editForm?.id) return;
-    if (!confirm("Supprimer le rapport de cette activité ?")) return;
+    const ok = await confirm({
+      title: "Supprimer le rapport ?",
+      body: "Vous pourrez en téléverser un autre ensuite.",
+      destructive: true,
+    });
+    if (!ok) return;
     setReportDeleting(true);
     setReportError("");
     try {
@@ -380,7 +386,7 @@ export default function Activities({
       setClearParticipantsConfirm(false);
       fetchActivities();
     } catch (err) {
-      alert(err?.response?.data?.error || "Erreur lors de la suppression.");
+      toast.error(err?.response?.data?.error || "La suppression a échoué.");
     } finally {
       setClearingParticipants(false);
     }
@@ -546,7 +552,12 @@ export default function Activities({
   };
 
   const handleDelete = async (activityId) => {
-    if (!confirm("Supprimer cette activité définitivement ?")) return;
+    const ok = await confirm({
+      title: "Supprimer cette activité ?",
+      body: "La liste de présences et le rapport associés seront supprimés avec elle.",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeleteError("");
     try {
       await api.delete(`/activities/${activityId}`);
@@ -566,7 +577,7 @@ export default function Activities({
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      alert("Erreur lors du téléchargement de la liste.");
+      toast.error("Le téléchargement de la liste a échoué.");
     }
   };
 

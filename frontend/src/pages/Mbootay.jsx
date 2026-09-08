@@ -17,6 +17,7 @@ import {
 import api from "../api";
 import AdminModal from "../components/admin/AdminModal";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
+import { useToast, useConfirm, EmptyState } from "../components/ui";
 
 export const PROJECT_STATUSES = [
   { key: "non_demarre", label: "Non démarré", dot: "bg-slate-400", badge: "bg-slate-100 text-slate-600" },
@@ -41,6 +42,9 @@ const EMPTY_FORM = {
 };
 
 export default function Mbootay() {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const [projects, setProjects] = useState([]);
   const [team, setTeam] = useState([]);
   const [partners, setPartners] = useState([]);
@@ -159,23 +163,30 @@ export default function Mbootay() {
       setOpen(false);
       setEditing(null);
       setForm(EMPTY_FORM);
+      toast.success(editing ? "Projet mis à jour." : "Projet créé.");
       await fetchAll();
     } catch (err) {
       console.error("Erreur enregistrement projet", err);
-      alert(err.response?.data?.error || "Erreur lors de l'enregistrement");
+      toast.error(err.response?.data?.error || "Erreur lors de l'enregistrement du projet.");
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (project) => {
-    if (!window.confirm(`Supprimer le projet "${project.title}" et toutes ses tâches ?`)) return;
+    const ok = await confirm({
+      title: `Supprimer « ${project.title} » ?`,
+      body: "Le projet et toutes ses tâches seront définitivement supprimés.",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/mbootay/projects/${project.id}`);
+      toast.success("Projet supprimé.");
       await fetchAll();
     } catch (err) {
       console.error("Erreur suppression projet", err);
-      alert("Suppression impossible");
+      toast.error("Suppression impossible.");
     }
   };
 
@@ -264,17 +275,22 @@ export default function Mbootay() {
       {loading ? (
         <div className="card p-8 text-center text-slate-500">Chargement...</div>
       ) : filtered.length === 0 ? (
-        <div className="card p-10 text-center">
-          <KanbanSquare className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-600 font-medium">
-            {projects.length === 0 ? "Aucun projet pour le moment" : "Aucun projet ne correspond au filtre"}
-          </p>
-          {projects.length === 0 && (
-            <p className="text-sm text-slate-500 mt-1">
-              Créez votre premier projet interne pour lancer Mbootay.
-            </p>
-          )}
-        </div>
+        <EmptyState
+          icon={KanbanSquare}
+          title={projects.length === 0 ? "Aucun projet pour le moment" : "Aucun projet ne correspond au filtre"}
+          description={
+            projects.length === 0
+              ? "Créez votre premier projet interne : titre, responsable, échéance, puis des tâches à suivre en Kanban ou au calendrier."
+              : "Modifiez la recherche ou le filtre de statut pour retrouver vos projets."
+          }
+          actionLabel={projects.length === 0 ? "Créer un projet" : "Réinitialiser les filtres"}
+          actionIcon={projects.length === 0 ? Plus : undefined}
+          onAction={
+            projects.length === 0
+              ? openCreate
+              : () => { setSearch(""); setStatusFilter("all"); }
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filtered.map((p, index) => (

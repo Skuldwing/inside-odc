@@ -6,6 +6,7 @@ import {
   Download, Maximize2, Share2, Users, Upload, FileText, ChevronUp, ChevronDown,
 } from "lucide-react";
 import api from "../api";
+import { useToast, useConfirm } from "../components/ui";
 
 const AVATARS = ["🧑","👩","👨","😎","🤓","🦸","🧙","🎓","🏆","⭐","🚀","💡","🎯","🔥","💪","🌟","🦁","🐯","🦊","🐺"];
 
@@ -87,6 +88,8 @@ function GuestQrSection({ session, qrDataUrl, guestJoinUrl, onProject }) {
 }
 
 export default function VoteConfig() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -207,7 +210,8 @@ export default function VoteConfig() {
   };
 
   const deleteProject = async (pid) => {
-    if (!confirm("Supprimer ce projet ?")) return;
+    const ok = await confirm({ title: "Supprimer ce projet ?", destructive: true });
+    if (!ok) return;
     try {
       await api.delete(`/vote/sessions/${id}/projects/${pid}`);
       setSession(s => ({ ...s, projects: s.projects.filter(p => p.id !== pid) }));
@@ -257,7 +261,7 @@ export default function VoteConfig() {
       const r = await api.post("/vote/upload-presentation", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setProjForm(p => ({ ...p, presentation_pdf: r.data.filename, presentation_url: "" }));
     } catch {
-      alert("Erreur lors de l'upload du PDF.");
+      toast.error("L'envoi du PDF a échoué.");
     } finally {
       setUploadingPdf(false);
       e.target.value = "";
@@ -274,7 +278,7 @@ export default function VoteConfig() {
       const r = await api.post("/vote/upload-video", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setProjForm(p => ({ ...p, video_file: r.data.filename, video_url: "" }));
     } catch {
-      alert("Erreur lors de l'upload de la vidéo.");
+      toast.error("L'envoi de la vidéo a échoué.");
     } finally {
       setUploadingVideo(false);
       e.target.value = "";
@@ -291,7 +295,7 @@ export default function VoteConfig() {
       const r = await api.post("/vote/upload-backdrop", fd, { headers: { "Content-Type": "multipart/form-data" } });
       setInfoForm(f => ({ ...f, backdrop: r.data.filename }));
     } catch {
-      alert("Erreur lors de l'upload de l'image.");
+      toast.error("L'envoi de l'image a échoué.");
     } finally {
       setUploadingBackdrop(false);
       e.target.value = "";
@@ -319,7 +323,12 @@ export default function VoteConfig() {
   };
 
   const deleteCriterion = async (cid) => {
-    if (!confirm("Supprimer ce critère ?")) return;
+    const ok = await confirm({
+      title: "Supprimer ce critère ?",
+      body: "Les notes déjà saisies sur ce critère seront perdues.",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/vote/sessions/${id}/criteria/${cid}`);
       setSession(s => ({ ...s, criteria: s.criteria.filter(c => c.id !== cid) }));

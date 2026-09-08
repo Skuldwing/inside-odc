@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { Plus, Pencil, Trash2, Megaphone } from "lucide-react";
 import api from "../api";
+import { useToast, useConfirm, Modal, Button } from "../components/ui";
 
 const platforms = [
   { value: "facebook", label: "Facebook" },
@@ -19,6 +19,9 @@ function formatCompact(value) {
 }
 
 export default function SocialKpis() {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [saving, setSaving] = useState(false);
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
   const [loading, setLoading] = useState(false);
@@ -96,7 +99,8 @@ export default function SocialKpis() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer ce KPI social ?")) return;
+    const ok = await confirm({ title: "Supprimer ce KPI social ?", destructive: true });
+    if (!ok) return;
     try {
       await api.delete(`/social-kpis/${id}`);
       fetchRows();
@@ -107,6 +111,7 @@ export default function SocialKpis() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaving(true);
     setError("");
     try {
       const payload = {
@@ -127,6 +132,8 @@ export default function SocialKpis() {
       fetchRows();
     } catch (err) {
       setError(err?.response?.data?.error || "Erreur enregistrement KPI social");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -246,12 +253,13 @@ export default function SocialKpis() {
           </table>
         </div>
 
-        {open && createPortal(
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-            <div className="card-solid w-full max-w-2xl p-6">
-              <h2 className="text-xl font-semibold mb-4">
-                {editing ? "Modifier KPI social" : "Nouveau KPI social"}
-              </h2>
+        {open && (
+          <Modal
+            open
+            onClose={() => setOpen(false)}
+            maxWidth="max-w-2xl"
+            title={editing ? "Modifier le KPI social" : "Nouveau KPI social"}
+          >
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -309,21 +317,15 @@ export default function SocialKpis() {
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4">
-                  <button
-                    type="button"
-                    className="btn-ghost border"
-                    onClick={() => setOpen(false)}
-                  >
+                  <Button variant="ghost" onClick={() => setOpen(false)}>
                     Annuler
-                  </button>
-                  <button type="submit" className="btn-primary">
+                  </Button>
+                  <Button type="submit" loading={saving} loadingLabel="Enregistrement…">
                     Enregistrer
-                  </button>
+                  </Button>
                 </div>
               </form>
-            </div>
-          </div>,
-          document.body
+          </Modal>
         )}
       </div>
   );

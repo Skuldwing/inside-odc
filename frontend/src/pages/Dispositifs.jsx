@@ -5,6 +5,7 @@ import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
 import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
+import { useToast, useConfirm, EmptyState } from "../components/ui";
 
 const categories = [
   "formation",
@@ -23,6 +24,8 @@ const categoryLabels = {
 };
 
 export default function Dispositifs() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const devicesApi = api;
 
   const [devices, setDevices] = useState([]);
@@ -93,7 +96,8 @@ export default function Dispositifs() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer ce dispositif ?")) return;
+    const ok = await confirm({ title: "Supprimer ce dispositif ?", destructive: true });
+    if (!ok) return;
 
     try {
       await devicesApi.delete(`/devices/${id}`);
@@ -113,6 +117,10 @@ export default function Dispositifs() {
     );
   });
 
+  const handleAdd = () => {
+    resetForm();
+    setOpen(true);
+  };
   return (
     <AdminPinGate>
       <div className="space-y-6">
@@ -121,10 +129,7 @@ export default function Dispositifs() {
           subtitle="Gérez les programmes et initiatives"
           buttonLabel="Nouveau dispositif"
           buttonIcon={Plus}
-          onAdd={() => {
-            resetForm();
-            setOpen(true);
-          }}
+          onAdd={handleAdd}
         />
 
         {open && (
@@ -232,9 +237,14 @@ export default function Dispositifs() {
         />
 
         {filteredDevices.length === 0 && (
-          <div className="card p-8 text-center text-slate-500">
-            Aucun dispositif enregistré
-          </div>
+          <EmptyState
+            icon={Layers}
+            title="Aucun dispositif enregistré"
+            description="Un dispositif regroupe les activités d'un même programme — c'est ce qui permet de suivre les objectifs par programme sur le tableau de bord."
+            actionLabel="Ajouter un dispositif"
+            actionIcon={Plus}
+            onAction={handleAdd}
+          />
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

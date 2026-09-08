@@ -8,6 +8,7 @@ import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
 import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
+import { useToast, useConfirm } from "../components/ui";
 
 /* ── FormCard ── */
 function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplicate }) {
@@ -91,6 +92,8 @@ function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplic
    Page liste des formulaires
 ══════════════════════════════════════════ */
 export default function Formulaires() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const querySearch = searchParams.get("q") || "";
@@ -137,15 +140,20 @@ export default function Formulaires() {
   }, [forms, search, statusFilter]);
 
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer ce formulaire définitivement ?")) return;
+    const ok = await confirm({
+      title: "Supprimer ce formulaire ?",
+      body: "Les réponses déjà reçues seront supprimées avec lui.",
+      destructive: true,
+    });
+    if (!ok) return;
     try { await api.delete(`/forms/${id}`); await fetchForms(); }
-    catch { alert("Erreur suppression formulaire"); }
+    catch { toast.error("La suppression du formulaire a échoué."); }
   };
 
   const handleCopyPublicLink = async (slug) => {
     const link = `${window.location.origin}/f/${slug}`;
-    try { await navigator.clipboard.writeText(link); alert("Lien copié !"); }
-    catch { alert(link); }
+    try { await navigator.clipboard.writeText(link); toast.success("Lien copié dans le presse-papiers."); }
+    catch { toast.info(link, { title: "Copie impossible — voici le lien" }); }
   };
 
   const handleToggleStatus = async (form) => {
@@ -153,12 +161,12 @@ export default function Formulaires() {
     try {
       await api.patch(`/forms/${form.id}/status`, { status: newStatus });
       setForms(prev => prev.map(f => f.id === form.id ? { ...f, status: newStatus } : f));
-    } catch { alert("Erreur changement statut"); }
+    } catch { toast.error("Le changement de statut a échoué."); }
   };
 
   const handleDuplicate = async (id) => {
     try { await api.post(`/forms/${id}/duplicate`); await fetchForms(); }
-    catch { alert("Erreur duplication formulaire"); }
+    catch { toast.error("La duplication du formulaire a échoué."); }
   };
 
   return (

@@ -30,6 +30,7 @@ import {
 import api from "../api";
 import AdminModal from "../components/admin/AdminModal";
 import { projectStatusMeta } from "./Mbootay";
+import { useToast, useConfirm, Button } from "../components/ui";
 
 const TASK_COLUMNS = [
   { key: "a_faire", label: "À faire", dot: "bg-slate-400" },
@@ -62,6 +63,8 @@ function toDateOnly(value) {
 
 export default function MbootayProjet() {
   const { id } = useParams();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -165,23 +168,29 @@ export default function MbootayProjet() {
       }
       setTaskModalOpen(false);
       setEditingTask(null);
+      toast.success(editingTask ? "Tâche mise à jour." : "Tâche créée.");
       await fetchAll();
     } catch (err) {
       console.error("Erreur enregistrement tâche", err);
-      alert(err.response?.data?.error || "Erreur lors de l'enregistrement");
+      toast.error(err.response?.data?.error || "Erreur lors de l'enregistrement de la tâche.");
     } finally {
       setSavingTask(false);
     }
   };
 
   const handleDeleteTask = async (task) => {
-    if (!window.confirm(`Supprimer la tâche "${task.title}" ?`)) return;
+    const ok = await confirm({
+      title: `Supprimer « ${task.title} » ?`,
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/mbootay/tasks/${task.id}`);
+      toast.success("Tâche supprimée.");
       await fetchAll();
     } catch (err) {
       console.error("Erreur suppression tâche", err);
-      alert("Suppression impossible");
+      toast.error("Suppression impossible.");
     }
   };
 
@@ -199,7 +208,7 @@ export default function MbootayProjet() {
     } catch (err) {
       console.error("Erreur déplacement tâche", err);
       setTasks(previous);
-      alert("Déplacement impossible");
+      toast.error("Le déplacement n'a pas pu être enregistré.");
     }
   };
 
@@ -220,10 +229,11 @@ export default function MbootayProjet() {
     try {
       await api.put(`/mbootay/projects/${id}/members`, { user_ids: memberSelection });
       setMembersOpen(false);
+      toast.success("Membres du projet mis à jour.");
       await fetchAll();
     } catch (err) {
       console.error("Erreur enregistrement membres", err);
-      alert("Enregistrement impossible");
+      toast.error("Enregistrement impossible.");
     } finally {
       setSavingMembers(false);
     }

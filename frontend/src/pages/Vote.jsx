@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Award, Settings, Play, Trash2, Users, Calendar, Loader2, BarChart3, Copy } from "lucide-react";
 import api from "../api";
+import { useToast, useConfirm } from "../components/ui";
 
 const STATUS_BADGE = {
   draft:  { label: "Brouillon",  cls: "bg-slate-100 text-slate-600" },
@@ -10,6 +11,8 @@ const STATUS_BADGE = {
 };
 
 export default function Vote() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
@@ -46,7 +49,12 @@ export default function Vote() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer cette session et toutes ses données ?")) return;
+    const ok = await confirm({
+      title: "Supprimer cette session de vote ?",
+      body: "Les projets, jurés, invités et votes enregistrés seront supprimés avec elle.",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/vote/sessions/${id}`);
       setSessions(s => s.filter(x => x.id !== id));

@@ -19,6 +19,7 @@ import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
 import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
+import { useToast, useConfirm, EmptyState } from "../components/ui";
 
 const PIPELINE_STAGES = [
   { key: "prospect", label: "Prospect", dot: "bg-slate-400" },
@@ -28,6 +29,8 @@ const PIPELINE_STAGES = [
 ];
 
 export default function Partenaires() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [partners, setPartners] = useState([]);
@@ -133,7 +136,12 @@ export default function Partenaires() {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer ce partenaire ?")) return;
+    const ok = await confirm({
+      title: "Supprimer ce partenaire ?",
+      body: "Les activités déjà enregistrées pour ce partenaire ne seront pas supprimées.",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/partners/${id}`);
       fetchPartners();
@@ -173,6 +181,10 @@ export default function Partenaires() {
     );
   });
 
+  const handleAdd = () => {
+    resetForm();
+    setOpen(true);
+  };
   return (
     <AdminPinGate>
       <div className="space-y-6">
@@ -181,10 +193,7 @@ export default function Partenaires() {
           subtitle="Gestion des partenaires Orange Digital Center"
           buttonLabel="Nouveau partenaire"
           buttonIcon={Plus}
-          onAdd={() => {
-            resetForm();
-            setOpen(true);
-          }}
+          onAdd={handleAdd}
         />
 
         <div className="inline-flex rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -363,9 +372,18 @@ export default function Partenaires() {
         />
 
         {filteredPartners.length === 0 && (
-          <div className="card p-8 text-center text-slate-500">
-            Aucun partenaire enregistré
-          </div>
+          <EmptyState
+            icon={Building2}
+            title={search ? "Aucun partenaire ne correspond à cette recherche" : "Aucun partenaire enregistré"}
+            description={
+              search
+                ? "Essayez un autre nom, ou effacez la recherche pour voir tous les partenaires."
+                : "Les partenaires que vous enregistrez ici pourront créer leurs activités et importer leurs listes de présences."
+            }
+            actionLabel={search ? "Effacer la recherche" : "Ajouter un partenaire"}
+            actionIcon={search ? undefined : Plus}
+            onAction={search ? () => setSearch("") : handleAdd}
+          />
         )}
 
         {viewMode === "kanban" && filteredPartners.length > 0 && (
