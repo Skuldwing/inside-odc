@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Award, Settings, Play, Trash2, Users, Calendar, Loader2, BarChart3, Copy } from "lucide-react";
 import api from "../api";
-import { useToast, useConfirm } from "../components/ui";
+import { useToast, useConfirm, EmptyState } from "../components/ui";
 
 const STATUS_BADGE = {
   draft:  { label: "Brouillon",  cls: "bg-slate-100 text-slate-600" },
@@ -142,11 +142,14 @@ export default function Vote() {
           <Loader2 className="w-8 h-8 animate-spin text-orange-400" />
         </div>
       ) : sessions.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
-          <Award className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">Aucune session de vote</p>
-          <p className="text-sm mt-1">Créez une session pour commencer</p>
-        </div>
+        <EmptyState
+          icon={Award}
+          title="Aucune session de vote"
+          description="Une session regroupe des projets, un jury et des critères de notation, pour dérouler une soutenance de bout en bout."
+          actionLabel="Créer une session"
+          actionIcon={Plus}
+          onAction={() => setShowNew(true)}
+        />
       ) : (
         <div className="space-y-3">
           {sessions.map(s => {

@@ -26,7 +26,7 @@ function OnlineDot({ online }) {
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
-import { useToast, useConfirm } from "../components/ui";
+import { useToast, useConfirm, EmptyState } from "../components/ui";
 
 const ROLES = [
   { value: "admin",   label: "Administrateur",  cls: "bg-orange-100 text-orange-700 border-orange-200" },
@@ -532,8 +532,24 @@ export default function Utilisateurs() {
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                    Aucun utilisateur trouvé.
+                  <td colSpan={6}>
+                    <EmptyState
+                      bare
+                      icon={UsersRound}
+                      title={users.length === 0 ? "Aucun utilisateur" : "Aucun utilisateur ne correspond aux filtres"}
+                      description={
+                        users.length === 0
+                          ? "Invitez un collègue : il recevra un lien pour définir son mot de passe."
+                          : "Modifiez la recherche, le rôle ou le statut pour élargir les résultats."
+                      }
+                      actionLabel={users.length === 0 ? "Nouvel utilisateur" : "Tout réinitialiser"}
+                      actionIcon={users.length === 0 ? Plus : undefined}
+                      onAction={
+                        users.length === 0
+                          ? openCreate
+                          : () => { setSearch(""); setRoleFilter(""); setStatusFilter(""); setOnlineFilter(false); }
+                      }
+                    />
                   </td>
                 </tr>
               ) : filteredUsers.map(u => {

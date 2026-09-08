@@ -528,7 +528,9 @@ export default function MbootayProjet() {
             </p>
             <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 max-h-72 overflow-y-auto">
               {team.length === 0 && (
-                <p className="px-4 py-3 text-sm text-slate-500">Aucun membre disponible</p>
+                <p className="px-4 py-3 text-sm text-slate-500">
+                  Aucun membre disponible — accordez l'accès Mbootay depuis la page Utilisateurs.
+                </p>
               )}
               {team.map((u) => (
                 <label

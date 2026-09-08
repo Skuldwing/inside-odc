@@ -1,16 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Calendar, Megaphone } from "lucide-react";
 import Activities from "./Activities";
 import SocialKpis from "./SocialKpis";
 import { useAuth } from "../auth/useAuth";
 
+const TABS = [
+  { key: "activities", label: "Activités", icon: Calendar },
+  { key: "social", label: "KPIs Social", icon: Megaphone },
+];
+
+/**
+ * Cette page empilait un bandeau « Flux opérationnels » et deux grandes cartes
+ * de bascule au-dessus de la liste des activités — alors que la barre latérale
+ * fait déjà cette navigation. Sur mobile, il fallait traverser 1 180 px avant
+ * d'atteindre une seule activité.
+ *
+ * Les deux cartes deviennent deux onglets, et le bandeau disparaît : environ
+ * 400 px récupérés au-dessus de la ligne de flottaison.
+ */
 export default function OperationsHub() {
   const { role } = useAuth();
   const isAdmin = role === "admin";
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState("activities");
   const querySearch = searchParams.get("q") || "";
+  const tabRefs = useRef({});
 
   useEffect(() => {
     if (searchParams.get("action") === "import") {
@@ -22,60 +37,56 @@ export default function OperationsHub() {
     return <Activities initialSearchQuery={querySearch} />;
   }
 
-  return (
-    <div className="space-y-6">
-      <section className="surface-glass p-5 lg:p-6">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-          Opérations
-        </p>
-        <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
-          Flux opérationnels
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Pilotage des activités et suivi social.
-        </p>
-      </section>
+  /* Navigation clavier attendue dans un jeu d'onglets : les fleches deplacent
+     la selection, Home/End vont aux extremites. */
+  const onKeyDown = (e) => {
+    const i = TABS.findIndex((t) => t.key === mode);
+    let next = null;
+    if (e.key === "ArrowRight") next = (i + 1) % TABS.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + TABS.length) % TABS.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = TABS.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    setMode(TABS[next].key);
+    tabRefs.current[TABS[next].key]?.focus();
+  };
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <ModeCard
-          active={mode === "activities"}
-          title="Activités"
-          subtitle="Gestion complète des activités"
-          icon={Calendar}
-          onClick={() => setMode("activities")}
-        />
-        <ModeCard
-          active={mode === "social"}
-          title="KPIs Social"
-          subtitle="Saisie mensuelle des réseaux sociaux"
-          icon={Megaphone}
-          onClick={() => setMode("social")}
-        />
-      </section>
+  return (
+    <div className="space-y-5">
+      <div
+        role="tablist"
+        aria-label="Flux opérationnels"
+        onKeyDown={onKeyDown}
+        className="inline-flex gap-1 rounded-xl border border-slate-200 bg-white p-1"
+      >
+        {TABS.map((tab) => {
+          const active = mode === tab.key;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              ref={(el) => { tabRefs.current[tab.key] = el; }}
+              role="tab"
+              type="button"
+              aria-selected={active}
+              tabIndex={active ? 0 : -1}
+              onClick={() => setMode(tab.key)}
+              className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
+                active
+                  ? "bg-orange-500 text-white shadow-sm shadow-orange-200"
+                  : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
 
       {mode === "activities" && <Activities initialSearchQuery={querySearch} />}
       {mode === "social" && <SocialKpis />}
     </div>
-  );
-}
-
-function ModeCard({ active, title, subtitle, icon: Icon, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`card p-5 text-left transition ${
-        active ? "ring-2 ring-orange-400 bg-orange-50" : "hover:bg-slate-50"
-      }`}
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center">
-          <Icon className="w-5 h-5" />
-        </div>
-        <div>
-          <p className="font-semibold text-slate-900">{title}</p>
-          <p className="text-sm text-slate-500">{subtitle}</p>
-        </div>
-      </div>
-    </button>
   );
 }

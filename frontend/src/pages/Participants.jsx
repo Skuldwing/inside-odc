@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState, useRef } from "react";
 import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import api from "../api";
+import { EmptyState, DensityToggle, useDensity } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
 function escapeCsvCell(value) {
@@ -11,6 +12,7 @@ function escapeCsvCell(value) {
 }
 
 export default function Participants() {
+  const { isCompact } = useDensity();
   const { isViewer } = useAuth();
   const [searchParams] = useSearchParams();
 
@@ -124,9 +126,10 @@ export default function Participants() {
       </section>
 
       <section className="card p-4 lg:p-5">
-        <div className="flex items-center gap-2 text-slate-700 mb-4">
-          <Filter className="h-4 w-4 text-orange-500" />
+        <div className="mb-4 flex flex-wrap items-center gap-2 text-slate-700">
+          <Filter className="h-4 w-4 text-orange-500" aria-hidden="true" />
           <h2 className="text-sm font-semibold uppercase tracking-wide">Recherche et filtres</h2>
+          <DensityToggle className="ml-auto" />
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="relative">
@@ -175,18 +178,22 @@ export default function Participants() {
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={12} className="text-center p-8 text-slate-500">
-                  <Users className="mx-auto mb-2 text-slate-300" />
-                  Aucun participant trouvé
+                <td colSpan={12}>
+                  <EmptyState
+                    bare
+                    icon={Users}
+                    title="Aucun participant trouvé"
+                    description="Les participants apparaissent ici dès qu'une liste de présences est importée sur une activité."
+                  />
                 </td>
               </tr>
             ) : (
               rows.map((p, i) => (
                 <tr key={`${p.id}_${p.activity_id ?? i}`} className="table-row">
-                  <td className="p-3 font-medium">{p.nom || "-"}</td>
-                  <td className="p-3">{p.prenom || "-"}</td>
-                  <td className="p-3">{p.structure || "-"}</td>
-                  <td className="p-3">
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"} font-medium`}>{p.nom || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.prenom || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.structure || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>
                     <span className={`badge ${
                       p.genre === "H"
                         ? "bg-blue-100 border-blue-200 text-blue-700"
@@ -195,14 +202,14 @@ export default function Participants() {
                       {p.genre || "-"}
                     </span>
                   </td>
-                  <td className="p-3">{p.age_range || "-"}</td>
-                  <td className="p-3">{p.email || "-"}</td>
-                  <td className="p-3">{p.telephone || "-"}</td>
-                  <td className="p-3">{p.statut || "-"}</td>
-                  <td className="p-3">{p.activite || "-"}</td>
-                  <td className="p-3">{p.date_activite || "-"}</td>
-                  <td className="p-3">{p.partenaire || "-"}</td>
-                  <td className="p-3">{p.dispositif || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.age_range || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.email || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.telephone || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.statut || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.activite || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.date_activite || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.partenaire || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.dispositif || "-"}</td>
                 </tr>
               ))
             )}

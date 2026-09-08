@@ -72,7 +72,7 @@ export default function FormSubmissionsPanel({
       ) : submissions.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
           <Inbox className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-          <p className="text-sm">Aucune reponse pour l&apos;instant.</p>
+          <p className="text-sm">Aucune réponse pour l&apos;instant.</p>
         </div>
       ) : (
         <>

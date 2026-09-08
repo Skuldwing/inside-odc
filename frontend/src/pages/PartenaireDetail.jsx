@@ -338,7 +338,10 @@ export default function PartenaireDetail() {
             Historique
           </h2>
           {timeline.length === 0 ? (
-            <p className="text-sm text-slate-500">Aucun événement pour ce partenaire pour l'instant.</p>
+            <p className="text-sm text-slate-500">
+              Rien pour l'instant. Les activités, notes, tâches et changements d'étape
+              de ce partenaire s'afficheront ici au fil de l'eau.
+            </p>
           ) : (
             <div>
               {timeline.map((event, i) => (
@@ -395,7 +398,9 @@ export default function PartenaireDetail() {
                 </div>
               ))}
               {pendingTasks.length === 0 && (
-                <p className="text-xs text-slate-500">Aucune tâche en cours.</p>
+                <p className="text-xs text-slate-500">
+              Aucune tâche en cours — ajoutez-en une pour ne pas perdre le fil du suivi.
+            </p>
               )}
               {doneTasks.length > 0 && (
                 <details className="pt-1">
@@ -454,7 +459,11 @@ export default function PartenaireDetail() {
                   </p>
                 </div>
               ))}
-              {notes.length === 0 && <p className="text-xs text-slate-500">Aucune note pour l'instant.</p>}
+              {notes.length === 0 && (
+              <p className="text-xs text-slate-500">
+                Aucune note — consignez ici ce qui s'est dit lors d'un échange.
+              </p>
+            )}
             </div>
           </div>
         </div>

@@ -13,6 +13,9 @@ import {
   FileDown,
   FileText,
   Filter,
+  ChevronDown,
+  Info,
+  X,
   SlidersHorizontal,
 } from "lucide-react";
 import {
@@ -75,6 +78,7 @@ export default function Dashboard() {
   const [geoPoints, setGeoPoints] = useState([]);
   const [geoBoundary, setGeoBoundary] = useState(null);
   const kpiRef = useRef(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({
     year: currentYear,
     month: "",
@@ -84,6 +88,7 @@ export default function Dashboard() {
     date_from: "",
     date_to: "",
   });
+
 
   useEffect(() => {
     Promise.all([api.get("/partners"), api.get("/devices")])
@@ -138,6 +143,58 @@ export default function Dashboard() {
     role === "partner" && user?.partner_id
       ? partners.filter((p) => p.id === user.partner_id)
       : partners;
+
+  /* Les filtres actifs sont resumes en pastilles au-dessus du panneau replie :
+     on doit pouvoir lire ce qu'on regarde sans deplier quoi que ce soit.
+     L'annee n'y figure pas — c'est la portee de base, affichee a part. */
+  const activeFilters = [];
+  if (filters.month) {
+    activeFilters.push({
+      key: "month",
+      label: "Mois",
+      value: format(new Date(2000, Number(filters.month) - 1, 1), "MMMM", { locale: fr }),
+    });
+  }
+  if (filters.partner_id) {
+    activeFilters.push({
+      key: "partner_id",
+      label: "Partenaire",
+      value: partnerOptions.find((p) => String(p.id) === String(filters.partner_id))?.name || "—",
+    });
+  }
+  if (filters.device_id) {
+    activeFilters.push({
+      key: "device_id",
+      label: "Dispositif",
+      value: devices.find((d) => String(d.id) === String(filters.device_id))?.name || "—",
+    });
+  }
+  if (filters.gender) {
+    activeFilters.push({
+      key: "gender",
+      label: "Genre",
+      value: filters.gender === "H" ? "Hommes" : "Femmes",
+    });
+  }
+  if (filters.date_from) {
+    activeFilters.push({ key: "date_from", label: "Depuis le", value: filters.date_from });
+  }
+  if (filters.date_to) {
+    activeFilters.push({ key: "date_to", label: "Jusqu'au", value: filters.date_to });
+  }
+
+  const clearFilter = (key) => setFilters((prev) => ({ ...prev, [key]: "" }));
+
+  const resetFilters = () =>
+    setFilters({
+      year: filters.year,
+      month: "",
+      partner_id: "",
+      device_id: "",
+      gender: "",
+      date_from: "",
+      date_to: "",
+    });
 
   const handleExport = async () => {
     try {
@@ -299,13 +356,77 @@ export default function Dashboard() {
       </section>
 
       <section className="card p-4 lg:p-5">
-        <div className="flex items-center gap-2 text-slate-700">
-          <Filter className="h-4 w-4 text-orange-500" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide">
-            Filtres analytiques
-          </h2>
+        {/* Le panneau de filtres occupait tout l'espace avant le moindre chiffre.
+            Il est desormais replie par defaut ; la ligne de filtres actifs reste
+            visible, pour qu'on sache toujours ce qu'on est en train de regarder. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            className="inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+          >
+            <Filter className="h-4 w-4 text-orange-500" aria-hidden="true" />
+            Filtres
+            <ChevronDown
+              className={`h-4 w-4 text-slate-500 transition-transform ${filtersOpen ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+
+          <span className="badge border-slate-200 bg-slate-100 text-slate-700">
+            {filters.year}
+          </span>
+
+          {activeFilters.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => clearFilter(f.key)}
+              title={`Retirer le filtre « ${f.label} »`}
+              className="badge border-orange-200 bg-orange-50 text-orange-700 transition hover:bg-orange-100"
+            >
+              {f.label} : {f.value}
+              <X className="ml-1.5 h-3 w-3" aria-hidden="true" />
+            </button>
+          ))}
+
+          {activeFilters.length > 0 && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs font-medium text-slate-500 underline underline-offset-2 transition hover:text-slate-900"
+            >
+              Tout réinitialiser
+            </button>
+          )}
+
+          <div className="ml-auto flex flex-wrap gap-2">
+            {isAdmin && (
+              <button className="btn-ghost border border-slate-200 bg-white" onClick={handleExport} disabled={exporting}>
+                <Download className="w-4 h-4" />
+                {exporting ? "Export…" : "Exporter objectifs"}
+              </button>
+            )}
+            <button
+              className="btn-ghost border border-slate-200 bg-white"
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+            >
+              <FileDown className="w-4 h-4" />
+              {exportingPdf ? "PDF…" : "Exporter KPIs"}
+            </button>
+            <button className="btn-primary" onClick={() => setShowRapport(true)} disabled={!summary}>
+              <FileText className="w-4 h-4" />
+              Rapport
+            </button>
+          </div>
         </div>
-        <div className={`mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 ${isCoach ? "xl:grid-cols-3" : "xl:grid-cols-5"}`}>
+
+        <div
+          hidden={!filtersOpen}
+          className={`mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 ${isCoach ? "xl:grid-cols-3" : "xl:grid-cols-5"}`}
+        >
           <div>
             <label className="text-xs text-slate-500">Année</label>
             <select
@@ -409,35 +530,11 @@ export default function Dashboard() {
             />
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-3">
-          {isAdmin && (
-            <button className="btn-primary" onClick={handleExport} disabled={exporting}>
-              <Download className="w-4 h-4" />
-              {exporting ? "Export..." : "Exporter objectifs"}
-            </button>
-          )}
-          <button
-            className="btn-ghost border border-slate-200 bg-white"
-            onClick={handleExportPdf}
-            disabled={exportingPdf}
-          >
-            <FileDown className="w-4 h-4" />
-            {exportingPdf ? "PDF..." : "Exporter KPIs"}
-          </button>
-          <button
-            className="btn-primary"
-            onClick={() => setShowRapport(true)}
-            disabled={!summary}
-          >
-            <FileText className="w-4 h-4" />
-            Rapport
-          </button>
-        </div>
       </section>
 
       <section
         ref={kpiRef}
-        className={`grid grid-cols-1 gap-4 ${isAdmin ? "md:grid-cols-2 xl:grid-cols-5" : "md:grid-cols-4"}`}
+        className={`grid grid-cols-2 gap-3 sm:gap-4 ${isAdmin ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-4"}`}
       >
         <HeroKpiCard
           label="Bénéficiaires enregistrés"
@@ -600,9 +697,7 @@ function TrendsLineChart({ data }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">Tendances mensuelles</h3>
       {formatted.length === 0 ? (
-        <div className="h-[280px] flex items-center justify-center text-slate-500">
-          Aucune donnée
-        </div>
+        <ChartEmpty />
       ) : (
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={formatted}>
@@ -732,14 +827,24 @@ function BeneficiariesByPartnerTable({ data }) {
   );
 }
 
+/* Une carte de graphique vide reservait 280 px pour afficher « Aucune donnée ».
+   Elle se retracte desormais a la hauteur de son message : sur mobile, le
+   tableau de bord passait de 5,6 ecrans de defilement a nettement moins. */
+function ChartEmpty({ label = "Aucune donnée sur cette période" }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-dashed border-slate-200 px-4 py-5 text-sm text-slate-500">
+      <Info className="h-4 w-4 flex-shrink-0 text-slate-400" aria-hidden="true" />
+      {label}
+    </div>
+  );
+}
+
 function ActivityBarChart({ data, title }) {
   return (
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
-        <div className="h-[280px] flex items-center justify-center text-slate-500">
-          Aucune donnée
-        </div>
+        <ChartEmpty />
       ) : (
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
@@ -764,9 +869,7 @@ function BeneficiaryPieChart({ data, title }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
-        <div className="h-[280px] flex items-center justify-center text-slate-500">
-          Aucune donnée
-        </div>
+        <ChartEmpty />
       ) : (
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
@@ -810,7 +913,7 @@ function RecentActivitiesCard({ data }) {
           </div>
         ))}
         {data.length === 0 && (
-          <p className="text-center text-slate-500 py-8">Aucune activité récente</p>
+          <p className="py-8 text-center text-sm text-slate-500">Aucune activité sur la période sélectionnée</p>
         )}
       </div>
     </div>

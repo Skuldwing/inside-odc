@@ -28,7 +28,7 @@ import {
   Send, Eye, X, Loader2, Pencil, Users,
 } from "lucide-react";
 import api from "../api";
-import { useToast, useConfirm } from "../components/ui";
+import { useToast, useConfirm, EmptyState } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
 /* ── TextStyle étendu : taille + famille de police ─────────── */
@@ -1059,10 +1059,14 @@ export default function Campagnes() {
 
           {/* Liste des campagnes */}
           {campagnes.length === 0 ? (
-            <div className="card p-12 text-center">
-              <Mail className="w-10 h-10 mx-auto mb-3 text-slate-200" />
-              <p className="text-sm text-slate-500">Aucune campagne. Créez votre première campagne emailing.</p>
-            </div>
+            <EmptyState
+              icon={Mail}
+              title="Aucune campagne"
+              description="Une campagne vous permet d'écrire un email et de l'envoyer à un groupe de partenaires ou de participants."
+              actionLabel="Créer une campagne"
+              actionIcon={Plus}
+              onAction={() => setEditingCampaign({})}
+            />
           ) : (
             <div className="card overflow-x-auto">
               <table className="table">

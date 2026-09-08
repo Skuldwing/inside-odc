@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { EmptyState } from "../components/ui";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -249,8 +250,13 @@ export default function AuditLogs() {
             <tbody>
               {rows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
-                    Aucun journal trouvé
+                  <td colSpan={7}>
+                    <EmptyState
+                      bare
+                      icon={ShieldCheck}
+                      title="Aucun journal sur cette période"
+                      description="Les créations, modifications et suppressions apparaissent ici au fil de l'activité de la plateforme."
+                    />
                   </td>
                 </tr>
               )}
