@@ -4,7 +4,12 @@ import App from "./App";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/useAuth";
 import TopProgressBar from "./components/TopProgressBar";
-import { ToastProvider, ConfirmProvider } from "./components/ui";
+import {
+  ToastProvider,
+  ConfirmProvider,
+  ServiceWorkerUpdate,
+  OfflineBanner,
+} from "./components/ui";
 import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
@@ -17,6 +22,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <ConfirmProvider>
           <AuthProvider>
             <TopProgressBar />
+            <OfflineBanner />
+            <ServiceWorkerUpdate />
             <App />
           </AuthProvider>
         </ConfirmProvider>

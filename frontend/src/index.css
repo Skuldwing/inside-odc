@@ -680,3 +680,19 @@ body {
     min-width: 2.75rem;
   }
 }
+
+/* ===== Bandeau hors ligne =====
+   Le bandeau est fixe en haut de l'ecran ; sans decalage il recouvrirait
+   l'en-tete collant, dont les boutons deviendraient inaccessibles. */
+:root[data-offline="true"] {
+  --offline-bar: 2.25rem;
+}
+:root[data-offline="true"] body {
+  padding-top: var(--offline-bar);
+}
+:root[data-offline="true"] header.sticky {
+  top: var(--offline-bar);
+}
+:root[data-offline="true"] aside {
+  padding-top: var(--offline-bar);
+}
