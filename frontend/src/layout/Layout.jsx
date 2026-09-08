@@ -11,11 +11,31 @@ export default function Layout() {
   );
   const location = useLocation();
 
-  // La fiche projet Mbootay est une sous-route : on garde "Mbootay" en titre
-  // plutôt que le slug brut "mbootay/12".
-  const currentPageName = location.pathname.startsWith("/mbootay")
-    ? "Mbootay"
-    : location.pathname.replace("/", "") || "Dashboard";
+  /* Le titre de l'en-tete etait derive du chemin d'URL : une application en
+     francais affichait donc "Activities" et "Dashboard". Les libelles sont
+     desormais explicites, et les sous-routes retombent sur leur section. */
+  const PAGE_TITLES = [
+    ["/mbootay", "Mbootay"],
+    ["/activities", "Activités"],
+    ["/participants", "Participants"],
+    ["/partenaires", "Partenaires"],
+    ["/dispositifs", "Dispositifs"],
+    ["/campagnes", "Campagnes"],
+    ["/utilisateurs", "Utilisateurs"],
+    ["/formulaires", "Formulaires"],
+    ["/vote", "Vote / Jury"],
+    ["/fiabilite", "Fiabilité"],
+    ["/audit", "Journaux d'audit"],
+    ["/social-dashboard", "Radar Social"],
+    ["/assistant-ia", "Pobarr"],
+    ["/rapport-mensuel", "Rapport mensuel"],
+  ];
+
+  const currentPageName =
+    location.pathname === "/"
+      ? "Tableau de bord"
+      : PAGE_TITLES.find(([prefix]) => location.pathname.startsWith(prefix))?.[1] ||
+        location.pathname.replace("/", "");
 
   const toggleCollapsed = () => {
     const next = !collapsed;

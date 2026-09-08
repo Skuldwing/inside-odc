@@ -10,7 +10,7 @@ const categories = [
   "formation",
   "hackathon",
   "programme",
-  "evenement",
+  "événement",
   "autre",
 ];
 

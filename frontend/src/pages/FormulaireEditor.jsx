@@ -42,7 +42,7 @@ function TabBar({ active, onChange, submissionsCount }) {
           <Icon className="w-3.5 h-3.5" />
           {label}
           {id === "reponses" && submissionsCount > 0 && (
-            <span className="rounded-full bg-orange-100 text-orange-700 text-[10px] font-semibold px-1.5 py-0.5 leading-none">
+            <span className="rounded-full bg-orange-100 text-orange-700 text-xs font-semibold px-1.5 py-0.5 leading-none">
               {submissionsCount}
             </span>
           )}
@@ -81,10 +81,10 @@ function FieldCard({ field, idx, total, isSelected, canRemove, isDragging,
       <span className="text-sm leading-none w-4 text-center flex-shrink-0">{ft?.icon || "•"}</span>
       <div className="flex-1 min-w-0">
         <p className={`text-xs font-semibold truncate leading-tight ${isSelected ? "text-orange-900" : "text-slate-700"}`}>
-          {field.label || <em className="not-italic text-slate-400">Sans titre</em>}
+          {field.label || <em className="not-italic text-slate-500">Sans titre</em>}
           {field.required && <span className="text-red-400 ml-0.5 font-normal">*</span>}
         </p>
-        <p className="text-[10px] text-slate-400 leading-tight">{ft?.label || field.type}</p>
+        <p className="text-xs text-slate-500 leading-tight">{ft?.label || field.type}</p>
       </div>
       <div className={`flex items-center gap-0.5 flex-shrink-0 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
         <button type="button" title="Monter" disabled={idx === 0}
@@ -99,12 +99,12 @@ function FieldCard({ field, idx, total, isSelected, canRemove, isDragging,
         </button>
         <button type="button" title="Dupliquer"
           onClick={e => { e.stopPropagation(); onDuplicate(); }}
-          className="p-0.5 rounded hover:bg-slate-200 text-slate-400 transition-colors">
+          className="p-0.5 rounded hover:bg-slate-200 text-slate-500 transition-colors">
           <Copy className="w-2.5 h-2.5" />
         </button>
         <button type="button" title="Supprimer" disabled={!canRemove}
           onClick={e => { e.stopPropagation(); onRemove(); }}
-          className="p-0.5 rounded hover:bg-red-100 text-slate-400 hover:text-red-500 disabled:opacity-20 transition-colors">
+          className="p-0.5 rounded hover:bg-red-100 text-slate-500 hover:text-red-500 disabled:opacity-20 transition-colors">
           <Trash2 className="w-2.5 h-2.5" />
         </button>
       </div>
@@ -123,7 +123,7 @@ function TypePickerPopover({ onAdd, onClose }) {
     <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-y-auto max-h-80 z-40 p-2">
       {Object.entries(groups).map(([group, types]) => (
         <div key={group} className="mb-1">
-          <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-2 py-1">{group}</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500 px-2 py-1">{group}</p>
           {types.map(ft => (
             <button key={ft.value} type="button"
               onClick={() => { onAdd(ft.value); onClose(); }}
@@ -435,7 +435,7 @@ export default function FormulaireEditor() {
   /* ── loading ── */
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center text-slate-400">
+      <div className="min-h-[60vh] flex items-center justify-center text-slate-500">
         Chargement du formulaire…
       </div>
     );
@@ -454,12 +454,12 @@ export default function FormulaireEditor() {
         {/* Inline editable title */}
         <div className="flex-1 min-w-0">
           <input
-            className="font-semibold text-slate-900 text-base bg-transparent border-0 outline-none w-full placeholder:text-slate-400 hover:bg-slate-50 focus:bg-white rounded px-1 py-0.5 focus:ring-1 focus:ring-orange-300 transition-all"
+            className="font-semibold text-slate-900 text-base bg-transparent border-0 outline-none w-full placeholder:text-slate-500 hover:bg-slate-50 focus:bg-white rounded px-1 py-0.5 focus:ring-1 focus:ring-orange-300 transition-all"
             placeholder="Titre du formulaire…"
             value={editor.title}
             onChange={e => setEditor(prev => ({ ...prev, title: e.target.value }))}
           />
-          {editor.slug && <p className="text-[11px] text-slate-400 font-mono px-1">/f/{editor.slug}</p>}
+          {editor.slug && <p className="text-xs text-slate-500 font-mono px-1">/f/{editor.slug}</p>}
         </div>
 
         {/* Status chip */}
@@ -486,7 +486,7 @@ export default function FormulaireEditor() {
 
         {/* Draft save indicator */}
         {!editor.id && lastDraftSavedAt && (
-          <span className="text-[11px] text-slate-400 hidden lg:inline flex-shrink-0">
+          <span className="text-xs text-slate-500 hidden lg:inline flex-shrink-0">
             Sauvegardé {new Date(lastDraftSavedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
           </span>
         )}
@@ -527,7 +527,7 @@ export default function FormulaireEditor() {
             {/* Description */}
             <div className="sm:col-span-2 space-y-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-1">Description (introduction)</label>
+                <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block mb-1">Description (introduction)</label>
                 <RichTextEditor
                   value={editor.description}
                   onChange={val => setEditor(prev => ({ ...prev, description: val }))}
@@ -537,7 +537,7 @@ export default function FormulaireEditor() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Texte du bouton d'envoi</label>
+                  <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Texte du bouton d'envoi</label>
                   <input
                     className="input mt-1 text-sm"
                     placeholder="Envoyer"
@@ -546,7 +546,7 @@ export default function FormulaireEditor() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-wide text-slate-400 block mb-1">Texte de fin (après envoi)</label>
+                  <label className="text-xs font-bold uppercase tracking-wide text-slate-500 block mb-1">Texte de fin (après envoi)</label>
                   <RichTextEditor
                     value={editor.settings?.success_message || ""}
                     onChange={val => setEditor(prev => ({ ...prev, settings: { ...prev.settings, success_message: val } }))}
@@ -620,7 +620,7 @@ export default function FormulaireEditor() {
                     </button>
                   ))}
                   <button type="button" onClick={addPage} title="Nouvelle page"
-                    className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-orange-600 transition-colors ml-auto">
+                    className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-orange-600 transition-colors ml-auto">
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -630,7 +630,7 @@ export default function FormulaireEditor() {
                   {activePageFields.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <Layers className="w-7 h-7 text-slate-200 mb-2" />
-                      <p className="text-xs text-slate-400">Aucun champ sur cette page</p>
+                      <p className="text-xs text-slate-500">Aucun champ sur cette page</p>
                     </div>
                   ) : (
                     editor.fields
@@ -677,7 +677,7 @@ export default function FormulaireEditor() {
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Ajouter un champ
-                      <ChevronDown className="w-3 h-3 ml-auto text-slate-400" />
+                      <ChevronDown className="w-3 h-3 ml-auto text-slate-500" />
                     </button>
                   </div>
                 </div>
@@ -709,7 +709,7 @@ export default function FormulaireEditor() {
                     </div>
                   </>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-slate-400">
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-slate-500">
                     <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
                       <CheckSquare className="w-7 h-7 text-slate-300" />
                     </div>
@@ -752,7 +752,7 @@ export default function FormulaireEditor() {
                     onDeleteSubmission={handleDeleteSubmission}
                   />
                 ) : (
-                  <div className="text-center py-12 text-slate-400">
+                  <div className="text-center py-12 text-slate-500">
                     <BarChart3 className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                     <p className="text-sm">Sauvegardez d&apos;abord le formulaire pour voir les réponses.</p>
                   </div>

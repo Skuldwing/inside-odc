@@ -44,7 +44,7 @@ function TimelineEvent({ event }) {
           <div className="w-px flex-1 bg-slate-200" />
         </div>
         <div className="pb-5 min-w-0">
-          <p className="text-xs text-slate-400">{date}</p>
+          <p className="text-xs text-slate-500">{date}</p>
           <p className="text-sm text-slate-800">
             Activité <span className="font-medium">{event.data.title}</span>
             {score != null && (
@@ -66,7 +66,7 @@ function TimelineEvent({ event }) {
           <div className="w-px flex-1 bg-slate-200" />
         </div>
         <div className="pb-5 min-w-0">
-          <p className="text-xs text-slate-400">{date}</p>
+          <p className="text-xs text-slate-500">{date}</p>
           <p className="text-sm text-slate-800">
             Note{event.data.author_name ? ` de ${event.data.author_name}` : ""} :{" "}
             <span className="text-slate-600">{event.data.content}</span>
@@ -84,7 +84,7 @@ function TimelineEvent({ event }) {
           <div className="w-px flex-1 bg-slate-200" />
         </div>
         <div className="pb-5 min-w-0">
-          <p className="text-xs text-slate-400">{date}</p>
+          <p className="text-xs text-slate-500">{date}</p>
           <p className="text-sm text-slate-800">
             Tâche créée : <span className="font-medium">{event.data.title}</span>
             {event.data.completed && <span className="ml-2 text-xs text-emerald-600 font-medium">Terminée</span>}
@@ -103,12 +103,12 @@ function TimelineEvent({ event }) {
           <div className="w-px flex-1 bg-slate-200" />
         </div>
         <div className="pb-5 min-w-0">
-          <p className="text-xs text-slate-400">{date}</p>
+          <p className="text-xs text-slate-500">{date}</p>
           <p className="text-sm text-slate-800 flex items-center gap-1.5">
-            <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
+            <ArrowRightLeft className="w-3.5 h-3.5 text-slate-500" />
             Stade changé {stageLabel(event.data.avant)} → {stageLabel(event.data.apres)}
             {event.data.user_full_name && (
-              <span className="text-slate-400">par {event.data.user_full_name}</span>
+              <span className="text-slate-500">par {event.data.user_full_name}</span>
             )}
           </p>
         </div>
@@ -230,7 +230,7 @@ export default function PartenaireDetail() {
   };
 
   if (loading && !partner) {
-    return <div className="min-h-[50vh] flex items-center justify-center text-slate-400">Chargement...</div>;
+    return <div className="min-h-[50vh] flex items-center justify-center text-slate-500">Chargement...</div>;
   }
 
   if (notFound) {
@@ -288,7 +288,7 @@ export default function PartenaireDetail() {
           </div>
 
           <div>
-            <p className="text-xs text-slate-400 mb-1.5 text-right">Stade du pipeline</p>
+            <p className="text-xs text-slate-500 mb-1.5 text-right">Stade du pipeline</p>
             <div className="flex gap-1">
               {PIPELINE_STAGES.map((stage) => (
                 <button
@@ -338,7 +338,7 @@ export default function PartenaireDetail() {
             Historique
           </h2>
           {timeline.length === 0 ? (
-            <p className="text-sm text-slate-400">Aucun événement pour ce partenaire pour l'instant.</p>
+            <p className="text-sm text-slate-500">Aucun événement pour ce partenaire pour l'instant.</p>
           ) : (
             <div>
               {timeline.map((event, i) => (
@@ -384,7 +384,7 @@ export default function PartenaireDetail() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-700">{task.title}</p>
                     {task.due_date && (
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-500">
                         Échéance : {format(parseISO(task.due_date), "dd/MM/yyyy", { locale: fr })}
                       </p>
                     )}
@@ -395,11 +395,11 @@ export default function PartenaireDetail() {
                 </div>
               ))}
               {pendingTasks.length === 0 && (
-                <p className="text-xs text-slate-400">Aucune tâche en cours.</p>
+                <p className="text-xs text-slate-500">Aucune tâche en cours.</p>
               )}
               {doneTasks.length > 0 && (
                 <details className="pt-1">
-                  <summary className="text-xs text-slate-400 cursor-pointer">
+                  <summary className="text-xs text-slate-500 cursor-pointer">
                     {doneTasks.length} tâche{doneTasks.length !== 1 ? "s" : ""} terminée{doneTasks.length !== 1 ? "s" : ""}
                   </summary>
                   <div className="space-y-2 mt-2">
@@ -449,12 +449,12 @@ export default function PartenaireDetail() {
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     {note.author_name || "—"} · {format(parseISO(note.created_at), "dd/MM/yyyy HH:mm", { locale: fr })}
                   </p>
                 </div>
               ))}
-              {notes.length === 0 && <p className="text-xs text-slate-400">Aucune note pour l'instant.</p>}
+              {notes.length === 0 && <p className="text-xs text-slate-500">Aucune note pour l'instant.</p>}
             </div>
           </div>
         </div>

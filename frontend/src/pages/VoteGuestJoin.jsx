@@ -139,7 +139,7 @@ export default function VoteGuestJoin() {
                 <Mail className="w-4 h-4 text-orange-500" />
                 <p className="font-semibold text-sm text-slate-800">Retrouver ma session</p>
               </div>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-slate-500 mb-4">
                 Entrez l&apos;adresse e-mail utilisée lors de votre inscription.
               </p>
               <input
@@ -185,7 +185,7 @@ export default function VoteGuestJoin() {
             {/* Identité */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm space-y-3">
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1 block">
                   Prénom <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -199,7 +199,7 @@ export default function VoteGuestJoin() {
                 />
               </div>
               <div>
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1 block">
                   Nom <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -215,11 +215,11 @@ export default function VoteGuestJoin() {
 
             {/* Email */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1 block">
                 Adresse e-mail{" "}
                 <span className="text-slate-300 font-normal normal-case">(recommandé)</span>
               </label>
-              <p className="text-xs text-slate-400 mb-2">
+              <p className="text-xs text-slate-500 mb-2">
                 Permet de retrouver votre session et de recevoir les résultats.
               </p>
               <input
@@ -249,7 +249,7 @@ export default function VoteGuestJoin() {
               }
             </button>
 
-            <p className="text-center text-xs text-slate-400">
+            <p className="text-center text-xs text-slate-500">
               Déjà inscrit ?{" "}
               <button
                 type="button"
@@ -260,7 +260,7 @@ export default function VoteGuestJoin() {
               </button>
             </p>
 
-            <p className="text-center text-xs text-slate-400 pb-4">Orange Digital Center Sénégal</p>
+            <p className="text-center text-xs text-slate-500 pb-4">Orange Digital Center Sénégal</p>
           </form>
         )}
       </div>

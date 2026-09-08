@@ -322,7 +322,7 @@ export default function Partenaires() {
                             {d.name}
                           </span>
                           {d.category && (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-500">
                               {d.category}
                             </span>
                           )}
@@ -517,13 +517,13 @@ export default function Partenaires() {
                           : 0;
                         return (
                           <div key={coach.id} className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-lg bg-purple-200 text-purple-700 text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                            <div className="w-6 h-6 rounded-lg bg-purple-200 text-purple-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
                               {(coach.full_name || "?")[0].toUpperCase()}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-0.5">
                                 <span className="text-xs text-slate-700 truncate">{coach.full_name || coach.email}</span>
-                                <span className="text-[11px] text-purple-600 font-medium ml-2 flex-shrink-0">
+                                <span className="text-xs text-purple-600 font-medium ml-2 flex-shrink-0">
                                   {coachObj > 0 ? `${coachObj} bénéf.` : "—"}
                                 </span>
                               </div>
@@ -542,7 +542,7 @@ export default function Partenaires() {
                     </div>
 
                     {objective > 0 && coachesAllocated < objective && (
-                      <p className="text-[11px] text-purple-400">
+                      <p className="text-xs text-purple-400">
                         {objective - coachesAllocated} bénéficiaire{objective - coachesAllocated > 1 ? "s" : ""} non encore attribué{objective - coachesAllocated > 1 ? "s" : ""}
                       </p>
                     )}
@@ -594,7 +594,7 @@ function PartnersKanban({ partners, draggedId, setDraggedId, onStageChange }) {
             <div className="flex items-center gap-2 px-1 mb-3">
               <span className={`w-2 h-2 rounded-full ${stage.dot}`} />
               <p className="text-sm font-semibold text-slate-700">{stage.label}</p>
-              <span className="ml-auto text-xs text-slate-400">{stagePartners.length}</span>
+              <span className="ml-auto text-xs text-slate-500">{stagePartners.length}</span>
             </div>
             <div className="space-y-2">
               {stagePartners.map((p) => (
@@ -611,7 +611,7 @@ function PartnersKanban({ partners, draggedId, setDraggedId, onStageChange }) {
                     <p className="text-sm font-medium text-slate-800 truncate">{p.name}</p>
                     <Link
                       to={`/partenaires/${p.id}`}
-                      className="text-slate-400 hover:text-orange-500 shrink-0"
+                      className="text-slate-500 hover:text-orange-500 shrink-0"
                       title="Voir la fiche"
                     >
                       <ArrowUpRight className="w-3.5 h-3.5" />
@@ -624,7 +624,7 @@ function PartnersKanban({ partners, draggedId, setDraggedId, onStageChange }) {
                 </div>
               ))}
               {stagePartners.length === 0 && (
-                <p className="text-xs text-slate-400 text-center py-6">Aucun partenaire</p>
+                <p className="text-xs text-slate-500 text-center py-6">Aucun partenaire</p>
               )}
             </div>
           </div>

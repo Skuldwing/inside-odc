@@ -24,11 +24,11 @@ export default function CheckinPage() {
     // Vérifier si déjà soumis sur cet appareil
     const done = localStorage.getItem(`checkin_done_${activityId}`);
     if (done) {
-      setResult({ ok: true, message: "Votre presence a deja ete enregistree pour cette activite.", already: true });
+      setResult({ ok: true, message: "Votre présence a déjà été enregistrée pour cette activité.", already: true });
     }
     api.get(`/checkin/${activityId}`)
       .then((r) => setActivity(r.data))
-      .catch((err) => setLoadError(err?.response?.data?.error || "Activite introuvable"));
+      .catch((err) => setLoadError(err?.response?.data?.error || "Activité introuvable"));
   }, [activityId]);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -45,7 +45,7 @@ export default function CheckinPage() {
     } catch (err) {
       const d = err?.response?.data;
       if (d?.already) {
-        setResult({ ok: true, message: "Votre presence est deja enregistree pour cette activite.", already: true });
+        setResult({ ok: true, message: "Votre présence est déjà enregistrée pour cette activité.", already: true });
       } else {
         setSubmitError(d?.error || "Erreur. Reessayez.");
       }
@@ -79,7 +79,7 @@ export default function CheckinPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-white px-4 text-center">
         <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mb-6">
-          <AlertCircle className="w-10 h-10 text-slate-400" />
+          <AlertCircle className="w-10 h-10 text-slate-500" />
         </div>
         <p className="text-xl font-bold text-slate-800 mb-2">Formulaire cloture</p>
         <p className="text-sm text-slate-500 max-w-xs mb-6">
@@ -87,9 +87,9 @@ export default function CheckinPage() {
         </p>
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4 text-sm text-slate-700 max-w-xs w-full">
           <p className="font-semibold text-slate-800 mb-1">{activity.title}</p>
-          {activity.location && <p className="text-slate-400 text-xs">{activity.location}</p>}
+          {activity.location && <p className="text-slate-500 text-xs">{activity.location}</p>}
         </div>
-        <p className="mt-8 text-xs text-slate-400">Orange Digital Center Senegal</p>
+        <p className="mt-8 text-xs text-slate-500">Orange Digital Center Senegal</p>
       </div>
     );
   }
@@ -102,14 +102,14 @@ export default function CheckinPage() {
           <CheckCircle2 className="w-10 h-10 text-orange-500" />
         </div>
         <p className="text-xl font-bold text-slate-900 mb-2">
-          {result.already ? "Deja enregistre !" : "Presence confirmee !"}
+          {result.already ? "Déjà enregistré !" : "Présence confirmée !"}
         </p>
         <p className="text-slate-500 text-sm max-w-xs mb-6">{result.message}</p>
         <div className="rounded-2xl border border-orange-200 bg-white px-6 py-4 text-sm text-slate-700 max-w-xs w-full">
           <p className="font-semibold text-orange-600 mb-1">{activity.title}</p>
-          <p className="text-slate-400 text-xs">{formatDate(activity.activity_date)}{activity.location ? ` · ${activity.location}` : ""}</p>
+          <p className="text-slate-500 text-xs">{formatDate(activity.activity_date)}{activity.location ? ` · ${activity.location}` : ""}</p>
         </div>
-        <p className="mt-8 text-xs text-slate-400">Orange Digital Center Senegal</p>
+        <p className="mt-8 text-xs text-slate-500">Orange Digital Center Senegal</p>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function CheckinPage() {
               </span>
             )}
           </div>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-xs text-slate-500">
             {activity.participants_count} participant{activity.participants_count !== 1 ? "s" : ""} enregistre{activity.participants_count !== 1 ? "s" : ""}
           </p>
         </div>
@@ -146,7 +146,7 @@ export default function CheckinPage() {
         {/* Formulaire */}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="rounded-2xl bg-white border border-slate-200 p-4 space-y-3 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">Vos informations</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Vos informations</p>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -224,7 +224,7 @@ export default function CheckinPage() {
               <label className="text-xs font-medium text-slate-600">Structure / Etablissement</label>
               <input
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
-                placeholder="Universite, entreprise, ecole..."
+                placeholder="Université, entreprise, école…"
                 value={form.structure}
                 onChange={(e) => set("structure", e.target.value)}
               />
@@ -249,11 +249,11 @@ export default function CheckinPage() {
                 Enregistrement...
               </span>
             ) : (
-              "Confirmer ma presence"
+              "Confirmer ma présence"
             )}
           </button>
 
-          <p className="text-center text-xs text-slate-400 pb-4">
+          <p className="text-center text-xs text-slate-500 pb-4">
             Orange Digital Center Senegal · Inside ODC
           </p>
         </form>

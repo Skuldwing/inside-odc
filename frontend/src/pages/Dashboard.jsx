@@ -273,7 +273,7 @@ export default function Dashboard() {
       <section className="surface-glass p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
               Pilotage stratégique
             </p>
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
@@ -576,7 +576,7 @@ function HeroKpiCard({ label, value, icon: Icon, accent, hint, prominent = false
         <div>
           <p className="text-sm font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{value}</p>
-          <p className="mt-1 text-xs text-slate-400">{hint}</p>
+          <p className="mt-1 text-xs text-slate-500">{hint}</p>
         </div>
         <div
           className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-white ${accent}`}
@@ -600,7 +600,7 @@ function TrendsLineChart({ data }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">Tendances mensuelles</h3>
       {formatted.length === 0 ? (
-        <div className="h-[280px] flex items-center justify-center text-slate-400">
+        <div className="h-[280px] flex items-center justify-center text-slate-500">
           Aucune donnée
         </div>
       ) : (
@@ -614,7 +614,7 @@ function TrendsLineChart({ data }) {
             <Line
               type="monotone"
               dataKey="activities"
-              stroke="#f97316"
+              stroke="#FF7900"
               strokeWidth={2.5}
               name="Activités"
               dot={false}
@@ -708,7 +708,7 @@ function BeneficiariesByPartnerTable({ data }) {
                             strokeDashoffset={100 - percent}
                           />
                         </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-700">
+                        <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-700">
                           {percent}%
                         </span>
                       </div>
@@ -737,7 +737,7 @@ function ActivityBarChart({ data, title }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
-        <div className="h-[280px] flex items-center justify-center text-slate-400">
+        <div className="h-[280px] flex items-center justify-center text-slate-500">
           Aucune donnée
         </div>
       ) : (
@@ -764,7 +764,7 @@ function BeneficiaryPieChart({ data, title }) {
     <div className="card p-6">
       <h3 className="font-semibold mb-4 text-slate-900">{title}</h3>
       {data.every((d) => d.value === 0) ? (
-        <div className="h-[280px] flex items-center justify-center text-slate-400">
+        <div className="h-[280px] flex items-center justify-center text-slate-500">
           Aucune donnée
         </div>
       ) : (
@@ -938,9 +938,9 @@ function LocationsMap({ data, points, geoBoundary }) {
             <GeoJSON
               data={geoBoundary}
               style={{
-                color: "#F97316",
+                color: "#FF7900",
                 weight: 1,
-                fillColor: "#FED7AA",
+                fillColor: "#FED3AC",
                 fillOpacity: 0.25,
               }}
             />
@@ -968,7 +968,7 @@ function LocationsMap({ data, points, geoBoundary }) {
           ))}
         </MapContainer>
       </div>
-      <p className="text-xs text-slate-400 mt-2">
+      <p className="text-xs text-slate-500 mt-2">
         Limites administratives : geoBoundaries (source ouverte).
       </p>
       {data.length === 0 && <p className="text-slate-500 mt-3">Aucune donnée</p>}

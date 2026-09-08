@@ -194,7 +194,7 @@ export default function Utilisateurs() {
         <section className="surface-glass p-5 lg:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Administration</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Administration</p>
               <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">Utilisateurs</h1>
               <p className="mt-1 text-sm text-slate-500">Gestion des accès, rôles et invitations.</p>
             </div>
@@ -216,7 +216,7 @@ export default function Utilisateurs() {
         <section className="card p-4 lg:p-5">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher nom, email…" className="input pl-10" />
             </div>
             <select className="select" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
@@ -280,7 +280,7 @@ export default function Utilisateurs() {
                         </button>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-slate-500">
                       Un email a également été envoyé si votre configuration email est active.
                     </p>
                   </>
@@ -376,15 +376,15 @@ export default function Utilisateurs() {
                           <div className="grid grid-cols-3 gap-1 text-xs text-center">
                             <div className="rounded-lg bg-white border border-orange-100 px-2 py-1.5">
                               <p className="text-orange-600 font-semibold">{partnerObjective}</p>
-                              <p className="text-slate-400">Total</p>
+                              <p className="text-slate-500">Total</p>
                             </div>
                             <div className="rounded-lg bg-white border border-orange-100 px-2 py-1.5">
                               <p className={`font-semibold ${totalAllocated > partnerObjective ? "text-red-500" : "text-slate-700"}`}>{totalAllocated}</p>
-                              <p className="text-slate-400">Alloués</p>
+                              <p className="text-slate-500">Alloués</p>
                             </div>
                             <div className="rounded-lg bg-white border border-orange-100 px-2 py-1.5">
                               <p className={`font-semibold ${remaining - thisCoach < 0 ? "text-red-500" : "text-emerald-600"}`}>{Math.max(0, remaining - thisCoach)}</p>
-                              <p className="text-slate-400">Restant</p>
+                              <p className="text-slate-500">Restant</p>
                             </div>
                           </div>
                           {totalAllocated > partnerObjective && (
@@ -457,7 +457,7 @@ export default function Utilisateurs() {
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-slate-900">Lien d'invitation</h3>
-                <button onClick={() => { setLinkModal(null); setLinkCopied2(false); }} className="text-slate-400 hover:text-slate-700 rounded-lg p-1"><X className="w-5 h-5" /></button>
+                <button onClick={() => { setLinkModal(null); setLinkCopied2(false); }} className="text-slate-500 hover:text-slate-700 rounded-lg p-1"><X className="w-5 h-5" /></button>
               </div>
 
               {linkLoading ? (
@@ -478,7 +478,7 @@ export default function Utilisateurs() {
                       {linkCopied2 ? <><Check className="w-4 h-4" /> Copié</> : <><Copy className="w-4 h-4" /> Copier</>}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-400">Ce lien est valable 24h. Un nouveau lien invalide le précédent.</p>
+                  <p className="text-xs text-slate-500">Ce lien est valable 24h. Un nouveau lien invalide le précédent.</p>
 
                   {linkModal.email && (
                     <div className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-3 ${emailSent ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -486,7 +486,7 @@ export default function Utilisateurs() {
                         <p className="text-sm font-medium text-slate-700">
                           {emailSent ? "Email envoyé !" : "Envoyer par email"}
                         </p>
-                        <p className="text-xs text-slate-400">{linkModal.email}</p>
+                        <p className="text-xs text-slate-500">{linkModal.email}</p>
                       </div>
                       {emailSent ? (
                         <Check className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -535,7 +535,7 @@ export default function Utilisateurs() {
                     <td className="px-4 py-3">
                       <div className="font-medium flex items-center gap-2">
                         <User className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                        {u.full_name || <span className="text-slate-400 italic">Sans nom</span>}
+                        {u.full_name || <span className="text-slate-500 italic">Sans nom</span>}
                       </div>
                       <div className="flex items-center gap-1 text-slate-500 text-xs mt-1">
                         <Mail className="w-3 h-3" /> {u.email}
@@ -550,7 +550,7 @@ export default function Utilisateurs() {
                       {(u.role === "admin" || u.is_team_odc) && (
                         <span
                           title="Accès Mbootay"
-                          className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700"
+                          className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700"
                         >
                           <KanbanSquare className="w-3 h-3" />
                           Mbootay
@@ -561,7 +561,7 @@ export default function Utilisateurs() {
                     <td className="px-4 py-3 text-sm">
                       {u.partner
                         ? <div>
-                            <span className="flex items-center gap-1"><Building2 className="w-4 h-4 text-slate-400" />{u.partner}</span>
+                            <span className="flex items-center gap-1"><Building2 className="w-4 h-4 text-slate-500" />{u.partner}</span>
                             {u.role === "coach" && u.objective_beneficiaries != null && (
                               <span className="flex items-center gap-1 mt-0.5 text-xs text-orange-600">
                                 <Target className="w-3 h-3" />
@@ -569,7 +569,7 @@ export default function Utilisateurs() {
                               </span>
                             )}
                           </div>
-                        : <span className="text-slate-400">—</span>}
+                        : <span className="text-slate-500">—</span>}
                     </td>
 
                     <td className="px-4 py-3">
@@ -585,11 +585,11 @@ export default function Utilisateurs() {
                           <div className="flex items-center gap-2">
                             <OnlineDot online={online} />
                             <div>
-                              <span className={`text-xs font-medium ${online ? "text-emerald-700" : "text-slate-400"}`}>
+                              <span className={`text-xs font-medium ${online ? "text-emerald-700" : "text-slate-500"}`}>
                                 {online ? "En ligne" : "Hors ligne"}
                               </span>
                               {u.last_seen_at && !online && (
-                                <p className="text-[10px] text-slate-400 leading-none mt-0.5">
+                                <p className="text-xs text-slate-500 leading-none mt-0.5">
                                   {formatLastSeen(u.last_seen_at)}
                                 </p>
                               )}
@@ -600,13 +600,13 @@ export default function Utilisateurs() {
                     </td>
 
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => openEdit(u)} className="text-slate-400 hover:text-orange-500 mr-3 transition-colors" title="Modifier">
+                      <button onClick={() => openEdit(u)} className="text-slate-500 hover:text-orange-500 mr-3 transition-colors" title="Modifier">
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => openLinkModal(u)} className="text-slate-400 hover:text-indigo-500 mr-3 transition-colors" title="Générer un lien d'invitation">
+                      <button onClick={() => openLinkModal(u)} className="text-slate-500 hover:text-indigo-500 mr-3 transition-colors" title="Générer un lien d'invitation">
                         <Link2 className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(u.id)} className="text-slate-400 hover:text-red-500 transition-colors" title="Supprimer">
+                      <button onClick={() => handleDelete(u.id)} className="text-slate-500 hover:text-red-500 transition-colors" title="Supprimer">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>

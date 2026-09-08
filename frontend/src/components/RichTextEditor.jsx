@@ -12,7 +12,7 @@ const COLORS = [
   { label: "Défaut",  value: null      },
   { label: "Noir",    value: "#111827" },
   { label: "Gris",    value: "#6B7280" },
-  { label: "Orange",  value: "#F97316" },
+  { label: "Orange",  value: "#FF7900" },
   { label: "Rouge",   value: "#EF4444" },
   { label: "Vert",    value: "#22C55E" },
   { label: "Bleu",    value: "#3B82F6" },
@@ -23,7 +23,7 @@ const COLORS = [
 const HIGHLIGHTS = [
   { label: "Aucun",  value: null      },
   { label: "Jaune",  value: "#FEF08A" },
-  { label: "Orange", value: "#FED7AA" },
+  { label: "Orange", value: "#FED3AC" },
   { label: "Vert",   value: "#BBF7D0" },
   { label: "Bleu",   value: "#BFDBFE" },
   { label: "Rose",   value: "#FBCFE8" },
@@ -80,7 +80,7 @@ function ColorPicker({ editor }) {
                 setOpen(false);
               }}
               className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110 flex-shrink-0"
-              style={{ background: c.value || "#ffffff", borderColor: current === c.value ? "#f97316" : "#e2e8f0" }}
+              style={{ background: c.value || "#ffffff", borderColor: current === c.value ? "#FF7900" : "#e2e8f0" }}
             />
           ))}
         </div>

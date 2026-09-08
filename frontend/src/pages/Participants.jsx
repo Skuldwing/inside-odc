@@ -83,7 +83,7 @@ export default function Participants() {
   const exportExcel = () => {
     const headers = [
       "Nom","Prénom","Structure/Etablissement","Genre","Tranche d'âge",
-      "Email","Telephone","Statut","Activité","Date activite","Partenaire","Dispositif",
+      "Email","Telephone","Statut","Activité","Date activité","Partenaire","Dispositif",
     ];
     const csvRows = rows.map((p) => [
       p.nom, p.prenom, p.structure, p.genre, p.age_range,
@@ -102,7 +102,7 @@ export default function Participants() {
       <section className="surface-glass p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Base unifiée</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Base unifiée</p>
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
               Participants / Bénéficiaires
             </h1>
@@ -130,7 +130,7 @@ export default function Participants() {
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
             <input
               value={search}
               onChange={(e) => handleSearch(e.target.value)}

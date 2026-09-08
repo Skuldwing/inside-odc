@@ -17,7 +17,7 @@ export default function FormSettingsPanel({ settings, onChange }) {
           <label className="text-sm font-medium text-slate-700">
             Nombre maximum de reponses
           </label>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Mettre 0 pour illimite. Le formulaire se ferme automatiquement.
           </p>
           <div className="flex items-center gap-2 mt-2">
@@ -40,7 +40,7 @@ export default function FormSettingsPanel({ settings, onChange }) {
               <label className="text-sm font-medium text-slate-700">
                 Une seule reponse par email
               </label>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 Bloque les doublons si le formulaire a un champ Email.
               </p>
             </div>
@@ -70,7 +70,7 @@ export default function FormSettingsPanel({ settings, onChange }) {
           <label className="text-sm font-medium text-slate-700">
             Email de notification
           </label>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Recevez un email a chaque nouvelle reponse. Laisser vide pour desactiver.
           </p>
           <input
@@ -94,7 +94,7 @@ export default function FormSettingsPanel({ settings, onChange }) {
           <label className="text-sm font-medium text-slate-700">
             Redirection (URL)
           </label>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Si renseigne, redirige vers cette URL apres envoi. Sinon affiche le message de succes.
           </p>
           <input
@@ -110,13 +110,13 @@ export default function FormSettingsPanel({ settings, onChange }) {
           <label className="text-sm font-medium text-slate-700">
             Message de succes
           </label>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Affiche si aucune URL de redirection n&apos;est definie.
           </p>
           <textarea
             className="input mt-2 min-h-[80px] text-sm"
             value={settings?.success_message || ""}
-            placeholder="Merci, votre reponse a bien ete enregistree."
+            placeholder="Merci, votre réponse a bien été enregistrée."
             onChange={(e) => set({ success_message: e.target.value })}
           />
         </div>
@@ -149,7 +149,7 @@ export default function FormSettingsPanel({ settings, onChange }) {
             />
           </div>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500">
           Laisser vide = toujours ouvert (tant que le statut est Actif).
         </p>
       </div>

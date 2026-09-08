@@ -49,7 +49,7 @@ function DetailsRow({ details }) {
     : null;
   const extras = Object.entries(details ?? {}).filter(([k, v]) => k !== "modifications" && v != null && v !== "");
   const hasContent = (mods && mods.length > 0) || extras.length > 0;
-  if (!hasContent) return <span className="text-slate-400">—</span>;
+  if (!hasContent) return <span className="text-slate-500">—</span>;
 
   return (
     <div>
@@ -68,9 +68,9 @@ function DetailsRow({ details }) {
               <div className="space-y-1">
                 {mods.map(([field, change]) => (
                   <div key={field} className="flex items-start gap-2 font-mono">
-                    <span className="shrink-0 w-28 text-slate-400 truncate">{field}</span>
+                    <span className="shrink-0 w-28 text-slate-500 truncate">{field}</span>
                     <span className="line-through text-red-400 truncate max-w-[90px]">{change?.avant ?? "—"}</span>
-                    <span className="text-slate-400">→</span>
+                    <span className="text-slate-500">→</span>
                     <span className="text-emerald-600 truncate max-w-[90px]">{change?.apres ?? "—"}</span>
                   </div>
                 ))}
@@ -81,7 +81,7 @@ function DetailsRow({ details }) {
             <div className={`space-y-1 font-mono ${mods && mods.length > 0 ? "border-t border-slate-200 pt-2" : ""}`}>
               {extras.map(([k, v]) => (
                 <div key={k} className="flex gap-2">
-                  <span className="text-slate-400 shrink-0">{k}:</span>
+                  <span className="text-slate-500 shrink-0">{k}:</span>
                   <span className="text-slate-700 break-all">{String(v)}</span>
                 </div>
               ))}
@@ -189,7 +189,7 @@ export default function AuditLogs() {
 
           {/* Recherche */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
             <input
               className="input pl-8 text-sm"
               placeholder="Rechercher..."
@@ -249,7 +249,7 @@ export default function AuditLogs() {
             <tbody>
               {rows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
                     Aucun journal trouvé
                   </td>
                 </tr>
@@ -263,7 +263,7 @@ export default function AuditLogs() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-slate-800">{row.user_full_name ?? "—"}</div>
-                    <div className="text-xs text-slate-400">{ROLE_LABELS[row.user_role] ?? row.user_role ?? "—"}</div>
+                    <div className="text-xs text-slate-500">{ROLE_LABELS[row.user_role] ?? row.user_role ?? "—"}</div>
                   </td>
                   <td className="px-4 py-3">
                     <ActionBadge action={row.action} />
@@ -277,7 +277,7 @@ export default function AuditLogs() {
                   <td className="px-4 py-3">
                     <DetailsRow details={row.details} />
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400 font-mono">
+                  <td className="px-4 py-3 text-xs text-slate-500 font-mono">
                     {row.ip_address ?? "—"}
                   </td>
                 </tr>

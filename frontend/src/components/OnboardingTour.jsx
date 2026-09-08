@@ -189,7 +189,7 @@ function StepContent({ step, stepIdx, total, onNext, onSkip }) {
         </div>
         <button
           onClick={onSkip}
-          className="ml-3 flex-shrink-0 rounded-lg p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition"
+          className="ml-3 flex-shrink-0 rounded-lg p-1 text-slate-500 hover:text-slate-600 hover:bg-slate-100 transition"
           title="Fermer le guide"
         >
           <X className="w-3.5 h-3.5" />
@@ -215,7 +215,7 @@ function StepContent({ step, stepIdx, total, onNext, onSkip }) {
           {!isLast && !isFirst && (
             <button
               onClick={onSkip}
-              className="text-xs text-slate-400 hover:text-slate-600 transition px-1"
+              className="text-xs text-slate-500 hover:text-slate-600 transition px-1"
             >
               Passer
             </button>
@@ -223,7 +223,7 @@ function StepContent({ step, stepIdx, total, onNext, onSkip }) {
           {isFirst && (
             <button
               onClick={onSkip}
-              className="text-xs text-slate-400 hover:text-slate-600 transition border border-slate-200 rounded-xl px-3 py-2"
+              className="text-xs text-slate-500 hover:text-slate-600 transition border border-slate-200 rounded-xl px-3 py-2"
             >
               Passer le guide
             </button>

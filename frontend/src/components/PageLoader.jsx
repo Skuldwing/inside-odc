@@ -5,7 +5,7 @@ export default function PageLoader({ label = "Chargement..." }) {
         <div className="absolute inset-0 rounded-full border-4 border-orange-100" />
         <div className="absolute inset-0 animate-spin rounded-full border-4 border-transparent border-t-orange-500" />
       </div>
-      <p className="anim-fade-in-up text-sm font-medium text-slate-400">{label}</p>
+      <p className="anim-fade-in-up text-sm font-medium text-slate-500">{label}</p>
     </div>
   );
 }

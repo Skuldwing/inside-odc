@@ -26,7 +26,7 @@ export default function Header({ currentPageName, onMenuClick }) {
     const actions = [
       {
         id: "activities",
-        label: "Voir activites",
+        label: "Voir les activités",
         icon: Calendar,
         to: "/activities",
       },
@@ -116,10 +116,13 @@ export default function Header({ currentPageName, onMenuClick }) {
           <div className="min-w-0 flex items-center gap-3">
             <ODCLogo variant="mark" className="hidden h-8 w-8 rounded-lg sm:block" />
             <div className="min-w-0">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">
+              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
                 Inside ODC
               </p>
-              <h2 className="truncate text-lg font-semibold text-slate-900 capitalize">
+              {/* Plus de `capitalize` : les libelles sont deja correctement
+                  casses, et la regle transformait "Journaux d'audit" en
+                  "Journaux D'audit". */}
+              <h2 className="truncate text-lg font-semibold text-slate-900">
                 {currentPageName}
               </h2>
             </div>
@@ -131,16 +134,16 @@ export default function Header({ currentPageName, onMenuClick }) {
             onSubmit={handleGlobalSearch}
             className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[320px] transition focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100"
           >
-            <Search className="h-4 w-4 text-slate-400" />
+            <Search className="h-4 w-4 text-slate-500" />
             <input
               type="text"
-              className="w-full border-none bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
+              className="w-full border-none bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none"
               placeholder="Rechercher et appuyer sur Entree..."
               aria-label="Recherche globale"
               value={globalSearch}
               onChange={(e) => setGlobalSearch(e.target.value)}
             />
-            <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-[10px] font-medium text-slate-400">
+            <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-500">
               ENTREE
             </span>
           </form>
@@ -189,7 +192,7 @@ export default function Header({ currentPageName, onMenuClick }) {
             onClick={handleLogout}
           >
             <LogOut className="w-4 h-4" />
-            Deconnexion
+            Déconnexion
           </button>
         </div>
       </div>

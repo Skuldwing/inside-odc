@@ -11,7 +11,7 @@ function percent(value, total) {
   return Math.round((value / total) * 100);
 }
 
-function progressBar(pct, color = "#f97316") {
+function progressBar(pct, color = "#FF7900") {
   const w = Math.min(100, Math.max(0, pct));
   return (
     <div style={{ height: 8, borderRadius: 4, background: "#e2e8f0", overflow: "hidden" }}>
@@ -70,7 +70,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
       }}
     >
       {/* ── Couverture ── */}
-      <div style={{ background: "linear-gradient(135deg,#f97316 0%,#ea580c 100%)", padding: "48px 48px 36px", color: "#fff" }}>
+      <div style={{ background: "linear-gradient(135deg,#FF7900 0%,#DE6A00 100%)", padding: "48px 48px 36px", color: "#fff" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ display: "inline-block", background: "#fff", borderRadius: 10, padding: "6px 14px", marginBottom: 10 }}>
@@ -102,7 +102,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
         <div style={{ marginBottom: 32 }}>
           <SectionTitle>Indicateurs cles</SectionTitle>
           <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
-            <KpiBox label="Activites" value={totals.activities ?? 0} color="#f97316" />
+            <KpiBox label="Activités" value={totals.activities ?? 0} color="#FF7900" />
             <KpiBox label="Participants" value={totals.participants ?? 0} color="#10b981" />
             <KpiBox label="Heures formation" value={`${totals.hours ?? 0}h`} color="#6366f1" />
             {isAdmin && <KpiBox label="Partenaires actifs" value={totals.partners_active ?? 0} color="#0ea5e9" />}
@@ -132,7 +132,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
                         <span style={{ fontWeight: 500 }}>{d.name}</span>
                         <span style={{ color: "#64748b" }}>{d.value}</span>
                       </div>
-                      {progressBar(percent(d.value, Math.max(...byDevice.map((x) => x.value))), d.color || "#f97316")}
+                      {progressBar(percent(d.value, Math.max(...byDevice.map((x) => x.value))), d.color || "#FF7900")}
                     </div>
                   ))
                 )}
@@ -164,9 +164,9 @@ function RapportContent({ summary, filters, partners, devices, role }) {
                       <td style={{ padding: "8px 12px", width: 120 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <div style={{ flex: 1 }}>
-                            {progressBar(pct, pct >= 100 ? "#10b981" : pct >= 50 ? "#f97316" : "#ef4444")}
+                            {progressBar(pct, pct >= 100 ? "#10b981" : pct >= 50 ? "#FF7900" : "#ef4444")}
                           </div>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: pct >= 100 ? "#059669" : pct >= 50 ? "#ea580c" : "#dc2626", minWidth: 32 }}>{pct}%</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: pct >= 100 ? "#059669" : pct >= 50 ? "#DE6A00" : "#dc2626", minWidth: 32 }}>{pct}%</span>
                         </div>
                       </td>
                     </tr>
@@ -184,7 +184,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "#f1f5f9" }}>
-                  {["Activite", "Partenaire", "Date", "Participants"].map((h) => (
+                  {["Activité", "Partenaire", "Date", "Participants"].map((h) => (
                     <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
                   ))}
                 </tr>
@@ -214,16 +214,16 @@ function RapportContent({ summary, filters, partners, devices, role }) {
                 { label: "Contacts manquants", value: dq.missing_contact_pct || 0 },
                 { label: "Genre manquant", value: dq.missing_gender_pct || 0 },
                 ...(!isCoach ? [
-                  { label: "Activites sans dispositif", value: dq.activities_missing_device_pct || 0 },
-                  { label: "Activites sans partenaire", value: dq.activities_missing_partner_pct || 0 },
+                  { label: "Activités sans dispositif", value: dq.activities_missing_device_pct || 0 },
+                  { label: "Activités sans partenaire", value: dq.activities_missing_partner_pct || 0 },
                 ] : []),
               ].map((r) => (
                 <div key={r.label} style={{ marginBottom: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
                     <span>{r.label}</span>
-                    <span style={{ fontWeight: 600, color: r.value > 30 ? "#dc2626" : r.value > 10 ? "#ea580c" : "#059669" }}>{r.value}%</span>
+                    <span style={{ fontWeight: 600, color: r.value > 30 ? "#dc2626" : r.value > 10 ? "#DE6A00" : "#059669" }}>{r.value}%</span>
                   </div>
-                  {progressBar(r.value, r.value > 30 ? "#ef4444" : r.value > 10 ? "#f97316" : "#10b981")}
+                  {progressBar(r.value, r.value > 30 ? "#ef4444" : r.value > 10 ? "#FF7900" : "#10b981")}
                 </div>
               ))}
             </div>
@@ -232,7 +232,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
           {!isCoach && (
             <div>
               <SectionTitle>Alertes</SectionTitle>
-              <div style={{ background: "#fff7ed", borderRadius: 10, padding: 16, border: "1px solid #fed7aa" }}>
+              <div style={{ background: "#FFF6EE", borderRadius: 10, padding: 16, border: "1px solid #FED3AC" }}>
                 {(alerts.partners || []).length === 0 && (alerts.devices || []).length === 0 ? (
                   <div style={{ color: "#059669", fontSize: 12 }}>✓ Aucune alerte active</div>
                 ) : (
@@ -240,7 +240,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
                     {(alerts.partners || []).map((p) => (
                       <div key={p.name} style={{ fontSize: 12, marginBottom: 6, display: "flex", justifyContent: "space-between" }}>
                         <span>⚠ {p.name}</span>
-                        <span style={{ color: "#ea580c", fontWeight: 600 }}>{p.percent}% objectif</span>
+                        <span style={{ color: "#DE6A00", fontWeight: 600 }}>{p.percent}% objectif</span>
                       </div>
                     ))}
                     {(alerts.devices || []).map((d) => (
@@ -268,7 +268,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
 
 function SectionTitle({ children }) {
   return (
-    <div style={{ fontSize: 13, fontWeight: 700, color: "#f97316", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12, paddingBottom: 6, borderBottom: "2px solid #fed7aa" }}>
+    <div style={{ fontSize: 13, fontWeight: 700, color: "#FF7900", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12, paddingBottom: 6, borderBottom: "2px solid #FED3AC" }}>
       {children}
     </div>
   );
@@ -337,7 +337,7 @@ function RapportDispositif({ summary, filters, devices }) {
     <div style={{ width: 794, background: "#fff", fontFamily: "'Segoe UI', Arial, sans-serif", fontSize: 13, color: "#1e293b", padding: 0 }}>
 
       {/* ── En-tête ── */}
-      <div style={{ background: "linear-gradient(135deg,#f97316 0%,#ea580c 100%)", padding: "36px 48px 28px", color: "#fff" }}>
+      <div style={{ background: "linear-gradient(135deg,#FF7900 0%,#DE6A00 100%)", padding: "36px 48px 28px", color: "#fff" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ display: "inline-block", background: "#fff", borderRadius: 10, padding: "6px 14px" }}>
@@ -363,7 +363,7 @@ function RapportDispositif({ summary, filters, devices }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <KpiBox label="Bénéficiaires" value={totalParticipants} color="#10b981" />
             <KpiBox label="Heures de formation" value={`${totals.hours ?? 0}h`} color="#6366f1" />
-            <KpiBox label="Activités réalisées" value={totals.activities ?? 0} color="#f97316" />
+            <KpiBox label="Activités réalisées" value={totals.activities ?? 0} color="#FF7900" />
           </div>
         </div>
 
@@ -371,17 +371,17 @@ function RapportDispositif({ summary, filters, devices }) {
         <div style={{ marginBottom: 28 }}>
           <SectionTitle>Répartition par modalité</SectionTitle>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 10, padding: "18px 20px" }}>
+            <div style={{ background: "#FFF6EE", border: "1px solid #FED3AC", borderRadius: 10, padding: "18px 20px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#f97316", flexShrink: 0 }} />
-                <span style={{ fontWeight: 700, fontSize: 13, color: "#ea580c" }}>Présentiel</span>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#FF7900", flexShrink: 0 }} />
+                <span style={{ fontWeight: 700, fontSize: 13, color: "#DE6A00" }}>Présentiel</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-around" }}>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: "#0f172a" }}>{presentiel.activities_count}</div>
                   <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>formations</div>
                 </div>
-                <div style={{ width: 1, background: "#fed7aa" }} />
+                <div style={{ width: 1, background: "#FED3AC" }} />
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 28, fontWeight: 700, color: "#0f172a" }}>{presentiel.value}</div>
                   <div style={{ fontSize: 11, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>bénéficiaires</div>
@@ -481,7 +481,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
       pdf.save(`rapport-odc-${fileLabel}.pdf`);
     } catch (err) {
       console.error("Erreur PDF:", err);
-      alert("Erreur lors de la generation du PDF.");
+      alert("Erreur lors de la génération du PDF.");
     } finally {
       setGenerating(false);
     }
@@ -504,7 +504,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
               ) : (
                 <FileDown className="w-4 h-4" />
               )}
-              {generating ? "Generation..." : "Telecharger PDF"}
+              {generating ? "Génération…" : "Télécharger le PDF"}
             </button>
             <button
               onClick={onClose}

@@ -21,7 +21,7 @@ function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplic
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-slate-900 truncate leading-tight">{form.title}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-mono truncate">/f/{form.slug}</p>
+            <p className="text-xs text-slate-500 mt-0.5 font-mono truncate">/f/{form.slug}</p>
           </div>
           <button
             type="button"
@@ -41,7 +41,7 @@ function FormCard({ form, onEdit, onDelete, onCopyLink, onToggleStatus, onDuplic
         )}
 
         <div className="flex items-center gap-2 mt-auto">
-          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
             isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-500"
           }`}>
             {isActive ? "Actif" : "Brouillon"}
@@ -225,7 +225,7 @@ export default function Formulaires() {
                 }`}
               >
                 {f.label}
-                <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-semibold ${
+                <span className={`text-xs rounded-full px-1.5 py-0.5 font-semibold ${
                   statusFilter === f.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
                 }`}>{f.count}</span>
               </button>
@@ -240,7 +240,7 @@ export default function Formulaires() {
         {loading ? (
           <div className="card p-6 text-center text-slate-500 text-sm">Chargement…</div>
         ) : filteredForms.length === 0 ? (
-          <div className="card p-10 text-center text-slate-400">
+          <div className="card p-10 text-center text-slate-500">
             <FileText className="w-10 h-10 mx-auto mb-3 text-slate-200" />
             <p className="font-medium text-slate-500 mb-1">Aucun formulaire trouvé</p>
             <p className="text-sm mb-4">

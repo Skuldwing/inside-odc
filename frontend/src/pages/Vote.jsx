@@ -134,7 +134,7 @@ export default function Vote() {
           <Loader2 className="w-8 h-8 animate-spin text-orange-400" />
         </div>
       ) : sessions.length === 0 ? (
-        <div className="text-center py-16 text-slate-400">
+        <div className="text-center py-16 text-slate-500">
           <Award className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p className="font-medium">Aucune session de vote</p>
           <p className="text-sm mt-1">Créez une session pour commencer</p>
@@ -197,7 +197,7 @@ export default function Vote() {
                     onClick={() => handleDuplicate(s.id)}
                     disabled={duplicating === s.id}
                     title="Dupliquer"
-                    className="rounded-xl p-2 text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-colors disabled:opacity-40"
+                    className="rounded-xl p-2 text-slate-500 hover:text-orange-500 hover:bg-orange-50 transition-colors disabled:opacity-40"
                   >
                     {duplicating === s.id
                       ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -206,7 +206,7 @@ export default function Vote() {
                   </button>
                   <button
                     onClick={() => handleDelete(s.id)}
-                    className="rounded-xl p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    className="rounded-xl p-2 text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
