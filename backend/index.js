@@ -26,6 +26,7 @@ const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes
 const auditRoutes = require("./routes/audit.routes");
 const reliabilityRoutes = require("./routes/reliability.routes");
 const mbootayRoutes = require("./routes/mbootay.routes");
+const searchRoutes = require("./routes/search.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -153,6 +154,7 @@ app.use("/email-templates", emailTemplatesRoutes);
 app.use("/audit-logs", auditRoutes);
 app.use("/reliability", reliabilityRoutes);
 app.use("/mbootay", mbootayRoutes);
+app.use("/search", searchRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -671,6 +673,29 @@ pool.query(`
     console.log("Migration OK: index Mbootay");
   } catch (e) {
     console.warn("Migration Mbootay:", e.message);
+  }
+})();
+
+/* ── Index de recherche ──
+   La recherche universelle balaie plusieurs tables en ILIKE. Les extensions
+   pg_trgm permettent d'indexer ces motifs « contient » ; si l'extension n'est
+   pas disponible sur l'hebergement, la recherche fonctionne quand meme, elle
+   se contente d'un balayage sequentiel. */
+(async () => {
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+    const idx = [
+      `CREATE INDEX IF NOT EXISTS idx_search_activities_title ON activities USING gin (title gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_search_participants_nom ON participants USING gin (nom gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_search_participants_prenom ON participants USING gin (prenom gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_search_partners_name ON partners USING gin (name gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_search_devices_name ON devices USING gin (name gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_search_mbootay_title ON mbootay_projects USING gin (title gin_trgm_ops)`,
+    ];
+    for (const q of idx) await pool.query(q);
+    console.log("Migration OK: index de recherche");
+  } catch (e) {
+    console.warn("Migration index de recherche (non bloquant):", e.message);
   }
 })();
 
