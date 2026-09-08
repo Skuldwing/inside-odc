@@ -696,7 +696,7 @@ export default function Activities({
             {!isViewer && (
               <button className="btn-primary" onClick={openUploadModal}>
                 <Plus className="w-4 h-4" />
-                Nouvelle activite
+                Nouvelle activité
               </button>
             )}
           </div>
@@ -954,7 +954,7 @@ export default function Activities({
                 className="btn-ghost border"
                 onClick={openUploadModal}
               >
-                Nouvelle activite
+                Nouvelle activité
               </button>
               <button type="button" className="btn-primary" onClick={closeUploadModal}>
                 Terminer
@@ -2054,11 +2054,11 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
               </>
             ) : activity.participants_manual != null ? (
               <>
-                <p className="text-2xl font-bold text-amber-600 inline-flex items-center gap-1" title="Nombre estime — liste non encore importee">
+                <p className="text-2xl font-bold text-amber-600 inline-flex items-center gap-1" title="Nombre estimé — liste non encore importée">
                   <Users className="h-5 w-5 text-amber-400" />
                   ~{activity.participants_manual}
                 </p>
-                <p className="text-xs text-amber-500">Estime</p>
+                <p className="text-xs text-amber-600">Estimé</p>
               </>
             ) : (
               <>

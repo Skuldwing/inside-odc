@@ -116,7 +116,7 @@ export default function FormSettingsPanel({ settings, onChange }) {
           <textarea
             className="input mt-2 min-h-[80px] text-sm"
             value={settings?.success_message || ""}
-            placeholder="Merci, votre reponse a bien ete enregistree."
+            placeholder="Merci, votre réponse a bien été enregistrée."
             onChange={(e) => set({ success_message: e.target.value })}
           />
         </div>

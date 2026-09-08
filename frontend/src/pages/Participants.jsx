@@ -83,7 +83,7 @@ export default function Participants() {
   const exportExcel = () => {
     const headers = [
       "Nom","Prénom","Structure/Etablissement","Genre","Tranche d'âge",
-      "Email","Telephone","Statut","Activité","Date activite","Partenaire","Dispositif",
+      "Email","Telephone","Statut","Activité","Date activité","Partenaire","Dispositif",
     ];
     const csvRows = rows.map((p) => [
       p.nom, p.prenom, p.structure, p.genre, p.age_range,

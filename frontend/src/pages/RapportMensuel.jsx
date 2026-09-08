@@ -184,7 +184,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ background: "#f1f5f9" }}>
-                  {["Activite", "Partenaire", "Date", "Participants"].map((h) => (
+                  {["Activité", "Partenaire", "Date", "Participants"].map((h) => (
                     <th key={h} style={{ padding: "8px 12px", textAlign: "left", fontWeight: 600, color: "#475569", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>{h}</th>
                   ))}
                 </tr>
@@ -481,7 +481,7 @@ export default function RapportMensuelModal({ summary, filters, partners, device
       pdf.save(`rapport-odc-${fileLabel}.pdf`);
     } catch (err) {
       console.error("Erreur PDF:", err);
-      alert("Erreur lors de la generation du PDF.");
+      alert("Erreur lors de la génération du PDF.");
     } finally {
       setGenerating(false);
     }

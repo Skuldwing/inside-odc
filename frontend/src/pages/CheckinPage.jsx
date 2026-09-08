@@ -24,11 +24,11 @@ export default function CheckinPage() {
     // Vérifier si déjà soumis sur cet appareil
     const done = localStorage.getItem(`checkin_done_${activityId}`);
     if (done) {
-      setResult({ ok: true, message: "Votre presence a deja ete enregistree pour cette activite.", already: true });
+      setResult({ ok: true, message: "Votre présence a déjà été enregistrée pour cette activité.", already: true });
     }
     api.get(`/checkin/${activityId}`)
       .then((r) => setActivity(r.data))
-      .catch((err) => setLoadError(err?.response?.data?.error || "Activite introuvable"));
+      .catch((err) => setLoadError(err?.response?.data?.error || "Activité introuvable"));
   }, [activityId]);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -45,7 +45,7 @@ export default function CheckinPage() {
     } catch (err) {
       const d = err?.response?.data;
       if (d?.already) {
-        setResult({ ok: true, message: "Votre presence est deja enregistree pour cette activite.", already: true });
+        setResult({ ok: true, message: "Votre présence est déjà enregistrée pour cette activité.", already: true });
       } else {
         setSubmitError(d?.error || "Erreur. Reessayez.");
       }
@@ -102,7 +102,7 @@ export default function CheckinPage() {
           <CheckCircle2 className="w-10 h-10 text-orange-500" />
         </div>
         <p className="text-xl font-bold text-slate-900 mb-2">
-          {result.already ? "Deja enregistre !" : "Presence confirmee !"}
+          {result.already ? "Déjà enregistré !" : "Présence confirmée !"}
         </p>
         <p className="text-slate-500 text-sm max-w-xs mb-6">{result.message}</p>
         <div className="rounded-2xl border border-orange-200 bg-white px-6 py-4 text-sm text-slate-700 max-w-xs w-full">
@@ -249,7 +249,7 @@ export default function CheckinPage() {
                 Enregistrement...
               </span>
             ) : (
-              "Confirmer ma presence"
+              "Confirmer ma présence"
             )}
           </button>
 
