@@ -2,11 +2,46 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>Inside ODC</title>
+    <meta
+      name="description"
+      content="Pilotage des activités, des bénéficiaires et des partenaires d'Orange Digital Center Sénégal."
+    />
+
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>Inside ODC</title>
+
+    <!-- Installation sur l'écran d'accueil : la plateforme est utilisée debout,
+         en salle, sur un téléphone. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Inside ODC" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- La couleur de la barre système suit le thème de l'utilisateur. -->
+    <meta name="theme-color" content="#FF7900" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#12100E" media="(prefers-color-scheme: dark)" />
+
+    <!-- Applique le thème avant le premier rendu, pour éviter l'éclair blanc
+         au chargement quand l'utilisateur a choisi le mode sombre. -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("theme");
+          var dark =
+            saved === "dark" ||
+            (saved !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.setAttribute("data-theme", "dark");
+        } catch (e) {
+          /* stockage bloqué : on garde le thème clair par défaut */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -414,3 +414,269 @@ body {
 [hidden] {
   display: none !important;
 }
+
+/* ============================================================
+   MODE SOMBRE
+   ------------------------------------------------------------
+   La plateforme compte environ 1 400 classes `slate-*` ecrites en
+   dur dans les pages : les reecrire toutes serait un diff
+   ingérable. Le theme est donc pose ici, en deux temps —
+   redefinition de nos propres classes de composants, puis
+   neutralisation ciblee des utilitaires qui portent le fond
+   clair. Les surfaces deja sombres (barre laterale, ecran de
+   projection du vote) ne sont pas touchees : elles n'utilisent
+   que slate-300/400 et blanc, hors de portee des regles ci-dessous.
+   ============================================================ */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #12100E;
+  --bg-soft: #17150F;
+  --card: #1C1A17;
+  --text: #F2EFEC;
+  --muted: #9C948D;
+  --line: #302C28;
+  --primary: #FF9233;
+  --primary-strong: #FF7900;
+}
+
+:root[data-theme="dark"] body {
+  color: var(--text);
+  background:
+    radial-gradient(1100px 700px at 5% -10%, #2A1B0C 0%, transparent 55%),
+    radial-gradient(900px 700px at 95% 0%, #131C2B 0%, transparent 50%),
+    linear-gradient(180deg, #15130F 0%, var(--bg) 45%, var(--bg-soft) 100%);
+}
+
+:root[data-theme="dark"] ::selection {
+  background: #7A3D00;
+  color: #FFE8D2;
+}
+
+/* ── Nos classes de composants ── */
+:root[data-theme="dark"] .card {
+  background: rgb(28 26 23 / 0.92);
+  border-color: rgb(255 255 255 / 0.08);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}
+:root[data-theme="dark"] .card-solid {
+  background: #1C1A17;
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+:root[data-theme="dark"] .surface-glass {
+  background: rgb(28 26 23 / 0.7);
+  border-color: rgb(255 255 255 / 0.08);
+}
+:root[data-theme="dark"] .input,
+:root[data-theme="dark"] .select {
+  background: #211E1B;
+  border-color: rgb(255 255 255 / 0.12);
+  color: var(--text);
+}
+:root[data-theme="dark"] .input::placeholder {
+  color: #7E766F;
+}
+:root[data-theme="dark"] .select option {
+  background: #211E1B;
+  color: var(--text);
+}
+:root[data-theme="dark"] .btn-ghost {
+  color: #CFC7C0;
+}
+:root[data-theme="dark"] .btn-ghost:hover {
+  background: rgb(255 255 255 / 0.07);
+}
+:root[data-theme="dark"] .btn-dark {
+  background: #E8E3DE;
+  color: #17150F;
+}
+:root[data-theme="dark"] .btn-dark:hover {
+  background: #FFFFFF;
+}
+:root[data-theme="dark"] .table-head {
+  background: rgb(255 255 255 / 0.05);
+  color: #A29A93;
+}
+:root[data-theme="dark"] .table-row {
+  border-color: rgb(255 255 255 / 0.07);
+}
+:root[data-theme="dark"] .table-row:hover {
+  background: rgb(255 146 51 / 0.07);
+}
+:root[data-theme="dark"] .page-subtitle {
+  color: var(--muted);
+}
+
+/* ── Utilitaires porteurs du fond clair ──
+   Portee limitee a <main> et aux surfaces flottantes : la barre
+   laterale et les ecrans de projection gardent leur propre theme. */
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white { background-color: #1C1A17 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-50 { background-color: #211E1B !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-100, :root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-100\/90 { background-color: #262320 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-200 { background-color: #302C28 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-900 { color: #F2EFEC !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-800 { color: #E4DFDA !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-700 { color: #D2CCC6 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-600 { color: #BAB2AB !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-500 { color: #9C948D !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-400 { color: #8A827B !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-slate-300 { color: #837B74 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-slate-100 { border-color: rgb(255 255 255 / 0.06) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-slate-200 { border-color: rgb(255 255 255 / 0.10) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-slate-300 { border-color: rgb(255 255 255 / 0.16) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .divide-slate-100 > * + * { border-color: rgb(255 255 255 / 0.06) !important; }
+  /* Fonds de pastilles : le -50 de Tailwind est presque blanc et
+  ressort de maniere criarde sur une carte sombre. */
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-emerald-50 { background-color: #12281E !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-red-50 { background-color: #2C1715 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-amber-50 { background-color: #2B2211 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-orange-50 { background-color: #2E1C0B !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-blue-50 { background-color: #131F30 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-violet-50 { background-color: #201830 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-sky-50 { background-color: #10222E !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-emerald-700 { color: #6FC79A !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-red-700 { color: #F09080 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-amber-700 { color: #DFAF60 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-orange-700 { color: #FFA860 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-blue-700 { color: #79B0E8 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-violet-700 { color: #B198E8 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-sky-700 { color: #6FB6D8 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-emerald-200 { border-color: rgb(111 199 154 / 0.28) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-red-200 { border-color: rgb(240 144 128 / 0.28) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-amber-200 { border-color: rgb(223 175 96 / 0.28) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-orange-200 { border-color: rgb(255 168 96 / 0.30) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-blue-200 { border-color: rgb(121 176 232 / 0.28) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-violet-200 { border-color: rgb(177 152 232 / 0.28) !important; }
+
+/* Palier -100 : utilise pour les pastilles de date et de statut. Il etait
+   absent des regles ci-dessus, d'ou du texte clair sur un fond clair (1,6:1). */
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-orange-100 { background-color: #3A2410 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-emerald-100 { background-color: #163123 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-red-100 { background-color: #351B18 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-amber-100 { background-color: #332915 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-blue-100 { background-color: #172639 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-green-100 { background-color: #163123 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-violet-100 { background-color: #271D3A !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-purple-100 { background-color: #271D3A !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-green-700 { color: #6FC79A !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .text-purple-700 { color: #B198E8 !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-green-200 { border-color: rgb(111 199 154 / 0.28) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-purple-200 { border-color: rgb(177 152 232 / 0.28) !important; }
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-slate-100 { border-color: rgb(255 255 255 / 0.06) !important; }
+
+/* Variantes d'opacite : Tailwind genere une classe distincte par palier
+   (`bg-white/95` n'est pas `bg-white`), et quatre tuiles du tableau de bord
+   restaient donc blanches. Les paliers eleves sont des surfaces claires a
+   convertir ; les paliers bas (bg-white/5 a /30) sont au contraire des
+   rehauts poses sur du sombre — on n'y touche pas. */
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white\/95,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white\/90,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white\/80,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white\/75,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white\/70,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-white\/65 { background-color: rgb(28 26 23 / 0.92) !important; }
+
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-50\/80,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-50\/60,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-50\/40 { background-color: rgb(33 30 27 / 0.7) !important; }
+
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-100\/90,
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-100\/70 { background-color: rgb(38 35 32 / 0.8) !important; }
+
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .bg-slate-200\/80 { background-color: rgb(48 44 40 / 0.8) !important; }
+
+:root[data-theme="dark"] :is(header, main, [role="dialog"], [role="region"]) .border-slate-200\/80 { border-color: rgb(255 255 255 / 0.10) !important; }
+
+/* L'en-tete et les surfaces vitrees utilisent des fonds blancs
+   semi-transparents, que les regles sur `.bg-white` ne couvrent pas. */
+:root[data-theme="dark"] header {
+  background-color: rgb(23 21 18 / 0.82) !important;
+  border-color: rgb(255 255 255 / 0.08) !important;
+}
+:root[data-theme="dark"] header .bg-white\/75,
+:root[data-theme="dark"] .bg-white\/90,
+:root[data-theme="dark"] .bg-white\/65 {
+  background-color: rgb(28 26 23 / 0.9) !important;
+}
+
+/* Le bouton de deconnexion combine `bg-white` et une teinte rouge claire :
+   sur fond sombre il tombait a 1,7:1. */
+:root[data-theme="dark"] header button.text-red-600 {
+  background-color: rgb(44 23 21 / 0.6) !important;
+  border-color: rgb(240 144 128 / 0.28) !important;
+  color: #F09080 !important;
+}
+:root[data-theme="dark"] header button.text-red-600:hover {
+  background-color: rgb(44 23 21 / 0.95) !important;
+}
+
+/* Une image ou une carte cartographique reste sur fond clair : on
+   evite l'inversion involontaire. */
+:root[data-theme="dark"] .leaflet-container {
+  background: #211E1B;
+}
+/* La barre d'attribution de Leaflet garde son fond blanc en dur : son
+   texte gris clair y tombait a 1,7:1. */
+:root[data-theme="dark"] .leaflet-control-attribution {
+  background: rgb(28 26 23 / 0.85) !important;
+  color: #A29A93 !important;
+}
+:root[data-theme="dark"] .leaflet-control-attribution a {
+  color: #FFA860 !important;
+}
+:root[data-theme="dark"] .leaflet-bar a {
+  background: #262320;
+  color: #E4DFDA;
+  border-color: rgb(255 255 255 / 0.10);
+}
+
+/* ============================================================
+   CIBLES TACTILES
+   ------------------------------------------------------------
+   Les boutons d'action de la plateforme sont dessines en 28 a
+   36 px — confortable a la souris, sous le seuil de 44 px
+   recommande au doigt. Plutot que de les redimensionner partout
+   (et d'alourdir l'affichage bureau), on ne les agrandit que
+   lorsque le pointeur principal est grossier, c'est-a-dire sur
+   telephone et tablette.
+
+   La regle vise uniquement `button` et `a` : les pastilles, les
+   avatars et les conteneurs d'icone de meme taille ne bougent pas.
+   ============================================================ */
+@media (pointer: coarse) {
+  button.h-7.w-7,  button.w-7.h-7,
+  button.h-8.w-8,  button.w-8.h-8,
+  button.h-9.w-9,  button.w-9.h-9,
+  a.h-7.w-7,       a.w-7.h-7,
+  a.h-8.w-8,       a.w-8.h-8,
+  a.h-9.w-9,       a.w-9.h-9 {
+    height: 2.75rem;
+    width: 2.75rem;
+  }
+
+  /* Icones cliquables posees a nu (sans cadre) : on elargit la zone
+     sans toucher au dessin, via une marge negative compensee. */
+  button > svg.w-4.h-4,
+  button > svg.h-4.w-4 {
+    padding: 0.375rem;
+    margin: -0.375rem;
+    box-sizing: content-box;
+  }
+
+  /* Controles segmentes : onglets et bascules de vue font 36 px de haut,
+     confortables a la souris mais justes au doigt. */
+  [role="tab"],
+  [role="group"] > button,
+  [role="tablist"] > button,
+  .btn {
+    min-height: 2.75rem;
+  }
+
+  /* Les bascules a icone seule sont larges de 40 px dans un groupe :
+     on complete sur l'autre axe. */
+  [role="group"] > button {
+    min-width: 2.75rem;
+  }
+}

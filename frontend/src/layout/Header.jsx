@@ -13,6 +13,7 @@ import {
 import { useAuth } from "../auth/useAuth";
 import ODCLogo from "../components/branding/ODCLogo";
 import NotificationBell from "../components/NotificationBell";
+import { ThemeToggle } from "../components/ui";
 
 export default function Header({ currentPageName, onMenuClick }) {
   const navigate = useNavigate();
@@ -132,7 +133,7 @@ export default function Header({ currentPageName, onMenuClick }) {
         <div className="flex items-center justify-end gap-2 lg:gap-3">
           <form
             onSubmit={handleGlobalSearch}
-            className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[320px] transition focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100"
+            className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[240px] 2xl:min-w-[320px] transition focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100"
           >
             <Search className="h-4 w-4 text-slate-500" />
             <input
@@ -184,6 +185,8 @@ export default function Header({ currentPageName, onMenuClick }) {
               </div>
             )}
           </div>
+
+          <ThemeToggle className="hidden sm:inline-flex" />
 
           <NotificationBell />
 
