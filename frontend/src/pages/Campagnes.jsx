@@ -28,6 +28,7 @@ import {
   Send, Eye, X, Loader2, Pencil, Users,
 } from "lucide-react";
 import api from "../api";
+import { useToast, useConfirm } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
 /* ── TextStyle étendu : taille + famille de police ─────────── */
@@ -240,8 +241,8 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
   const validEmails = customEmails.split(/[\n,;]+/).filter(e => e.trim().includes("@")).length;
 
   async function save(andSend = false) {
-    if (!name.trim())    { alert("Le nom de la campagne est requis."); return; }
-    if (!subject.trim()) { alert("L'objet de l'email est requis."); return; }
+    if (!name.trim())    { toast.warning("Le nom de la campagne est requis."); return; }
+    if (!subject.trim()) { toast.warning("L'objet de l'email est requis."); return; }
     setSaving(true);
     try {
       const customEmailsJSON = JSON.stringify(
@@ -267,7 +268,7 @@ function CampaignModal({ campaign, activities, onClose, onSaved }) {
       }
       onSaved(savedId, andSend, name.trim());
     } catch (err) {
-      alert(err?.response?.data?.error || "Erreur lors de la sauvegarde.");
+      toast.error(err?.response?.data?.error || "L'enregistrement a échoué.");
     } finally {
       setSaving(false);
     }
@@ -573,13 +574,18 @@ function TemplatesTab() {
       setDirty(false);
       setTemplates(prev => prev.map(t => t.slug === selected.slug ? { ...t, subject, body_html } : t));
       setSelected(t => ({ ...t, subject, body_html }));
-    } catch { alert("Erreur lors de la sauvegarde."); }
+    } catch { toast.error("L'enregistrement a échoué."); }
     setSaving(false);
   }
 
   async function reset() {
     if (!selected) return;
-    if (!window.confirm("Remettre ce template aux valeurs par défaut ?")) return;
+    const ok = await confirm({
+      title: "Réinitialiser ce modèle ?",
+      body: "Vos modifications seront remplacées par le contenu par défaut.",
+      confirmLabel: "Réinitialiser",
+    });
+    if (!ok) return;
     try {
       const res = await api.delete(`/email-templates/${selected.slug}/reset`);
       const def = res.data.template;
@@ -589,7 +595,7 @@ function TemplatesTab() {
       setSelected(t => ({ ...t, ...def }));
       setDirty(false);
       setSavedSlug(null);
-    } catch { alert("Erreur lors de la réinitialisation."); }
+    } catch { toast.error("La réinitialisation a échoué."); }
   }
 
   /* ── Actions éditeur ── */
@@ -877,6 +883,8 @@ const SEND_MODE_STYLE = {
 };
 
 export default function Campagnes() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { isAdmin } = useAuth();
   const [tab,             setTab]             = useState("campagnes");
   const [campagnes,       setCampagnes]       = useState([]);
@@ -923,16 +931,21 @@ export default function Campagnes() {
       setSendResult({ ...res.data, name: camp?.name || "la campagne" });
       fetchCampagnes();
     } catch (err) {
-      alert(err?.response?.data?.error || "Erreur lors de l'envoi");
+      toast.error(err?.response?.data?.error || "L'envoi a échoué.");
     } finally {
       setSendingId(null);
     }
   };
 
   const handleDelete = async (id) => {
-    if (!confirm("Supprimer définitivement cette campagne ?")) return;
+    const ok = await confirm({
+      title: "Supprimer cette campagne ?",
+      body: "Son contenu et son historique d'envoi seront supprimés.",
+      destructive: true,
+    });
+    if (!ok) return;
     try { await api.delete(`/campagnes/${id}`); fetchCampagnes(); }
-    catch { alert("Erreur lors de la suppression."); }
+    catch { toast.error("La suppression a échoué."); }
   };
 
   return (

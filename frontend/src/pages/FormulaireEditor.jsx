@@ -11,6 +11,7 @@ import FieldEditor from "./formulaires/FieldEditor";
 import FormBrandingPanel from "./formulaires/FormBrandingPanel";
 import FormSettingsPanel from "./formulaires/FormSettingsPanel";
 import FormSubmissionsPanel from "./formulaires/FormSubmissionsPanel";
+import { useToast, useConfirm } from "../components/ui";
 import { FORM_EDITOR_DRAFT_KEY, FIELD_TYPES } from "./formulaires/constants";
 import {
   defaultSettings, isoToLocalDateTime, localDateTimeToIso,
@@ -142,6 +143,8 @@ function TypePickerPopover({ onAdd, onClose }) {
    FormulaireEditor
 ══════════════════════════════════════════ */
 export default function FormulaireEditor() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const isNew = !id || id === "new";
@@ -283,7 +286,7 @@ export default function FormulaireEditor() {
       a.href = url; a.download = `${editor.slug || `form-${editor.id}`}-reponses.${format}`;
       document.body.appendChild(a); a.click(); a.remove();
       window.URL.revokeObjectURL(url);
-    } catch { alert("Erreur export"); } finally { setExportingFormat(""); }
+    } catch { toast.error("L'export a échoué."); } finally { setExportingFormat(""); }
   };
 
   const handleDeleteSubmission = async sid => {
@@ -291,7 +294,7 @@ export default function FormulaireEditor() {
       await api.delete(`/forms/${editor.id}/submissions/${sid}`);
       setSubmissions(prev => prev.filter(s => s.id !== sid));
       setEditor(prev => ({ ...prev, submissions_count: Math.max(0, (prev.submissions_count || 0) - 1) }));
-    } catch { alert("Erreur suppression réponse"); }
+    } catch { toast.error("La suppression de la réponse a échoué."); }
   };
 
   /* ── save ── */
@@ -361,7 +364,7 @@ export default function FormulaireEditor() {
       else { await api.post("/forms", payload); localStorage.removeItem(FORM_EDITOR_DRAFT_KEY); }
       navigate("/formulaires");
     } catch (err) {
-      alert(err?.response?.data?.error || "Erreur sauvegarde formulaire");
+      toast.error(err?.response?.data?.error || "L'enregistrement du formulaire a échoué.");
     } finally { setSaving(false); }
   };
 
@@ -417,9 +420,14 @@ export default function FormulaireEditor() {
     setSelectedFieldId(newField._id);
   };
 
-  const removePage = pageNum => {
+  const removePage = async pageNum => {
     if (pageNum <= 1) return;
-    if (!window.confirm(`Supprimer la page ${pageNum} ? Ses champs seront fusionnés avec la page ${pageNum - 1}.`)) return;
+    const ok = await confirm({
+      title: `Supprimer la page ${pageNum} ?`,
+      body: `Ses champs seront fusionnés avec la page ${pageNum - 1}.`,
+      destructive: true,
+    });
+    if (!ok) return;
     setEditor(prev => ({
       ...prev,
       fields: prev.fields.map(f => {

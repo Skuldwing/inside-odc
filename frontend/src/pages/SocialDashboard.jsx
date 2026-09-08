@@ -10,6 +10,7 @@ import {
   LineChart, Line, Legend,
 } from "recharts";
 import api from "../api";
+import { useToast, useConfirm } from "../components/ui";
 
 /* ===== CONFIG PLATEFORMES ===== */
 const PLATFORMS = [
@@ -103,6 +104,8 @@ function NumField({ label, value, onChange }) {
 
 /* ===================================================================== */
 export default function SocialDashboard() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const currentYear = new Date().getFullYear();
   const [tab, setTab] = useState("overview");
   const [year, setYear] = useState(currentYear);
@@ -239,7 +242,8 @@ export default function SocialDashboard() {
   };
 
   const handleDelete = async id => {
-    if (!confirm("Supprimer ce KPI social ?")) return;
+    const ok = await confirm({ title: "Supprimer ce KPI social ?", destructive: true });
+    if (!ok) return;
     try {
       await api.delete(`/social-kpis/${id}`);
       fetchRows();

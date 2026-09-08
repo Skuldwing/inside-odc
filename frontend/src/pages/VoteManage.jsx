@@ -6,6 +6,7 @@ import {
   MessageCircleQuestion, Download, X, StopCircle, Monitor, Heart, ListOrdered, UserCheck, ChevronUp, ChevronDown,
 } from "lucide-react";
 import api from "../api";
+import { useToast, useConfirm } from "../components/ui";
 
 /* Timer SVG circulaire — partagé avec VoteJury */
 function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
@@ -103,6 +104,8 @@ const PROJ_STATUS = {
 };
 
 export default function VoteManage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { id } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -155,7 +158,12 @@ export default function VoteManage() {
   };
 
   const closeProject = async () => {
-    if (!confirm("Fermer les votes pour ce projet ?")) return;
+    const ok = await confirm({
+      title: "Fermer les votes pour ce projet ?",
+      body: "Les jurés ne pourront plus modifier leurs notes.",
+      confirmLabel: "Fermer les votes",
+    });
+    if (!ok) return;
     setClosing(true);
     try {
       await api.post(`/vote/sessions/${id}/close-project`);
@@ -165,7 +173,12 @@ export default function VoteManage() {
   };
 
   const closeSession = async () => {
-    if (!confirm("Terminer la session de vote ? Les résultats seront finalisés.")) return;
+    const ok = await confirm({
+      title: "Terminer la session de vote ?",
+      body: "Les résultats seront finalisés et le classement figé.",
+      confirmLabel: "Terminer la session",
+    });
+    if (!ok) return;
     try {
       await api.put(`/vote/sessions/${id}/close`);
       await fetchLive();

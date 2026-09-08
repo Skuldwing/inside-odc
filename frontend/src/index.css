@@ -385,3 +385,24 @@ body {
   float: left;
   height: 0;
 }
+
+/* ===== Notifications (lot 2) ===== */
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.anim-toast-in { animation: toastIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* ===== Focus clavier (lot 2) =====
+   L'audit n'a trouve aucune regle focus-visible dans la plateforme : la
+   navigation au clavier etait invisible. Anneau global, pose seulement sur
+   le focus clavier — jamais au clic a la souris. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #FF7900;
+  outline-offset: 2px;
+  border-radius: 0.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-toast-in { animation: none; }
+}
