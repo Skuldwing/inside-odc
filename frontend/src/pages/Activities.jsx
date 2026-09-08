@@ -41,6 +41,7 @@ export default function Activities({
   const [status, setStatus] = useState("all");
   const [partnerFilter, setPartnerFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 25;
   const [activities, setActivities] = useState([]);
@@ -670,27 +671,63 @@ export default function Activities({
     }
   };
 
+  /* Resume des filtres actifs : on doit savoir ce qu'on regarde sans deplier. */
+  const STATUS_LABELS = {
+    planned: "Planifiée",
+    ongoing: "En cours",
+    completed: "Terminée",
+  };
+
+  const activeFilterChips = [];
+  if (role === "admin" && partnerFilter) {
+    activeFilterChips.push({
+      key: "partner",
+      label: "Partenaire",
+      value: partners.find((p) => String(p.id) === String(partnerFilter))?.name || "—",
+      clear: () => setPartnerFilter(""),
+    });
+  }
+  if (deviceFilter) {
+    activeFilterChips.push({
+      key: "device",
+      label: "Dispositif",
+      value: deviceOptions.find((d) => String(d.id) === String(deviceFilter))?.name || "—",
+      clear: () => setDeviceFilter(""),
+    });
+  }
+  if (status !== "all") {
+    activeFilterChips.push({
+      key: "status",
+      label: "Statut",
+      value: STATUS_LABELS[status] || status,
+      clear: () => setStatus("all"),
+    });
+  }
+  const activeFilterCount = activeFilterChips.length;
+
+  const resetFilters = () => {
+    setPartnerFilter("");
+    setDeviceFilter("");
+    setStatus("all");
+  };
   return (
     <div className="space-y-6">
       <section className="surface-glass p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
-              Operations
-            </p>
-            <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
+            <h1 className="text-2xl lg:text-3xl font-semibold text-slate-900">
               Activités
             </h1>
             <p className="mt-1 text-sm text-slate-500">
               Gestion, import Excel et suivi des activités terrain.
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-shrink-0 rounded-xl border border-slate-200 bg-white overflow-hidden">
               <button
                 type="button"
                 onClick={() => setViewMode("liste")}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${viewMode === "liste" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm transition-colors ${viewMode === "liste" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}
               >
                 <List className="w-4 h-4" />
                 Liste
@@ -698,7 +735,7 @@ export default function Activities({
               <button
                 type="button"
                 onClick={() => setViewMode("calendrier")}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${viewMode === "calendrier" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap px-3 py-2 text-sm transition-colors ${viewMode === "calendrier" ? "bg-orange-500 text-white" : "text-slate-500 hover:bg-slate-50"}`}
               >
                 <CalendarDays className="w-4 h-4" />
                 Calendrier
@@ -714,20 +751,19 @@ export default function Activities({
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-4 gap-2 sm:gap-4">
         <CountCard label="Total" value={stats.total} />
         <CountCard label="Planifiées" value={stats.planned} />
         <CountCard label="En cours" value={stats.ongoing} />
         <CountCard label="Terminées" value={stats.completed} />
       </section>
 
+      {/* La recherche reste toujours accessible ; partenaire, dispositif et
+          statut se replient, avec leurs valeurs actives resumees en pastilles.
+          Le panneau deplie occupait 290 px avant la premiere activite. */}
       <section className="card p-4 lg:p-5">
-        <div className="flex items-center gap-2 text-slate-700">
-          <Filter className="h-4 w-4 text-orange-500" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide">Filtres</h2>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
-          <div className="relative">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
             <input
               type="text"
@@ -737,7 +773,49 @@ export default function Activities({
               className="input pl-10"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            className={`btn-ghost flex-shrink-0 border ${
+              activeFilterCount > 0 ? "border-orange-200 bg-orange-50 text-orange-700" : "border-slate-200"
+            }`}
+          >
+            <Filter className="h-4 w-4" aria-hidden="true" />
+            Filtres
+            {activeFilterCount > 0 && (
+              <span className="ml-0.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-orange-500 px-1.5 text-xs font-semibold text-white">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
 
+        {activeFilterCount > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {activeFilterChips.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                onClick={c.clear}
+                title={`Retirer le filtre « ${c.label} »`}
+                className="badge border-orange-200 bg-orange-50 text-orange-700 transition hover:bg-orange-100"
+              >
+                {c.label} : {c.value}
+                <X className="ml-1.5 h-3 w-3" aria-hidden="true" />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="text-xs font-medium text-slate-500 underline underline-offset-2 transition hover:text-slate-900"
+            >
+              Tout réinitialiser
+            </button>
+          </div>
+        )}
+
+        <div hidden={!filtersOpen} className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
           {role === "admin" ? (
             <select
               className="select"

@@ -406,3 +406,11 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .anim-toast-in { animation: none; }
 }
+
+/* L'attribut `hidden` doit gagner sur les utilitaires de display.
+   Sans cette regle, `hidden` pose sur un element `.grid` ou `.flex` reste
+   sans effet : la classe Tailwind arrive plus tard dans la feuille et
+   l'emporte a specificite egale. */
+[hidden] {
+  display: none !important;
+}
