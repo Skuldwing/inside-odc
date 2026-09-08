@@ -15,11 +15,15 @@ import ODCLogo from "../components/branding/ODCLogo";
 import NotificationBell from "../components/NotificationBell";
 import { ThemeToggle } from "../components/ui";
 
-export default function Header({ currentPageName, onMenuClick }) {
+export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
+  /* macOS affiche ⌘K, le reste Ctrl K. */
+  const shortcutLabel =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "")
+      ? "⌘K"
+      : "Ctrl K";
   const navigate = useNavigate();
   const location = useLocation();
   const { logout, role } = useAuth();
-  const [globalSearch, setGlobalSearch] = useState("");
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef(null);
 
@@ -77,30 +81,6 @@ export default function Header({ currentPageName, onMenuClick }) {
     navigate("/login", { replace: true });
   };
 
-  const handleGlobalSearch = (e) => {
-    e.preventDefault();
-    const q = globalSearch.trim();
-    if (!q) return;
-
-    const normalized = q.toLowerCase();
-    if (normalized.includes("import")) {
-      navigate(`/activities?action=import&q=${encodeURIComponent(q)}`);
-      return;
-    }
-    if (normalized.includes("util")) {
-      navigate(`/utilisateurs?q=${encodeURIComponent(q)}`);
-      return;
-    }
-    if (normalized.includes("form")) {
-      navigate(`/formulaires?q=${encodeURIComponent(q)}`);
-      return;
-    }
-    if (normalized.includes("activ")) {
-      navigate(`/activities?q=${encodeURIComponent(q)}`);
-      return;
-    }
-    navigate(`/participants?q=${encodeURIComponent(q)}`);
-  };
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl">
@@ -131,23 +111,30 @@ export default function Header({ currentPageName, onMenuClick }) {
         </div>
 
         <div className="flex items-center justify-end gap-2 lg:gap-3">
-          <form
-            onSubmit={handleGlobalSearch}
-            className="hidden xl:flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 min-w-[240px] 2xl:min-w-[320px] transition focus-within:border-orange-300 focus-within:ring-4 focus-within:ring-orange-100"
+          {/* L'ancien champ n'interrogeait aucune donnee : il testait quatre
+              chaines en dur et renvoyait tout le reste sur Participants. Il
+              ouvre desormais la vraie recherche. */}
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-orange-300 xl:flex xl:min-w-[240px] 2xl:min-w-[320px]"
           >
-            <Search className="h-4 w-4 text-slate-500" />
-            <input
-              type="text"
-              className="w-full border-none bg-transparent p-0 text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none"
-              placeholder="Rechercher et appuyer sur Entree..."
-              aria-label="Recherche globale"
-              value={globalSearch}
-              onChange={(e) => setGlobalSearch(e.target.value)}
-            />
-            <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-500">
-              ENTREE
-            </span>
-          </form>
+            <Search className="h-4 w-4 flex-shrink-0 text-slate-500" aria-hidden="true" />
+            <span className="flex-1 text-sm text-slate-500">Rechercher…</span>
+            <kbd className="flex-shrink-0 rounded-md border border-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-500">
+              {shortcutLabel}
+            </kbd>
+          </button>
+
+          {/* Sous xl, le champ n'a pas la place : une icone suffit. */}
+          <button
+            type="button"
+            onClick={onOpenSearch}
+            aria-label="Rechercher"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-300 xl:hidden"
+          >
+            <Search className="h-4 w-4" aria-hidden="true" />
+          </button>
 
           <div className="relative hidden sm:block" ref={actionsRef}>
             {role === "admin" && (

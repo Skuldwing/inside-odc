@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import OnboardingTour from "../components/OnboardingTour";
+import CommandPalette from "../components/ui/CommandPalette";
+import { useAuth } from "../auth/useAuth";
 
 export default function Layout() {
+  const { isAdmin, isTeamOdc } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("sidebar_collapsed") === "true"
   );
@@ -37,6 +41,27 @@ export default function Layout() {
       : PAGE_TITLES.find(([prefix]) => location.pathname.startsWith(prefix))?.[1] ||
         location.pathname.replace("/", "");
 
+  /* Ctrl/Cmd + K depuis n'importe ou, sauf quand on est deja en train de
+     saisir du texte ailleurs. La touche « / » ouvre aussi la recherche, comme
+     dans la plupart des outils de ce type. */
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const tag = e.target?.tagName;
+      const typing =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || e.target?.isContentEditable;
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (e.key === "/" && !typing) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   const toggleCollapsed = () => {
     const next = !collapsed;
     setCollapsed(next);
@@ -46,6 +71,13 @@ export default function Layout() {
   return (
     <div className="min-h-screen">
       <OnboardingTour />
+
+      <CommandPalette
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        isAdmin={isAdmin}
+        isTeamOdc={isTeamOdc}
+      />
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
@@ -67,6 +99,7 @@ export default function Layout() {
         <Header
           currentPageName={currentPageName}
           onMenuClick={() => setSidebarOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
         />
 
         <main className="p-4 lg:p-6">
