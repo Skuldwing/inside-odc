@@ -252,7 +252,7 @@ export default function Formulaires() {
             <FileText className="w-10 h-10 mx-auto mb-3 text-slate-200" />
             <p className="font-medium text-slate-500 mb-1">Aucun formulaire trouvé</p>
             <p className="text-sm mb-4">
-              {search ? "Essaie un autre mot-clé." : "Crée ton premier formulaire."}
+              {search ? "Essayez un autre mot-clé." : "Créez votre premier formulaire."}
             </p>
             {!search && (
               <button type="button" className="btn-primary mx-auto" onClick={() => navigate("/formulaires/new")}>

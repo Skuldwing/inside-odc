@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Pencil, Trash2, Megaphone } from "lucide-react";
 import api from "../api";
-import { useToast, useConfirm, Modal, Button } from "../components/ui";
+import { useToast, useConfirm, Modal, Button, EmptyState } from "../components/ui";
 
 const platforms = [
   { value: "facebook", label: "Facebook" },
@@ -214,8 +214,16 @@ export default function SocialKpis() {
               )}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
-                    Aucun KPI enregistré pour {year}
+                  <td colSpan={8}>
+                    <EmptyState
+                      bare
+                      icon={Megaphone}
+                      title={`Aucune saisie pour ${year}`}
+                      description="Enregistrez les chiffres mensuels de chaque plateforme pour alimenter le Radar Social."
+                      actionLabel="Nouveau KPI"
+                      actionIcon={Plus}
+                      onAction={() => { resetForm(); setOpen(true); }}
+                    />
                   </td>
                 </tr>
               )}

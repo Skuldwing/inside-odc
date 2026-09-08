@@ -576,7 +576,7 @@ export default function VoteConfig() {
         </div>
 
         {session.projects?.length === 0 && !showProjForm && (
-          <p className="text-sm text-slate-500 italic">Aucun projet ajouté</p>
+          <p className="text-sm text-slate-500">Aucun projet — ajoutez-en un pour que le jury ait quelque chose à noter.</p>
         )}
 
         <div className="space-y-2 mb-3">
@@ -772,7 +772,7 @@ export default function VoteConfig() {
         </div>
 
         {session.criteria?.length === 0 && !showCritForm && (
-          <p className="text-sm text-slate-500 italic">Aucun critère ajouté</p>
+          <p className="text-sm text-slate-500">Aucun critère — sans critère, le jury ne peut pas attribuer de note.</p>
         )}
 
         <div className="space-y-2 mb-3">

@@ -7,3 +7,4 @@ export { default as PageHeader } from "./PageHeader";
 export { Skeleton, SkeletonText, SkeletonCards, SkeletonRows } from "./Skeleton";
 export { ToastProvider, useToast } from "./ToastProvider";
 export { ConfirmProvider, useConfirm } from "./ConfirmProvider";
+export { default as DensityToggle, useDensity } from "./DensityToggle";

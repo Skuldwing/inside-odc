@@ -28,7 +28,7 @@ import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
-import { useToast, useConfirm } from "../components/ui";
+import { useToast, useConfirm, EmptyState, DensityToggle, useDensity } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
 export default function Activities({
@@ -42,6 +42,7 @@ export default function Activities({
   const [partnerFilter, setPartnerFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { listGap, cardPadding } = useDensity();
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 25;
   const [activities, setActivities] = useState([]);
@@ -741,6 +742,7 @@ export default function Activities({
                 Calendrier
               </button>
             </div>
+            <DensityToggle className="flex-shrink-0" />
             {!isViewer && (
               <button className="btn-primary" onClick={openUploadModal}>
                 <Plus className="w-4 h-4" />
@@ -884,13 +886,38 @@ export default function Activities({
         const totalPages = Math.ceil(filteredActivities.length / ITEMS_PER_PAGE);
         const paginated = filteredActivities.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
         return (
-          <div className="space-y-4">
+          <div className={`flex flex-col ${listGap}`}>
             {loading && <div className="card p-6 text-center text-slate-500">Chargement...</div>}
             {!loading && filteredActivities.length === 0 && (
-              <div className="card p-6 text-center text-slate-500">Aucune activité trouvée</div>
+              <EmptyState
+                icon={CalendarDays}
+                compact
+                title={
+                  activities.length === 0
+                    ? "Aucune activité enregistrée"
+                    : "Aucune activité ne correspond à la recherche"
+                }
+                description={
+                  activities.length === 0
+                    ? "Créez une activité, puis importez sa liste de présences pour alimenter les indicateurs."
+                    : "Modifiez la recherche ou retirez un filtre pour élargir les résultats."
+                }
+                actionLabel={
+                  activities.length === 0
+                    ? (isViewer ? undefined : "Nouvelle activité")
+                    : "Tout réinitialiser"
+                }
+                actionIcon={activities.length === 0 ? Plus : undefined}
+                onAction={
+                  activities.length === 0
+                    ? (isViewer ? undefined : openUploadModal)
+                    : () => { setSearch(""); resetFilters(); }
+                }
+              />
             )}
             {paginated.map((activity) => (
               <ActivityCard
+                cardPadding={cardPadding}
                 key={activity.id}
                 activity={activity}
                 canEdit={!isViewer}
@@ -2094,7 +2121,7 @@ function QrModal({ activity, onClose }) {
   );
 }
 
-function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, onOpenGallery, showQrCode = true }) {
+function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, onOpenGallery, showQrCode = true, cardPadding = "p-5" }) {
   const statusColors = {
     planned: "bg-blue-100 border-blue-200 text-blue-700",
     ongoing: "bg-orange-100 border-orange-200 text-orange-700",
@@ -2102,7 +2129,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
   };
 
   return (
-    <div className="card p-5">
+    <div className={`card ${cardPadding}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
           <p className="font-semibold text-slate-900 text-lg break-words">{activity.title}</p>

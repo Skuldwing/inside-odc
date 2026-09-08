@@ -913,7 +913,7 @@ function RecentActivitiesCard({ data }) {
           </div>
         ))}
         {data.length === 0 && (
-          <p className="text-center text-slate-500 py-8">Aucune activité récente</p>
+          <p className="py-8 text-center text-sm text-slate-500">Aucune activité sur la période sélectionnée</p>
         )}
       </div>
     </div>
