@@ -26,10 +26,18 @@ export function AuthProvider({ children }) {
           localStorage.removeItem("user");
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!mounted) return;
-        setUser(null);
-        localStorage.removeItem("user");
+        /* On ne ferme la session que si le serveur a repondu. Une panne
+           reseau ne prouve rien sur la validite de la session, et vider le
+           stockage ici deconnectait l'utilisateur a la moindre coupure —
+           precisement ce qui arrive en salle avec un Wi-Fi instable.
+           La securite ne repose pas la-dessus : chaque requete est de toute
+           facon verifiee cote serveur. */
+        if (err?.response) {
+          setUser(null);
+          localStorage.removeItem("user");
+        }
       })
       .finally(() => {
         if (mounted) setAuthReady(true);

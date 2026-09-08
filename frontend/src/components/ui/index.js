@@ -9,3 +9,5 @@ export { ToastProvider, useToast } from "./ToastProvider";
 export { ConfirmProvider, useConfirm } from "./ConfirmProvider";
 export { default as DensityToggle, useDensity } from "./DensityToggle";
 export { default as ThemeToggle, useTheme } from "./ThemeToggle";
+export { default as ServiceWorkerUpdate } from "./ServiceWorkerUpdate";
+export { default as OfflineBanner } from "./OfflineBanner";
