@@ -664,7 +664,7 @@ export default function Activities({
       <section className="surface-glass p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
               Operations
             </p>
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
@@ -717,7 +717,7 @@ export default function Activities({
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
             <input
               type="text"
               placeholder="Rechercher une activité..."
@@ -862,9 +862,9 @@ export default function Activities({
               />
               <div className="border-t border-slate-100 pt-4">
                 <label className="text-sm font-medium flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-slate-400" />
+                  <FileText className="w-4 h-4 text-slate-500" />
                   Rapport d'activité PDF
-                  <span className="text-xs text-slate-400 font-normal">(optionnel)</span>
+                  <span className="text-xs text-slate-500 font-normal">(optionnel)</span>
                 </label>
                 <input
                   type="file"
@@ -883,7 +883,7 @@ export default function Activities({
                 <div className="flex items-center justify-between mb-1">
                   <div>
                     <label className="text-sm font-medium">Liste de presences Excel</label>
-                    <span className="ml-2 text-xs text-slate-400">(optionnel — peut être ajouté plus tard)</span>
+                    <span className="ml-2 text-xs text-slate-500">(optionnel — peut être ajouté plus tard)</span>
                   </div>
                   <a
                     href={`${import.meta.env.VITE_API_URL}/import/template`}
@@ -997,7 +997,7 @@ export default function Activities({
           {/* Rapport d'activité */}
           <div className="mt-5 pt-5 border-t border-slate-200">
             <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-400" />
+              <FileText className="w-4 h-4 text-slate-500" />
               Rapport d'activité
             </p>
             {editForm.report_filename && (
@@ -1180,12 +1180,12 @@ export default function Activities({
           {/* Photos */}
           <div className="mt-5 pt-5 border-t border-slate-200">
             <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-              <Camera className="w-4 h-4 text-slate-400" />
+              <Camera className="w-4 h-4 text-slate-500" />
               Photos de l&apos;activité
               {(() => {
                 const count = activities.find(a => a.id === editForm.id)?.photo_count ?? 0;
                 return (
-                  <span className={`text-xs font-normal rounded-full px-2 py-0.5 border ${count >= 8 ? "text-red-600 bg-red-50 border-red-200" : count > 0 ? "text-violet-600 bg-violet-50 border-violet-200" : "text-slate-400 bg-slate-50 border-slate-200"}`}>
+                  <span className={`text-xs font-normal rounded-full px-2 py-0.5 border ${count >= 8 ? "text-red-600 bg-red-50 border-red-200" : count > 0 ? "text-violet-600 bg-violet-50 border-violet-200" : "text-slate-500 bg-slate-50 border-slate-200"}`}>
                     {count}/8 photo{count !== 1 ? "s" : ""}
                   </span>
                 );
@@ -1231,7 +1231,7 @@ export default function Activities({
               </p>
               <button
                 onClick={() => { setGalleryActivity(null); setLightboxIdx(null); }}
-                className="ml-3 flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                className="ml-3 flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1268,9 +1268,9 @@ export default function Activities({
             {/* Grille de photos */}
             <div className="flex-1 overflow-y-auto p-4">
               {galleryLoading ? (
-                <div className="flex items-center justify-center h-32 text-slate-400 text-sm">Chargement…</div>
+                <div className="flex items-center justify-center h-32 text-slate-500 text-sm">Chargement…</div>
               ) : galleryPhotos.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-32 text-slate-400 gap-2">
+                <div className="flex flex-col items-center justify-center h-32 text-slate-500 gap-2">
                   <ImageIcon className="w-10 h-10 opacity-20" />
                   <p className="text-sm">Aucune photo pour le moment</p>
                 </div>
@@ -1453,7 +1453,7 @@ function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConf
                 <span className="text-xs text-slate-500">←</span>
                 <span className="text-xs text-slate-700 font-mono">{col.original}</span>
                 {col.samples.length > 0 && (
-                  <span className="ml-auto text-xs text-slate-400 truncate max-w-[120px]">
+                  <span className="ml-auto text-xs text-slate-500 truncate max-w-[120px]">
                     ex : {col.samples[0]}
                   </span>
                 )}
@@ -1474,7 +1474,7 @@ function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConf
               <div key={col.original} className="flex items-center gap-2 rounded-lg bg-white border border-slate-200 px-3 py-1.5">
                 <span className="text-xs text-slate-700 font-mono flex-shrink-0 w-32 truncate">{col.original}</span>
                 {col.samples.length > 0 && (
-                  <span className="text-xs text-slate-400 truncate flex-1">ex : {col.samples[0]}</span>
+                  <span className="text-xs text-slate-500 truncate flex-1">ex : {col.samples[0]}</span>
                 )}
                 <select
                   className="ml-auto text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white text-slate-700"
@@ -1599,7 +1599,7 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
       </div>
 
       <div>
-        <label className="text-sm font-medium">Date de fin <span className="text-slate-400 font-normal text-xs">(optionnel — si activité multi-jours)</span></label>
+        <label className="text-sm font-medium">Date de fin <span className="text-slate-500 font-normal text-xs">(optionnel — si activité multi-jours)</span></label>
         <input
           type="date"
           className="input mt-1"
@@ -1622,7 +1622,7 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
 
       <div>
         <label className="text-sm font-medium">Nombre de présences (estimé)</label>
-        <p className="text-xs text-slate-400 mb-1">Remplacement temporaire avant import Excel. Remplace automatiquement par le vrai compte une fois la liste importée.</p>
+        <p className="text-xs text-slate-500 mb-1">Remplacement temporaire avant import Excel. Remplace automatiquement par le vrai compte une fois la liste importée.</p>
         <input
           type="number"
           min="0"
@@ -1801,13 +1801,13 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
                   {dayActivities.slice(0, 2).map((a) => {
                     const c = STATUS_COLORS[a.status] || STATUS_COLORS.planned;
                     return (
-                      <div key={a.id} className={`rounded px-1 py-0.5 text-[10px] leading-tight truncate font-medium ${c.bg} ${c.text}`}>
+                      <div key={a.id} className={`rounded px-1 py-0.5 text-xs leading-tight truncate font-medium ${c.bg} ${c.text}`}>
                         {a.title}
                       </div>
                     );
                   })}
                   {dayActivities.length > 2 && (
-                    <div className="text-[10px] text-slate-400 px-1">+{dayActivities.length - 2}</div>
+                    <div className="text-xs text-slate-500 px-1">+{dayActivities.length - 2}</div>
                   )}
                 </div>
               </div>
@@ -1836,7 +1836,7 @@ function CalendarView({ activities, calendarDate, onDateChange, canEdit, onEdit,
             </span>
           </p>
           {selectedActivities.length === 0 ? (
-            <p className="text-sm text-slate-400">Aucune activité ce jour.</p>
+            <p className="text-sm text-slate-500">Aucune activité ce jour.</p>
           ) : (
             <div className="space-y-3">
               {selectedActivities.map((activity) => (
@@ -1980,7 +1980,7 @@ function QrModal({ activity, onClose }) {
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-400 break-all mb-4">{checkinUrl}</p>
+        <p className="text-center text-xs text-slate-500 break-all mb-4">{checkinUrl}</p>
 
         <div className="flex gap-2">
           <button
@@ -1996,7 +1996,7 @@ function QrModal({ activity, onClose }) {
           </button>
         </div>
 
-        <p className="mt-3 text-center text-[11px] text-slate-400">
+        <p className="mt-3 text-center text-xs text-slate-500">
           Les participants scannent ce QR code pour s&apos;inscrire directement.
         </p>
       </div>
@@ -2015,8 +2015,8 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
   return (
     <div className="card p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="font-semibold text-slate-900 text-lg">{activity.title}</p>
+        <div className="min-w-0">
+          <p className="font-semibold text-slate-900 text-lg break-words">{activity.title}</p>
           <p className="text-sm text-slate-500 mt-1">
             {activity.coach_name
               ? `Formateur : ${activity.coach_name}`
@@ -2026,7 +2026,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
           {activity.description && (
             <p className="text-sm text-slate-600 mt-2">{activity.description}</p>
           )}
-          <p className="text-xs text-slate-400 mt-3 flex flex-wrap items-center gap-4">
+          <p className="text-xs text-slate-500 mt-3 flex flex-wrap items-center gap-4">
             <span className="flex items-center gap-1">
               <MapPin size={14} />
               {activity.location}
@@ -2040,7 +2040,9 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
           </p>
         </div>
 
-        <div className="flex items-center gap-4 lg:gap-6">
+        {/* flex-wrap : sans lui, badges et boutons d'action tiennent sur une seule
+            ligne et sortent de l'ecran sur mobile (644px de contenu pour 390px d'ecran). */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 lg:flex-nowrap lg:gap-x-6">
           <div className="text-center">
             {activity.participants > 0 ? (
               <>
@@ -2064,7 +2066,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
                   <Users className="h-5 w-5 text-slate-300" />
                   —
                 </p>
-                <p className="text-xs text-slate-400">Participants</p>
+                <p className="text-xs text-slate-500">Participants</p>
               </>
             )}
           </div>
@@ -2082,7 +2084,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
               Rapport ✓
             </span>
           ) : (
-            <span className="badge bg-slate-100 border-slate-200 text-slate-400">
+            <span className="badge bg-slate-100 border-slate-200 text-slate-500">
               Sans rapport
             </span>
           )}

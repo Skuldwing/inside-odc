@@ -125,7 +125,7 @@ export default function VoteJoin() {
                 <Mail className="w-4 h-4 text-orange-500" />
                 <p className="font-semibold text-sm text-slate-800">Retrouver ma session</p>
               </div>
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-slate-500 mb-4">
                 Entrez l&apos;adresse e-mail utilisée lors de votre inscription.
               </p>
               <input
@@ -170,7 +170,7 @@ export default function VoteJoin() {
 
             {/* Pseudo */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-2 block">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2 block">
                 Votre pseudo
               </label>
               <input
@@ -186,11 +186,11 @@ export default function VoteJoin() {
 
             {/* Email */}
             <div className="rounded-2xl bg-white border border-slate-200 p-4 shadow-sm">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1 block">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1 block">
                 Adresse e-mail{" "}
                 <span className="text-slate-300 font-normal normal-case">(recommandé)</span>
               </label>
-              <p className="text-xs text-slate-400 mb-2">
+              <p className="text-xs text-slate-500 mb-2">
                 Permet de retrouver votre session si vous changez d&apos;appareil.
               </p>
               <input
@@ -216,7 +216,7 @@ export default function VoteJoin() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-slate-800 text-sm truncate">{pseudo || "Votre pseudo..."}</p>
-                <p className="text-xs text-slate-400">Membre du jury</p>
+                <p className="text-xs text-slate-500">Membre du jury</p>
               </div>
             </div>
 
@@ -231,7 +231,7 @@ export default function VoteJoin() {
               }
             </button>
 
-            <p className="text-center text-xs text-slate-400">
+            <p className="text-center text-xs text-slate-500">
               Déjà inscrit ?{" "}
               <button
                 type="button"
@@ -242,7 +242,7 @@ export default function VoteJoin() {
               </button>
             </p>
 
-            <p className="text-center text-xs text-slate-400 pb-4">Orange Digital Center Sénégal</p>
+            <p className="text-center text-xs text-slate-500 pb-4">Orange Digital Center Sénégal</p>
           </form>
         )}
       </div>

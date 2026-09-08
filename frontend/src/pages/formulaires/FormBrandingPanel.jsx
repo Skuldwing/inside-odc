@@ -2,7 +2,7 @@ import { Palette } from "lucide-react";
 
 const PRESET_COLORS = [
   "#0f766e", "#0369a1", "#7c3aed", "#db2777",
-  "#ea580c", "#16a34a", "#ca8a04", "#374151",
+  "#DE6A00", "#16a34a", "#ca8a04", "#374151",
 ];
 
 export default function FormBrandingPanel({ settings, title, description, onChange }) {
@@ -40,7 +40,7 @@ export default function FormBrandingPanel({ settings, title, description, onChan
               />
             </div>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">Couleur actuelle : <span className="font-mono">{settings?.primary_color || "#0f766e"}</span></p>
+          <p className="mt-1 text-xs text-slate-500">Couleur actuelle : <span className="font-mono">{settings?.primary_color || "#0f766e"}</span></p>
         </div>
 
         {/* Logo */}
@@ -58,7 +58,7 @@ export default function FormBrandingPanel({ settings, title, description, onChan
               placeholder="URL de l'image..." onChange={(e) => set({ header_image_url: e.target.value })} />
           </div>
           <div className="mt-2">
-            <label className="text-xs text-slate-400 cursor-pointer hover:text-orange-600">
+            <label className="text-xs text-slate-500 cursor-pointer hover:text-orange-600">
               ou uploader une image locale :
               <input type="file" accept="image/*" className="hidden"
                 onChange={(e) => {

@@ -50,7 +50,7 @@ function CircleTimer({ startedAt, stoppedAt, durationMinutes, label, size = "md"
     : elapsed  ? "#ef4444"
     : warning  ? "#f59e0b"
     : isQa     ? "#a855f7"
-    : "#f97316";
+    : "#FF7900";
 
   const mins = Math.floor(Math.abs(timeLeft) / 60);
   const secs = Math.abs(timeLeft) % 60;
@@ -74,17 +74,17 @@ function CircleTimer({ startedAt, stoppedAt, durationMinutes, label, size = "md"
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`${size === "sm" ? "text-base" : "text-xl"} font-bold tabular-nums leading-none ${
-            stopped ? "text-slate-400" : elapsed ? "text-red-500" : warning ? "text-amber-500" : isQa ? "text-purple-700" : "text-slate-800"
+            stopped ? "text-slate-500" : elapsed ? "text-red-500" : warning ? "text-amber-500" : isQa ? "text-purple-700" : "text-slate-800"
           }`}>
             {elapsed ? `+${fmt}` : fmt}
           </span>
-          <span className={`${size === "sm" ? "text-[9px]" : "text-[10px]"} text-slate-400 mt-0.5`}>
+          <span className={`${size === "sm" ? "text-xs" : "text-xs"} text-slate-500 mt-0.5`}>
             {isQa ? "Q & R" : "Pitch"}
           </span>
         </div>
       </div>
       {stopped
-        ? <p className="text-xs font-semibold text-slate-400 mt-1">⏹ Arrêté</p>
+        ? <p className="text-xs font-semibold text-slate-500 mt-1">⏹ Arrêté</p>
         : elapsed
         ? <p className="text-xs font-semibold text-red-500 mt-1">Temps écoulé</p>
         : null
@@ -135,7 +135,7 @@ function ScoreInput({ value, scale, onChange }) {
         onChange={e => { onChange(Number(e.target.value)); if (navigator?.vibrate) navigator.vibrate(15); }}
         className="w-full accent-orange-500"
       />
-      <div className="flex justify-between text-xs text-slate-400 mt-1">
+      <div className="flex justify-between text-xs text-slate-500 mt-1">
         <span>1</span><span>{scale}</span>
       </div>
     </div>
@@ -148,24 +148,24 @@ function SuccessFlash({ pseudo }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/70 backdrop-blur-sm pointer-events-none">
       <div className="anim-success-pop flex flex-col items-center">
         <svg className="w-28 h-28" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="45" fill="none" stroke="#f97316" strokeWidth="5" opacity="0.12" />
+          <circle cx="50" cy="50" r="45" fill="none" stroke="#FF7900" strokeWidth="5" opacity="0.12" />
           <circle
             cx="50" cy="50" r="45"
-            fill="none" stroke="#f97316" strokeWidth="5"
+            fill="none" stroke="#FF7900" strokeWidth="5"
             strokeLinecap="round"
             strokeDasharray="283" strokeDashoffset="283"
             style={{ animation: "circleGrow 0.5s ease forwards" }}
           />
           <polyline
             points="28,52 43,67 72,33"
-            fill="none" stroke="#f97316" strokeWidth="5"
+            fill="none" stroke="#FF7900" strokeWidth="5"
             strokeLinecap="round" strokeLinejoin="round"
             strokeDasharray="60" strokeDashoffset="60"
             style={{ animation: "checkDraw 0.4s 0.45s ease forwards" }}
           />
         </svg>
         <p className="text-xl font-bold text-slate-800 mt-2">Notes envoyées !</p>
-        <p className="text-sm text-slate-400 mt-1">Bien joué {pseudo}</p>
+        <p className="text-sm text-slate-500 mt-1">Bien joué {pseudo}</p>
       </div>
     </div>,
     document.body
@@ -343,7 +343,7 @@ export default function VoteJury() {
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-bold text-orange-600">{p.weighted_avg}</p>
-                    <p className="text-xs text-slate-400">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
+                    <p className="text-xs text-slate-500">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
                   </div>
                 </div>
               ))}
@@ -376,7 +376,7 @@ export default function VoteJury() {
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-400 mt-8">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 mt-8">Orange Digital Center Sénégal</p>
         </div>
       </div>
     );
@@ -397,7 +397,7 @@ export default function VoteJury() {
           <div className="text-center mb-6 anim-fade-in-up">
             <Avatar src={juryInfo?.avatar} className="w-20 h-20 rounded-2xl mx-auto mb-2 border border-slate-100" />
             <p className="text-lg font-semibold text-slate-800">{juryInfo?.pseudo}</p>
-            <p className="text-xs text-slate-400 mt-0.5">Membre du jury</p>
+            <p className="text-xs text-slate-500 mt-0.5">Membre du jury</p>
           </div>
 
           {juryList.length > 0 && (
@@ -472,7 +472,7 @@ export default function VoteJury() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-xs text-slate-800">{p.name}</p>
-                          {p.porteur && <p className="text-[10px] text-slate-500">{p.porteur}</p>}
+                          {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
                         </div>
                         {isSelected && <Heart className="w-3.5 h-3.5 text-pink-500 flex-shrink-0" />}
                       </div>
@@ -489,11 +489,11 @@ export default function VoteJury() {
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>En attente du prochain projet...</span>
               </div>
-              <p className="text-xs text-slate-400 mt-6">L&apos;administrateur lancera le vote sous peu</p>
+              <p className="text-xs text-slate-500 mt-6">L&apos;administrateur lancera le vote sous peu</p>
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-400 mt-6">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 mt-6">Orange Digital Center Sénégal</p>
         </div>
       </div>
     );
@@ -526,7 +526,7 @@ export default function VoteJury() {
             <h1 className="text-xl font-bold text-slate-900">{proj.name}</h1>
             {proj.porteur && <p className="text-sm text-slate-500 mt-0.5">{proj.porteur}</p>}
             {proj.description && (
-              <p className="text-xs text-slate-400 mt-2 max-w-xs mx-auto">{proj.description}</p>
+              <p className="text-xs text-slate-500 mt-2 max-w-xs mx-auto">{proj.description}</p>
             )}
           </div>
 
@@ -582,7 +582,7 @@ export default function VoteJury() {
                         className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 border text-xs font-medium transition-all duration-300 ${
                           j.voted
                             ? "bg-green-50 border-green-200 text-green-700"
-                            : "bg-slate-50 border-slate-100 text-slate-400"
+                            : "bg-slate-50 border-slate-100 text-slate-500"
                         }`}
                         style={j.voted ? { animationDelay: `${idx * 40}ms` } : {}}
                       >
@@ -594,7 +594,7 @@ export default function VoteJury() {
                   </div>
                 )}
                 {juryTotal > 0 && votedCount < juryTotal && (
-                  <p className="text-xs text-slate-400 mt-2">
+                  <p className="text-xs text-slate-500 mt-2">
                     En attente de {juryTotal - votedCount} juré{juryTotal - votedCount > 1 ? "s" : ""}...
                   </p>
                 )}
@@ -620,12 +620,12 @@ export default function VoteJury() {
                         )}
                       </div>
                       <span className="text-xl font-bold text-orange-500 flex-shrink-0">
-                        {val}<span className="text-slate-400 text-sm font-normal"> / {c.scale}</span>
+                        {val}<span className="text-slate-500 text-sm font-normal"> / {c.scale}</span>
                       </span>
                     </div>
                     <ScoreInput value={val} scale={c.scale} onChange={score => setScore(c.id, score)} />
                     <details className="mt-3">
-                      <summary className="text-xs text-slate-400 cursor-pointer hover:text-slate-600 select-none">
+                      <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-600 select-none">
                         + Ajouter un commentaire
                       </summary>
                       <textarea
@@ -671,7 +671,7 @@ export default function VoteJury() {
             </form>
           )}
 
-          <p className="text-center text-xs text-slate-400 py-4">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 py-4">Orange Digital Center Sénégal</p>
         </div>
       </div>
     </>

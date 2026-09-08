@@ -30,13 +30,13 @@ function TypePicker({ value, onChange }) {
           <span className="text-base">{current?.icon}</span>
           <span className="font-medium text-slate-700">{current?.label || value}</span>
         </span>
-        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="absolute z-50 top-full left-0 mt-1 w-64 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-y-auto max-h-72 p-2">
           {Object.entries(groups).map(([group, types]) => (
             <div key={group} className="mb-1">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400 px-2 py-1">{group}</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 px-2 py-1">{group}</p>
               {types.map(ft => (
                 <button
                   key={ft.value}
@@ -252,7 +252,7 @@ function JumpRulesEditor({ rules, totalPages, onChange }) {
 function Section({ title, children }) {
   return (
     <div className="rounded-2xl border border-slate-100 bg-white p-4 space-y-3">
-      <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{title}</h4>
+      <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500">{title}</h4>
       {children}
     </div>
   );
@@ -263,7 +263,7 @@ function Field({ label, children, hint }) {
     <div className="space-y-1">
       {label && <label className="text-xs font-semibold text-slate-600">{label}</label>}
       {children}
-      {hint && <p className="text-[11px] text-slate-400 leading-snug">{hint}</p>}
+      {hint && <p className="text-xs text-slate-500 leading-snug">{hint}</p>}
     </div>
   );
 }
@@ -427,7 +427,7 @@ export default function FieldEditor({ field, idx, totalPages, otherFields, onUpd
       {!isSep && (
         <Section title="Logique conditionnelle">
           <div className="flex items-center gap-2 mb-1">
-            <GitBranch className="w-3.5 h-3.5 text-slate-400" />
+            <GitBranch className="w-3.5 h-3.5 text-slate-500" />
             <span className="text-xs text-slate-500">Ce champ s'affiche si :</span>
           </div>
           <ConditionsEditor
@@ -443,7 +443,7 @@ export default function FieldEditor({ field, idx, totalPages, otherFields, onUpd
       {hasJump && (
         <Section title="Sauts de page">
           <div className="flex items-center gap-2 mb-1">
-            <GitBranch className="w-3.5 h-3.5 text-slate-400" />
+            <GitBranch className="w-3.5 h-3.5 text-slate-500" />
             <span className="text-xs text-slate-500">Selon la réponse, aller à :</span>
           </div>
           <JumpRulesEditor

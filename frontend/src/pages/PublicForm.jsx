@@ -128,7 +128,7 @@ function ScaleInput({ value, onChange, min, max, primaryColor }) {
         onChange={e => onChange(Number(e.target.value))}
         className="w-full" style={{ accentColor: primaryColor }}
       />
-      <div className="flex justify-between text-xs text-slate-400">
+      <div className="flex justify-between text-xs text-slate-500">
         <span>{lo}</span>
         <span className="font-semibold text-base" style={{ color: primaryColor }}>{current}</span>
         <span>{hi}</span>
@@ -326,7 +326,7 @@ export default function PublicForm() {
               <p className="mt-1 text-xs text-slate-500">{field.help_text}</p>
             )}
             {!field.help_text && field.placeholder && (field.type === "text" || field.type === "email" || field.type === "phone" || field.type === "url" || field.type === "number" || field.type === "date" || field.type === "time") && (
-              <p className="mt-1 text-xs text-slate-400">{field.placeholder}</p>
+              <p className="mt-1 text-xs text-slate-500">{field.placeholder}</p>
             )}
 
             {/* ── textarea ── */}
@@ -403,7 +403,7 @@ export default function PublicForm() {
                       }}
                     >
                       <span
-                        className="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
+                        className="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center text-xs font-bold"
                         style={{ borderColor: selected ? pc : "#94a3b8", backgroundColor: selected ? pc : "#fff", color: "#fff" }}
                       >
                         {selected && "✓"}

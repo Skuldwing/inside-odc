@@ -9,7 +9,7 @@ export default function AdminSearchCard({ placeholder, value, onChange }) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
           <svg
             viewBox="0 0 24 24"
             className="w-5 h-5"

@@ -376,7 +376,7 @@ export default function MbootayProjet() {
                 <div className="flex items-center gap-2 px-1 mb-3">
                   <span className={`w-2 h-2 rounded-full ${column.dot}`} />
                   <p className="text-sm font-semibold text-slate-700">{column.label}</p>
-                  <span className="ml-auto text-xs text-slate-400">{columnTasks.length}</span>
+                  <span className="ml-auto text-xs text-slate-500">{columnTasks.length}</span>
                 </div>
 
                 <div className="space-y-2">
@@ -532,7 +532,7 @@ export default function MbootayProjet() {
                     className="w-4 h-4 accent-orange-500"
                   />
                   <span className="text-sm text-slate-700 flex-1">{u.full_name || u.email}</span>
-                  <span className="text-xs text-slate-400">{u.role}</span>
+                  <span className="text-xs text-slate-500">{u.role}</span>
                 </label>
               ))}
             </div>
@@ -588,16 +588,16 @@ function TaskCard({ task, onDragStart, onDragEnd, dragging, onEdit, onDelete }) 
         <GripVertical className="w-3.5 h-3.5 text-slate-300 mt-0.5 flex-shrink-0" />
         <p
           className={`text-sm flex-1 ${
-            task.status === "termine" ? "text-slate-400 line-through" : "text-slate-800"
+            task.status === "termine" ? "text-slate-500 line-through" : "text-slate-800"
           }`}
         >
           {task.title}
         </p>
         <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
-          <button onClick={onEdit} className="text-slate-400 hover:text-orange-500" title="Modifier">
+          <button onClick={onEdit} className="text-slate-500 hover:text-orange-500" title="Modifier">
             <Pencil className="w-3.5 h-3.5" />
           </button>
-          <button onClick={onDelete} className="text-slate-400 hover:text-red-500" title="Supprimer">
+          <button onClick={onDelete} className="text-slate-500 hover:text-red-500" title="Supprimer">
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -617,7 +617,7 @@ function TaskCard({ task, onDragStart, onDragEnd, dragging, onEdit, onDelete }) 
           </span>
         )}
         {task.assigned_name && (
-          <span className="text-xs text-slate-400 truncate max-w-[110px]">{task.assigned_name}</span>
+          <span className="text-xs text-slate-500 truncate max-w-[110px]">{task.assigned_name}</span>
         )}
       </div>
     </div>
@@ -673,7 +673,7 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px text-center text-[11px] uppercase tracking-wide text-slate-400 mb-1">
+        <div className="grid grid-cols-7 gap-px text-center text-xs uppercase tracking-wide text-slate-500 mb-1">
           {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
             <div key={d} className="py-1">{d}</div>
           ))}
@@ -707,7 +707,7 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
                       key={t.id}
                       onClick={() => onSelectTask(t)}
                       title={t.title}
-                      className={`block w-full text-left truncate rounded-md px-1.5 py-1 text-[11px] transition ${
+                      className={`block w-full text-left truncate rounded-md px-1.5 py-1 text-xs transition ${
                         t.status === "termine"
                           ? "bg-emerald-50 text-emerald-700 line-through"
                           : t.priority === "haute"
@@ -719,7 +719,7 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
                     </button>
                   ))}
                   {dayTasks.length > 3 && (
-                    <p className="text-[10px] text-slate-400 px-1.5">
+                    <p className="text-xs text-slate-500 px-1.5">
                       +{dayTasks.length - 3} autre{dayTasks.length - 3 > 1 ? "s" : ""}
                     </p>
                   )}

@@ -41,7 +41,7 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
     : elapsed  ? "#ef4444"
     : warning  ? "#f59e0b"
     : isQa     ? "#a855f7"
-    : "#f97316";
+    : "#FF7900";
 
   const mins = Math.floor(Math.abs(timeLeft) / 60);
   const secs = Math.abs(timeLeft) % 60;
@@ -72,7 +72,7 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`text-base font-bold tabular-nums leading-none ${
-            stopped ? "text-slate-400" : elapsed ? "text-red-600" : warning ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"
+            stopped ? "text-slate-500" : elapsed ? "text-red-600" : warning ? "text-amber-600" : isQa ? "text-purple-700" : "text-slate-800"
           }`}>
             {elapsed ? `+${fmt}` : fmt}
           </span>
@@ -84,7 +84,7 @@ function PitchTimer({ startedAt, stoppedAt, durationMinutes, label }) {
           {isQa ? "Q & R" : "Pitch"} · {durationMinutes} min
         </p>
         {stopped
-          ? <p className="text-sm font-semibold text-slate-400 mt-0.5">⏹ Arrêté</p>
+          ? <p className="text-sm font-semibold text-slate-500 mt-0.5">⏹ Arrêté</p>
           : elapsed
           ? <p className="text-sm font-bold text-red-600 mt-0.5">Temps écoulé</p>
           : warning
@@ -364,7 +364,7 @@ export default function VoteManage() {
                   {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   PDF
                 </button>
-                <button onClick={() => setShowResults(false)} className="rounded-lg p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                <button onClick={() => setShowResults(false)} className="rounded-lg p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -398,11 +398,11 @@ export default function VoteManage() {
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="text-xl font-bold text-orange-600">{p.weighted_avg}</p>
-                        <p className="text-xs text-slate-400">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
+                        <p className="text-xs text-slate-500">{p.voter_count} vote{p.voter_count !== 1 ? "s" : ""}</p>
                       </div>
                     </div>
                   ))}
-                  {results.ranking.length === 0 && <p className="text-sm text-slate-400 text-center py-6">Aucun vote enregistré</p>}
+                  {results.ranking.length === 0 && <p className="text-sm text-slate-500 text-center py-6">Aucun vote enregistré</p>}
                 </div>
               )}
 
@@ -416,7 +416,7 @@ export default function VoteManage() {
                         {results.criteria.map(c => (
                           <th key={c.id} className="text-center py-2 px-3 font-semibold text-slate-700 min-w-[90px]">
                             {c.name}
-                            <span className="block text-xs font-normal text-slate-400">/ {c.scale}</span>
+                            <span className="block text-xs font-normal text-slate-500">/ {c.scale}</span>
                           </th>
                         ))}
                         <th className="text-center py-2 px-3 font-semibold text-orange-600 min-w-[80px]">Moy. pond.</th>
@@ -430,7 +430,7 @@ export default function VoteManage() {
                               <span className="text-base">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : ""}</span>
                               <div>
                                 <p className="font-medium text-slate-800 text-sm">{p.name}</p>
-                                {p.porteur && <p className="text-xs text-slate-400">{p.porteur}</p>}
+                                {p.porteur && <p className="text-xs text-slate-500">{p.porteur}</p>}
                               </div>
                             </div>
                           </td>
@@ -457,10 +457,10 @@ export default function VoteManage() {
                       <div className="flex items-center gap-2 mb-2">
                         <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
                         <h4 className="font-semibold text-slate-800">{p.name}</h4>
-                        {p.porteur && <span className="text-xs text-slate-400">{p.porteur}</span>}
+                        {p.porteur && <span className="text-xs text-slate-500">{p.porteur}</span>}
                       </div>
                       {p.jury_scores.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic pl-2">Aucun vote</p>
+                        <p className="text-xs text-slate-500 italic pl-2">Aucun vote</p>
                       ) : (
                         <div className="overflow-x-auto">
                           <table className="w-full text-xs border border-slate-100 rounded-xl overflow-hidden">
@@ -482,7 +482,7 @@ export default function VoteManage() {
                                     <td key={s.criteria_id} className="text-center py-2 px-2 text-slate-700">
                                       {s.score}
                                       {s.comment && (
-                                        <span className="ml-1 text-[10px] text-slate-400" title={s.comment}>💬</span>
+                                        <span className="ml-1 text-xs text-slate-500" title={s.comment}>💬</span>
                                       )}
                                     </td>
                                   ))}
@@ -503,7 +503,7 @@ export default function VoteManage() {
                   {!cdcResults ? (
                     <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
                   ) : cdcResults.results.length === 0 ? (
-                    <p className="text-sm text-slate-400 italic text-center py-6">Aucun vote enregistré</p>
+                    <p className="text-sm text-slate-500 italic text-center py-6">Aucun vote enregistré</p>
                   ) : (
                     <div className="space-y-3">
                       {cdcResults.results.map((p, i) => (
@@ -515,11 +515,11 @@ export default function VoteManage() {
                           </div>
                           <div className="text-right flex-shrink-0">
                             <p className="text-2xl font-bold text-pink-600">{p.total_votes}</p>
-                            <p className="text-xs text-slate-400">{p.jury_votes} jurés · {p.guest_votes} invités</p>
+                            <p className="text-xs text-slate-500">{p.jury_votes} jurés · {p.guest_votes} invités</p>
                           </div>
                         </div>
                       ))}
-                      <p className="text-xs text-slate-400 pt-2 text-right">
+                      <p className="text-xs text-slate-500 pt-2 text-right">
                         {cdcResults.jury_total} jurés · {cdcResults.guest_total} invités ont participé
                       </p>
                     </div>
@@ -595,7 +595,7 @@ export default function VoteManage() {
                 </div>
               );
             })}
-            {projects.length === 0 && <p className="text-sm text-slate-400 italic">Aucun projet</p>}
+            {projects.length === 0 && <p className="text-sm text-slate-500 italic">Aucun projet</p>}
           </div>
         </div>
 
@@ -726,7 +726,7 @@ export default function VoteManage() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+            <div className="flex flex-col items-center justify-center py-10 text-slate-500">
               <Clock className="w-10 h-10 mb-2 opacity-30" />
               <p className="text-sm">Aucun projet actif</p>
               <p className="text-xs mt-1">Sélectionnez un projet à gauche</p>
@@ -738,7 +738,7 @@ export default function VoteManage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold text-slate-800 mb-3">Jurés ({juryTotal})</h2>
           {jury.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-slate-500">
               <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p className="text-sm">En attente des jurés</p>
             </div>
@@ -793,17 +793,17 @@ export default function VoteManage() {
               {!guestPredictions ? (
                 <div className="flex items-center justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-300" /></div>
               ) : guestPredictions.guests.length === 0 ? (
-                <p className="text-sm text-slate-400 italic text-center py-6">Aucun invité inscrit</p>
+                <p className="text-sm text-slate-500 italic text-center py-6">Aucun invité inscrit</p>
               ) : (
                 <div className="space-y-3">
                   {guestPredictions.guests.map(g => (
                     <div key={g.id} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
                       <div className="flex items-center justify-between gap-3 mb-1">
                         <p className="font-medium text-sm text-slate-800">{g.prenom} {g.nom}</p>
-                        {g.email && <p className="text-xs text-slate-400">{g.email}</p>}
+                        {g.email && <p className="text-xs text-slate-500">{g.email}</p>}
                         {g.predicted_ranking
-                          ? <span className="text-[10px] font-semibold bg-green-100 text-green-700 rounded-full px-2 py-0.5">Pronostic envoyé</span>
-                          : <span className="text-[10px] text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Pas encore</span>
+                          ? <span className="text-xs font-semibold bg-green-100 text-green-700 rounded-full px-2 py-0.5">Pronostic envoyé</span>
+                          : <span className="text-xs text-slate-500 bg-slate-100 rounded-full px-2 py-0.5">Pas encore</span>
                         }
                       </div>
                       {g.predicted_ranking && (
@@ -846,7 +846,7 @@ export default function VoteManage() {
                         <tr key={`${p.role}-${p.id}`} className="border-b border-slate-50">
                           <td className="py-2 pr-4 font-medium text-slate-800">{p.nom_complet}</td>
                           <td className="py-2 pr-4">
-                            <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${p.role === "jury" ? "bg-orange-100 text-orange-700" : "bg-purple-100 text-purple-700"}`}>
+                            <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${p.role === "jury" ? "bg-orange-100 text-orange-700" : "bg-purple-100 text-purple-700"}`}>
                               {p.role}
                             </span>
                           </td>
@@ -854,11 +854,11 @@ export default function VoteManage() {
                         </tr>
                       ))}
                       {participants.jury.length === 0 && participants.guests.length === 0 && (
-                        <tr><td colSpan={3} className="py-6 text-center text-slate-400 text-sm italic">Aucun participant</td></tr>
+                        <tr><td colSpan={3} className="py-6 text-center text-slate-500 text-sm italic">Aucun participant</td></tr>
                       )}
                     </tbody>
                   </table>
-                  <p className="text-xs text-slate-400 mt-3">{participants.jury.length} juré{participants.jury.length !== 1 ? "s" : ""} · {participants.guests.length} invité{participants.guests.length !== 1 ? "s" : ""}</p>
+                  <p className="text-xs text-slate-500 mt-3">{participants.jury.length} juré{participants.jury.length !== 1 ? "s" : ""} · {participants.guests.length} invité{participants.guests.length !== 1 ? "s" : ""}</p>
                 </div>
               )}
             </div>
@@ -870,14 +870,14 @@ export default function VoteManage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="font-semibold text-slate-800">Coup de cœur féminin</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{femaleProjects.length} projet{femaleProjects.length !== 1 ? "s" : ""} porté{femaleProjects.length !== 1 ? "s" : ""} par une femme</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{femaleProjects.length} projet{femaleProjects.length !== 1 ? "s" : ""} porté{femaleProjects.length !== 1 ? "s" : ""} par une femme</p>
                 </div>
                 <span className={`text-xs font-semibold rounded-full px-3 py-1 ${cdcActive ? "bg-pink-100 text-pink-700" : "bg-slate-100 text-slate-500"}`}>
                   {cdcActive ? "Vote en cours" : "Inactif"}
                 </span>
               </div>
               {femaleProjects.length === 0 ? (
-                <p className="text-sm text-slate-400 italic text-center py-4">
+                <p className="text-sm text-slate-500 italic text-center py-4">
                   Aucun projet marqué "Portée par une femme" — configurez-les dans la page de configuration.
                 </p>
               ) : (
@@ -895,12 +895,12 @@ export default function VoteManage() {
                           </div>
                           <div className="text-right text-xs flex-shrink-0">
                             <p className="font-bold text-pink-600 text-base">{total}</p>
-                            <p className="text-slate-400">{p.cdc_votes_jury || 0}j · {p.cdc_votes_guest || 0}i</p>
+                            <p className="text-slate-500">{p.cdc_votes_jury || 0}j · {p.cdc_votes_guest || 0}i</p>
                           </div>
                         </div>
                       );
                     })}
-                  <p className="text-xs text-slate-400 mt-2 text-right">Mise à jour automatique toutes les 3s</p>
+                  <p className="text-xs text-slate-500 mt-2 text-right">Mise à jour automatique toutes les 3s</p>
                 </div>
               )}
             </div>

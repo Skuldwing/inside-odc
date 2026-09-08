@@ -33,13 +33,13 @@ function formatCompact(value) {
 
 function PlatformBadge({ platform }) {
   const p = platformMap[platform];
-  if (!p) return <span className="text-slate-400 text-xs">{platform}</span>;
+  if (!p) return <span className="text-slate-500 text-xs">{platform}</span>;
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
       style={{ backgroundColor: p.bg, color: p.color }}
     >
-      <span className="font-bold text-[10px] tracking-tight">{p.short}</span>
+      <span className="font-bold text-xs tracking-tight">{p.short}</span>
       {p.label}
     </span>
   );
@@ -212,7 +212,7 @@ export default function SocialDashboard() {
       .map(d => ({
         ...d,
         displayName: platformMap[d.name]?.label || d.name,
-        color: platformMap[d.name]?.color || "#F97316",
+        color: platformMap[d.name]?.color || "#FF7900",
       })), [summary]
   );
 
@@ -290,7 +290,7 @@ export default function SocialDashboard() {
               </div>
               <h1 className="text-2xl font-bold tracking-tight">Radar Social</h1>
             </div>
-            <p className="text-slate-400 text-sm pl-12">
+            <p className="text-slate-500 text-sm pl-12">
               {PLATFORMS.map(p => p.label).join(" · ")} — {year}
             </p>
           </div>
@@ -351,7 +351,7 @@ export default function SocialDashboard() {
                       <XAxis dataKey="month_label" tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
                       <YAxis tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={formatCompact} width={40} />
                       <Tooltip formatter={(v) => formatCompact(v)} contentStyle={{ borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.08)" }} />
-                      <Bar dataKey="followers" fill="#F97316" radius={[6, 6, 0, 0]} />
+                      <Bar dataKey="followers" fill="#FF7900" radius={[6, 6, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -400,7 +400,7 @@ export default function SocialDashboard() {
                     <YAxis tick={{ fontSize: 12, fill: "#94A3B8" }} axisLine={false} tickLine={false} tickFormatter={formatCompact} width={40} />
                     <Tooltip formatter={(v) => formatCompact(v)} contentStyle={{ borderRadius: 10, border: "1px solid #E2E8F0", fontSize: 12 }} />
                     <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                    <Line type="monotone" dataKey="reach"      stroke="#F97316" strokeWidth={2} dot={false} name="Portée" />
+                    <Line type="monotone" dataKey="reach"      stroke="#FF7900" strokeWidth={2} dot={false} name="Portée" />
                     <Line type="monotone" dataKey="engagement" stroke="#10B981" strokeWidth={2} dot={false} name="Engagement" />
                     <Line type="monotone" dataKey="results"    stroke="#3B82F6" strokeWidth={2} dot={false} name="Résultats" />
                   </LineChart>
@@ -411,7 +411,7 @@ export default function SocialDashboard() {
 
           {/* Plateformes — dernière valeur */}
           <div>
-            <p className="text-xs uppercase tracking-widest text-slate-400 font-semibold mb-3">Abonnés par plateforme — dernier mois</p>
+            <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold mb-3">Abonnés par plateforme — dernier mois</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
               {latestByPlatform.map(p => {
                 const cfg = platformMap[p.platform];
@@ -420,12 +420,12 @@ export default function SocialDashboard() {
                   <div key={p.platform} className="card p-4 relative overflow-hidden group hover:shadow-md transition-shadow">
                     <div className="absolute inset-0 opacity-[0.04] group-hover:opacity-[0.08] transition-opacity" style={{ backgroundColor: cfg.color }} />
                     <div className="relative">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold mb-2"
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold mb-2"
                         style={{ backgroundColor: cfg.bg, color: cfg.color }}>
                         {cfg.short}
                       </span>
                       <p className="text-2xl font-bold text-slate-900">{formatCompact(p.followers)}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{cfg.label}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{cfg.label}</p>
                     </div>
                   </div>
                 );
@@ -455,14 +455,14 @@ export default function SocialDashboard() {
               const latest = rows.find(r => r.platform === p.value);
               return (
                 <div key={p.value} className="card p-3">
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold mb-2"
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold mb-2"
                     style={{ backgroundColor: p.bg, color: p.color }}>
                     {p.short}
                   </span>
                   <p className="text-xl font-bold text-slate-900">
                     {latest ? formatCompact(latest.followers) : "—"}
                   </p>
-                  <p className="text-xs text-slate-400">{p.label}</p>
+                  <p className="text-xs text-slate-500">{p.label}</p>
                 </div>
               );
             })}
@@ -486,10 +486,10 @@ export default function SocialDashboard() {
                 </thead>
                 <tbody>
                   {loadingData && (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">Chargement...</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Chargement...</td></tr>
                   )}
                   {!loadingData && rows.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+                    <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">
                       Aucun KPI enregistré pour {year}
                     </td></tr>
                   )}
@@ -506,10 +506,10 @@ export default function SocialDashboard() {
                         <td className="px-4 py-3 text-right text-slate-600 text-sm">{formatCompact(row.results)}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
-                            <button onClick={() => handleEdit(row)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-orange-500 hover:bg-orange-50 transition-colors">
+                            <button onClick={() => handleEdit(row)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-orange-500 hover:bg-orange-50 transition-colors">
                               <Pencil className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={() => handleDelete(row.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                            <button onClick={() => handleDelete(row.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors">
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -537,7 +537,7 @@ export default function SocialDashboard() {
               </div>
               <button
                 onClick={() => setModalOpen(false)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -615,7 +615,7 @@ export default function SocialDashboard() {
               </div>
               <button
                 onClick={() => { setReportOpen(false); setReportError(""); }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -637,7 +637,7 @@ export default function SocialDashboard() {
                       onClick={() => setReportType(opt.value)}
                       className="py-2.5 rounded-xl border-2 text-sm font-semibold transition-all"
                       style={reportType === opt.value
-                        ? { borderColor: "#F97316", backgroundColor: "#FFF7ED", color: "#EA580C" }
+                        ? { borderColor: "#FF7900", backgroundColor: "#FFF6EE", color: "#DE6A00" }
                         : { borderColor: "#E2E8F0", color: "#94A3B8" }}
                     >
                       {opt.label}

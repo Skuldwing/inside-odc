@@ -46,7 +46,7 @@ function CircleTimer({ startedAt, stoppedAt, durationMinutes, label, size = "md"
   const pct  = Math.max(0, Math.min(1, timeLeft / (durationMinutes * 60)));
   const dashOffset = circ * (1 - pct);
 
-  const stroke = elapsed ? "#ef4444" : warning ? "#f59e0b" : isQa ? "#a855f7" : "#f97316";
+  const stroke = elapsed ? "#ef4444" : warning ? "#f59e0b" : isQa ? "#a855f7" : "#FF7900";
 
   const mins = Math.floor(Math.abs(timeLeft) / 60);
   const secs = Math.abs(timeLeft) % 60;
@@ -70,7 +70,7 @@ function CircleTimer({ startedAt, stoppedAt, durationMinutes, label, size = "md"
           }`}>
             {elapsed ? `+${fmt}` : fmt}
           </span>
-          <span className={`${size === "sm" ? "text-[9px]" : "text-[10px]"} text-slate-400 mt-0.5`}>
+          <span className={`${size === "sm" ? "text-xs" : "text-xs"} text-slate-500 mt-0.5`}>
             {isQa ? "Q & R" : "Pitch"}
           </span>
         </div>
@@ -109,7 +109,7 @@ function PredictionPanel({ projects, currentPrediction, onSave, saving }) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-400">
+      <p className="text-xs text-slate-500">
         Ordonnez les projets selon votre pronostic de classement final. Utilisez les flèches pour réordonner.
       </p>
 
@@ -120,18 +120,18 @@ function PredictionPanel({ projects, currentPrediction, onSave, saving }) {
             className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm"
           >
             <span className="text-lg w-6 text-center flex-shrink-0">
-              {medals[i] || <span className="text-xs font-bold text-slate-400">#{i + 1}</span>}
+              {medals[i] || <span className="text-xs font-bold text-slate-500">#{i + 1}</span>}
             </span>
             <div className="flex-1 min-w-0">
               <p className="font-medium text-sm text-slate-800 truncate">{p.name}</p>
-              {p.porteur && <p className="text-xs text-slate-400 truncate">{p.porteur}</p>}
+              {p.porteur && <p className="text-xs text-slate-500 truncate">{p.porteur}</p>}
             </div>
             <div className="flex flex-col gap-0.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => moveUp(i)}
                 disabled={i === 0}
-                className="p-1 rounded-lg text-slate-400 hover:text-orange-500 disabled:opacity-20 transition-colors"
+                className="p-1 rounded-lg text-slate-500 hover:text-orange-500 disabled:opacity-20 transition-colors"
               >
                 <ChevronUp className="w-4 h-4" />
               </button>
@@ -139,7 +139,7 @@ function PredictionPanel({ projects, currentPrediction, onSave, saving }) {
                 type="button"
                 onClick={() => moveDown(i)}
                 disabled={i === ranked.length - 1}
-                className="p-1 rounded-lg text-slate-400 hover:text-orange-500 disabled:opacity-20 transition-colors"
+                className="p-1 rounded-lg text-slate-500 hover:text-orange-500 disabled:opacity-20 transition-colors"
               >
                 <ChevronDown className="w-4 h-4" />
               </button>
@@ -164,7 +164,7 @@ function PredictionPanel({ projects, currentPrediction, onSave, saving }) {
         <button
           type="button"
           onClick={reset}
-          className="rounded-xl border border-slate-200 px-3 py-2.5 text-slate-400 hover:text-slate-700 hover:border-slate-400 transition-colors"
+          className="rounded-xl border border-slate-200 px-3 py-2.5 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
           title="Réinitialiser"
         >
           <RotateCcw className="w-4 h-4" />
@@ -297,7 +297,7 @@ export default function VoteGuest() {
           {/* Pronostic soumis */}
           {myPred && myPred.length > 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 mb-4 anim-fade-in-up shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Votre pronostic</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">Votre pronostic</p>
               <div className="space-y-1.5">
                 {myPred.slice(0, 5).map((pid, i) => {
                   const proj = projects.find(p => p.id === pid);
@@ -324,7 +324,7 @@ export default function VoteGuest() {
             </p>
           </div>
 
-          <p className="text-center text-xs text-slate-400 mt-6">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 mt-6">Orange Digital Center Sénégal</p>
         </div>
       </div>
     );
@@ -353,7 +353,7 @@ export default function VoteGuest() {
           <Avatar src={guestInfo?.avatar} className="w-12 h-12 rounded-xl flex-shrink-0 border border-slate-100" />
           <div className="min-w-0">
             <p className="font-semibold text-slate-800 truncate">{guestInfo?.prenom} {guestInfo?.nom}</p>
-            <p className="text-xs text-slate-400">Invité · {status?.session_name}</p>
+            <p className="text-xs text-slate-500">Invité · {status?.session_name}</p>
           </div>
         </div>
 
@@ -398,7 +398,7 @@ export default function VoteGuest() {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>En attente du prochain projet...</span>
                 </div>
-                <p className="text-xs text-slate-400">L&apos;administrateur lancera la présentation sous peu</p>
+                <p className="text-xs text-slate-500">L&apos;administrateur lancera la présentation sous peu</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -413,7 +413,7 @@ export default function VoteGuest() {
 
                 {/* Timers (lecture seule, pas de vote) */}
                 <div className="rounded-2xl bg-white border border-slate-200 shadow-sm p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">Chronomètre</p>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-4">Chronomètre</p>
                   <div className="flex justify-center gap-6">
                     {proj.started_at && (
                       <CircleTimer
@@ -444,20 +444,20 @@ export default function VoteGuest() {
         {activeTab === "projects" && (
           <div className="space-y-3 anim-fade-in-up">
             {projects.length === 0 ? (
-              <p className="text-sm text-slate-400 italic text-center py-8">Aucun projet disponible</p>
+              <p className="text-sm text-slate-500 italic text-center py-8">Aucun projet disponible</p>
             ) : projects.map((p, i) => (
               <div key={p.id} className={`rounded-2xl border shadow-sm p-4 ${p.id === proj?.id ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-start gap-3">
-                  <span className="text-xs font-bold text-slate-400 mt-0.5 w-4">#{i + 1}</span>
+                  <span className="text-xs font-bold text-slate-500 mt-0.5 w-4">#{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-semibold text-sm text-slate-800">{p.name}</p>
                       {p.id === proj?.id && (
-                        <span className="text-[10px] font-semibold bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">En cours</span>
+                        <span className="text-xs font-semibold bg-orange-100 text-orange-700 rounded-full px-2 py-0.5">En cours</span>
                       )}
                     </div>
                     {p.porteur && <p className="text-xs text-slate-500 mt-0.5">{p.porteur}</p>}
-                    {p.description && <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">{p.description}</p>}
+                    {p.description && <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{p.description}</p>}
                   </div>
                 </div>
               </div>
@@ -473,12 +473,12 @@ export default function VoteGuest() {
                 <ListOrdered className="w-5 h-5 text-orange-500" />
                 <div>
                   <p className="font-semibold text-slate-800">Votre pronostic</p>
-                  <p className="text-xs text-slate-400">Prédisez le classement final du jury</p>
+                  <p className="text-xs text-slate-500">Prédisez le classement final du jury</p>
                 </div>
               </div>
 
               {projects.length < 2 ? (
-                <p className="text-sm text-slate-400 italic">Attendez que les projets soient ajoutés</p>
+                <p className="text-sm text-slate-500 italic">Attendez que les projets soient ajoutés</p>
               ) : (
                 <>
                   {predSaved && (
@@ -488,7 +488,7 @@ export default function VoteGuest() {
                     </div>
                   )}
                   {status?.my_prediction && !predSaved && (
-                    <div className="text-xs text-slate-400 mb-3 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
+                    <div className="text-xs text-slate-500 mb-3 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
                       Pronostic déjà envoyé — vous pouvez le modifier jusqu&apos;à la clôture.
                     </div>
                   )}
@@ -562,7 +562,7 @@ export default function VoteGuest() {
           </div>
         )}
 
-        <p className="text-center text-xs text-slate-400 mt-8 pb-4">Orange Digital Center Sénégal</p>
+        <p className="text-center text-xs text-slate-500 mt-8 pb-4">Orange Digital Center Sénégal</p>
       </div>
     </div>
   );

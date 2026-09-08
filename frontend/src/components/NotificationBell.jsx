@@ -92,7 +92,7 @@ export default function NotificationBell() {
       >
         <Bell className="w-4 h-4" />
         {count > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1 text-[10px] font-bold text-white leading-none">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-orange-500 px-1 text-xs font-bold text-white leading-none">
             {count > 99 ? "99+" : count}
           </span>
         )}
@@ -103,13 +103,13 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
             <span className="font-semibold text-sm text-slate-800">Notifications</span>
             {items.length > 0 && (
-              <span className="text-xs text-slate-400">{items.length} récente{items.length > 1 ? "s" : ""}</span>
+              <span className="text-xs text-slate-500">{items.length} récente{items.length > 1 ? "s" : ""}</span>
             )}
           </div>
 
           <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
             {items.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+              <div className="flex flex-col items-center justify-center py-10 text-slate-500">
                 <CheckCheck className="w-8 h-8 mb-2 opacity-40" />
                 <p className="text-sm">Aucune activité récente</p>
               </div>
@@ -132,7 +132,7 @@ export default function NotificationBell() {
                         <p className="text-xs text-slate-600 mt-0.5">
                           Tâche de suivi · {item.partner_name}
                         </p>
-                        <p className={`text-[10px] mt-0.5 ${overdue ? "text-red-500 font-medium" : "text-slate-400"}`}>
+                        <p className={`text-xs mt-0.5 ${overdue ? "text-red-500 font-medium" : "text-slate-500"}`}>
                           {overdue ? "En retard" : "Échéance aujourd'hui"}
                         </p>
                       </div>
@@ -157,7 +157,7 @@ export default function NotificationBell() {
                         <span className="font-normal text-slate-500"> ({roleLabel})</span>
                       </p>
                       <p className="text-xs text-slate-600 mt-0.5">{humanize(item)}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{ago}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{ago}</p>
                     </div>
                   </div>
                 );

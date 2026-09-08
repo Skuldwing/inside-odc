@@ -197,7 +197,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
                 <h1 className="text-white font-semibold tracking-tight text-[14px]">
                   Inside ODC
                 </h1>
-                <p className="text-[10px] text-slate-400 uppercase tracking-[0.2em]">
+                <p className="text-xs text-slate-400 uppercase tracking-[0.2em]">
                   Centre de pilotage
                 </p>
               </div>
@@ -231,7 +231,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
         {/* Nav */}
         <nav className={clsx("flex-1 overflow-y-auto py-4 space-y-1", collapsed ? "px-2" : "px-4")}>
           {!collapsed && (
-            <p className="px-3 mb-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+            <p className="px-3 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400">
               Pilotage
             </p>
           )}
@@ -257,7 +257,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
               ) : (
                 <>
                   <div className="px-3"><div className="h-px bg-white/10" /></div>
-                  <p className="px-3 mt-4 mb-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  <p className="px-3 mt-4 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400">
                     Équipe ODC
                   </p>
                 </>
@@ -284,7 +284,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
               ) : (
                 <>
                   <div className="px-3"><div className="h-px bg-white/10" /></div>
-                  <p className="px-3 mt-4 mb-2 text-[10px] uppercase tracking-[0.22em] text-slate-500">
+                  <p className="px-3 mt-4 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400">
                     Administration
                   </p>
                 </>

@@ -423,12 +423,12 @@ export default function VoteProject() {
             />
           )}
           {videoActive && (
-            <span className="text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-2 py-0.5 uppercase tracking-wide animate-pulse">
+            <span className="text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/30 rounded-full px-2 py-0.5 uppercase tracking-wide animate-pulse">
               ● Vidéo
             </span>
           )}
           {offline && (
-            <span className="text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full px-2 py-0.5 uppercase tracking-wide animate-pulse">
+            <span className="text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full px-2 py-0.5 uppercase tracking-wide animate-pulse">
               ⚠ Reconnexion…
             </span>
           )}

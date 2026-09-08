@@ -216,7 +216,7 @@ export default function Mbootay() {
           <div className="flex items-center gap-2 mb-3">
             <ListTodo className="w-4 h-4 text-orange-500" />
             <p className="font-semibold text-slate-900">Mes tâches en cours</p>
-            <span className="ml-auto text-xs text-slate-400">{myTasks.length}</span>
+            <span className="ml-auto text-xs text-slate-500">{myTasks.length}</span>
           </div>
           <div className="space-y-2">
             {myTasks.slice(0, 6).map((t) => (
@@ -226,7 +226,7 @@ export default function Mbootay() {
                 className="flex items-center gap-3 rounded-xl border border-slate-100 px-3 py-2.5 transition hover:border-orange-200 hover:bg-orange-50/40"
               >
                 <span className="text-sm text-slate-800 flex-1 truncate">{t.title}</span>
-                <span className="text-xs text-slate-400 hidden sm:block truncate max-w-[150px]">
+                <span className="text-xs text-slate-500 hidden sm:block truncate max-w-[150px]">
                   {t.project_title}
                 </span>
                 {t.due_date && <DueBadge date={t.due_date} />}
@@ -369,7 +369,7 @@ export default function Mbootay() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Partenaire lié <span className="text-slate-400 font-normal">(optionnel)</span>
+                  Partenaire lié <span className="text-slate-500 font-normal">(optionnel)</span>
                 </label>
                 <select
                   className="select"
@@ -384,7 +384,7 @@ export default function Mbootay() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Dispositif lié <span className="text-slate-400 font-normal">(optionnel)</span>
+                  Dispositif lié <span className="text-slate-500 font-normal">(optionnel)</span>
                 </label>
                 <select
                   className="select"

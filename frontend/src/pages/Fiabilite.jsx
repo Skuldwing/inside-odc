@@ -54,7 +54,7 @@ function scoreTextColor(score) {
 function ParticipantsCriterionNote({ c }) {
   if (!c.has_real_list) {
     return (
-      <p className="mt-1 flex items-center gap-1.5 text-[11px] text-amber-600">
+      <p className="mt-1 flex items-center gap-1.5 text-xs text-amber-600">
         <AlertTriangle className="w-3 h-3 shrink-0" />
         Effectif estimé — aucune liste réelle importée
       </p>
@@ -67,7 +67,7 @@ function ParticipantsCriterionNote({ c }) {
   if (c.missing_structure > 0) gaps.push(`${c.missing_structure} sans structure`);
   if (gaps.length === 0) return null;
   return (
-    <p className="mt-1 text-[11px] text-slate-500">
+    <p className="mt-1 text-xs text-slate-500">
       Sur {c.real_count} participant{c.real_count !== 1 ? "s" : ""} : {gaps.join(" · ")}
     </p>
   );
@@ -76,7 +76,7 @@ function ParticipantsCriterionNote({ c }) {
 function DuplicatesCriterionNote({ c, duplicateOfTitle }) {
   if (!c.duplicate_of) return null;
   return (
-    <p className="mt-1 flex items-center gap-1.5 text-[11px] text-red-600">
+    <p className="mt-1 flex items-center gap-1.5 text-xs text-red-600">
       <AlertTriangle className="w-3 h-3 shrink-0" />
       Doublon potentiel avec « {duplicateOfTitle || `activité #${c.duplicate_of}`} » —
       même partenaire/coach, même date
@@ -97,9 +97,9 @@ function ScoreBreakdown({ details, duplicateOfTitle }) {
           <div key={key}>
             <div className="flex items-center justify-between text-xs mb-1">
               <span className="flex items-center gap-1.5 text-slate-600">
-                <Icon className="w-3.5 h-3.5 text-slate-400" />
+                <Icon className="w-3.5 h-3.5 text-slate-500" />
                 {meta.label}
-                <span className="text-slate-400">({Math.round(c.weight * 100)}%)</span>
+                <span className="text-slate-500">({Math.round(c.weight * 100)}%)</span>
               </span>
               <span className={`font-semibold ${scoreTextColor(c.score)}`}>{c.score}%</span>
             </div>
@@ -133,12 +133,12 @@ function ParticipantsList({ activityId }) {
   }, [activityId]);
 
   if (loading) {
-    return <p className="text-xs text-slate-400 py-2">Chargement de la liste...</p>;
+    return <p className="text-xs text-slate-500 py-2">Chargement de la liste...</p>;
   }
 
   if (!participants || participants.length === 0) {
     return (
-      <p className="text-xs text-slate-400 py-2">
+      <p className="text-xs text-slate-500 py-2">
         Aucune liste nominative importée pour cette activité — uniquement un effectif estimé.
       </p>
     );
@@ -192,18 +192,18 @@ function ActivityRow({ activity, onValidate, onReject, onReset, busy }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <p className="font-semibold text-slate-900">{activity.title}</p>
-            <span className="badge bg-slate-100 border-slate-200 text-slate-600 text-[11px]">
+            <span className="badge bg-slate-100 border-slate-200 text-slate-600 text-xs">
               {activity.mode === "ligne" ? "En ligne" : "Présentiel"}
             </span>
             {status !== "a_verifier" && statusMeta && (
-              <span className={`badge text-[11px] ${statusMeta.className}`}>
+              <span className={`badge text-xs ${statusMeta.className}`}>
                 {statusMeta.label}
                 {activity.reliability_manual_override ? " (manuel)" : ""}
               </span>
             )}
             {hasRealList === false && (
               <span
-                className="badge bg-amber-50 border-amber-200 text-amber-700 text-[11px]"
+                className="badge bg-amber-50 border-amber-200 text-amber-700 text-xs"
                 title="Aucune liste nominative importée — effectif estimé uniquement"
               >
                 Effectif estimé{activity.participants_manual != null ? ` (~${activity.participants_manual})` : ""}
@@ -211,7 +211,7 @@ function ActivityRow({ activity, onValidate, onReject, onReset, busy }) {
             )}
             {activity.duplicate_of && (
               <span
-                className="badge bg-violet-50 border-violet-200 text-violet-700 text-[11px]"
+                className="badge bg-violet-50 border-violet-200 text-violet-700 text-xs"
                 title={`Doublon potentiel de : ${activity.duplicate_of_title}`}
               >
                 Doublon potentiel
@@ -255,7 +255,7 @@ function ActivityRow({ activity, onValidate, onReject, onReset, busy }) {
         <div className="flex items-center gap-4">
           <div className="text-center">
             <p className={`text-2xl font-bold ${scoreTextColor(score)}`}>{score.toFixed(0)}%</p>
-            <p className="text-xs text-slate-400">Fiabilité</p>
+            <p className="text-xs text-slate-500">Fiabilité</p>
           </div>
           <div className="flex gap-2">
             {status === "a_verifier" ? (
@@ -406,7 +406,7 @@ export default function Fiabilite() {
 
       <div className="card-solid p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <Settings2 className="w-4 h-4 text-slate-400" />
+          <Settings2 className="w-4 h-4 text-slate-500" />
           <p className="text-sm text-slate-600">
             Seuil de validation automatique : une activité passe en <strong>validée</strong> dès que
             son score de fiabilité atteint ce seuil.
@@ -420,7 +420,7 @@ export default function Fiabilite() {
               value={thresholdInput}
               onChange={(e) => setThresholdInput(e.target.value)}
             />
-            <span className="text-sm text-slate-400">%</span>
+            <span className="text-sm text-slate-500">%</span>
             <button
               onClick={saveThreshold}
               disabled={savingThreshold || Number(thresholdInput) === threshold}
@@ -454,7 +454,7 @@ export default function Fiabilite() {
 
       <div className="space-y-3">
         {!loading && queue.length === 0 && (
-          <div className="card-solid p-12 text-center text-sm text-slate-400">
+          <div className="card-solid p-12 text-center text-sm text-slate-500">
             {activeTab === "a_verifier"
               ? "Rien à vérifier — toutes les activités déclarées sont au-dessus du seuil de fiabilité."
               : "Aucune activité dans cette catégorie."}
