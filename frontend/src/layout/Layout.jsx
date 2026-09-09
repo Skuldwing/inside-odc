@@ -30,7 +30,6 @@ export default function Layout() {
     ["/vote", "Vote / Jury"],
     ["/fiabilite", "Fiabilité"],
     ["/audit", "Journaux d'audit"],
-    ["/social-dashboard", "Radar Social"],
     ["/assistant-ia", "Pobarr"],
     ["/rapport-mensuel", "Rapport mensuel"],
   ];

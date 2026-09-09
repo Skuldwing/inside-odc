@@ -8,7 +8,6 @@ import {
   UserCog,
   MessageSquare,
   FileText,
-  BarChart3,
   Bot,
   Award,
   ShieldCheck,
@@ -29,12 +28,6 @@ const navigation = [
     path: "/",
     roles: ["admin", "partner", "coach", "viewer"],
     tourId: "nav-dashboard",
-  },
-  {
-    name: "Radar Social",
-    icon: BarChart3,
-    path: "/social-dashboard",
-    roles: ["admin"],
   },
   {
     name: "Pobarr",

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router-dom";
 import {
   Calendar,
   MapPin,
@@ -33,9 +34,15 @@ import { useAuth } from "../auth/useAuth";
 
 export default function Activities({
   forceUploadOpen = false,
-  initialSearchQuery = "",
+  initialSearchQuery: initialSearchQueryProp = "",
 }) {
   const { role, user, isViewer, isCoach } = useAuth();
+
+  /* La recherche pouvait arriver par l'URL : c'est OperationsHub qui lisait
+     le parametre et le passait en propriete. Cette page etant desormais
+     montee directement, elle le lit elle-meme. */
+  const [searchParams] = useSearchParams();
+  const initialSearchQuery = initialSearchQueryProp || searchParams.get("q") || "";
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -2131,7 +2138,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
   return (
     <div className={`card ${cardPadding}`}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
+        <div className="min-w-0 lg:flex-1">
           <p className="font-semibold text-slate-900 text-lg break-words">{activity.title}</p>
           <p className="text-sm text-slate-500 mt-1">
             {activity.coach_name
@@ -2140,7 +2147,16 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
             }
           </p>
           {activity.description && (
-            <p className="text-sm text-slate-600 mt-2">{activity.description}</p>
+            /* Une description longue etirait la carte sur toute sa hauteur et
+               desalignait la liste. Elle est bornee a deux lignes ; le texte
+               complet reste accessible au survol et sur la fiche de
+               modification. */
+            <p
+              className="mt-2 line-clamp-2 text-sm text-slate-600"
+              title={activity.description}
+            >
+              {activity.description}
+            </p>
           )}
           <p className="text-xs text-slate-500 mt-3 flex flex-wrap items-center gap-4">
             <span className="flex items-center gap-1">
@@ -2158,7 +2174,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
 
         {/* flex-wrap : sans lui, badges et boutons d'action tiennent sur une seule
             ligne et sortent de l'ecran sur mobile (644px de contenu pour 390px d'ecran). */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 lg:flex-nowrap lg:gap-x-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 lg:flex-nowrap lg:gap-x-6 lg:flex-shrink-0">
           <div className="text-center">
             {activity.participants > 0 ? (
               <>
