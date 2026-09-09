@@ -1,19 +1,28 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
+import { format, parseISO } from "date-fns";
+import { fr } from "date-fns/locale";
 import api from "../api";
-import { EmptyState, DensityToggle, useDensity } from "../components/ui";
+import { EmptyState, DensityToggle, useDensity, useToast } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
-function escapeCsvCell(value) {
-  const text = value == null ? "" : String(value).replace(/"/g, '""');
-  if (/[;"\n]/.test(text)) return `"${text}"`;
-  return text;
+/* La date arrivait telle que la rend pg — « 2026-09-08T00:00:00.000Z » —
+   c'est-a-dire un horodatage brut, illisible dans un tableau. */
+function formatDate(value) {
+  if (!value) return "-";
+  try {
+    return format(parseISO(String(value)), "d MMM yyyy", { locale: fr });
+  } catch {
+    return String(value).slice(0, 10);
+  }
 }
 
 export default function Participants() {
   const { isCompact } = useDensity();
   const { isViewer } = useAuth();
+  const toast = useToast();
+  const [exporting, setExporting] = useState(false);
   const [searchParams] = useSearchParams();
 
   const [search, setSearch]           = useState(searchParams.get("q") || "");
@@ -81,22 +90,48 @@ export default function Participants() {
     fetchPage(debouncedSearch.current, genderFilter, p);
   };
 
-  /* Export CSV de la page courante */
-  const exportExcel = () => {
-    const headers = [
-      "Nom","Prénom","Structure/Etablissement","Genre","Tranche d'âge",
-      "Email","Telephone","Statut","Activité","Date activité","Partenaire","Dispositif",
-    ];
-    const csvRows = rows.map((p) => [
-      p.nom, p.prenom, p.structure, p.genre, p.age_range,
-      p.email, p.telephone, p.statut, p.activite, p.date_activite, p.partenaire, p.dispositif,
-    ]);
-    const csv = [headers, ...csvRows].map((r) => r.map(escapeCsvCell).join(";")).join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = "participants_odc.csv";
-    link.click();
+  /* Export CSV.
+     Il etait construit a partir de `rows`, c'est-a-dire la seule page
+     affichee : au-dela de 100 lignes le fichier etait silencieusement
+     incomplet. Le serveur le produit desormais sur l'ensemble des lignes
+     correspondant aux filtres en cours. */
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const params = {};
+      if (debouncedSearch.current) params.search = debouncedSearch.current;
+      if (genderFilter) params.genre = genderFilter;
+
+      const res = await api.get("/participants/export.csv", {
+        params,
+        responseType: "blob",
+      });
+
+      const url = URL.createObjectURL(res.data);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download =
+        res.headers["content-disposition"]?.match(/filename="([^"]+)"/)?.[1] ||
+        "participants-odc.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      /* Liberation differee : Safari annule le telechargement si l'URL est
+         revoquee trop tot. */
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+      const count = res.headers["x-total-count"];
+      toast.success(
+        count
+          ? `${Number(count).toLocaleString("fr-FR")} participant(s) exporté(s).`
+          : "Export terminé."
+      );
+    } catch (err) {
+      console.error("Erreur export participants", err);
+      toast.error("L'export n'a pas abouti. Réessayez dans un instant.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -108,12 +143,18 @@ export default function Participants() {
             <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">
               Participants / Bénéficiaires
             </h1>
-            <p className="mt-1 text-sm text-slate-500">Suivi complet des profils issus des activites.</p>
+            <p className="mt-1 text-sm text-slate-500">Suivi complet des profils issus des activités.</p>
           </div>
           {!isViewer && (
-            <button onClick={exportExcel} className="btn-primary">
-              <Download className="w-4 h-4" />
-              Exporter CSV (page)
+            <button onClick={exportCsv} className="btn-primary" disabled={exporting || total === 0}>
+              {exporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Download className="w-4 h-4" aria-hidden="true" />
+              )}
+              {exporting
+                ? "Export en cours…"
+                : `Exporter CSV${total ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
             </button>
           )}
         </div>
@@ -207,7 +248,7 @@ export default function Participants() {
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.telephone || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.statut || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.activite || "-"}</td>
-                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.date_activite || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{formatDate(p.date_activite)}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.partenaire || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.dispositif || "-"}</td>
                 </tr>
