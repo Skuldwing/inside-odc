@@ -97,9 +97,7 @@ export default function Activities({
   });
 
   const [reportFile, setReportFile] = useState(null);
-  const [reportUploading, setReportUploading] = useState(false);
   const [reportError, setReportError] = useState("");
-  const [reportSuccess, setReportSuccess] = useState(false);
   const [reportDeleting, setReportDeleting] = useState(false);
 
   const [createReportFile, setCreateReportFile] = useState(null);
@@ -311,7 +309,6 @@ export default function Activities({
     setReportFile(null);
     setReportError("");
     setClearParticipantsConfirm(false);
-    setReportSuccess(false);
     setEditForm({
       id: activity.id,
       title: activity.title || "",
@@ -328,27 +325,6 @@ export default function Activities({
       mode: activity.mode || "presentiel",
     });
     setEditOpen(true);
-  };
-
-  const handleReportUpload = async () => {
-    if (!reportFile || !editForm.id) return;
-    setReportUploading(true);
-    setReportError("");
-    setReportSuccess(false);
-    try {
-      const fd = new FormData();
-      fd.append("report", reportFile);
-      await api.post(`/activities/${editForm.id}/report`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setReportSuccess(true);
-      setEditForm(f => ({ ...f, report_filename: reportFile.name }));
-      fetchActivities();
-    } catch (err) {
-      setReportError(err?.response?.data?.error || "Erreur lors de l'upload.");
-    } finally {
-      setReportUploading(false);
-    }
   };
 
   const handlePreviewReport = (activityId) => {
@@ -369,8 +345,7 @@ export default function Activities({
     try {
       await api.delete(`/activities/${editForm.id}/report`);
       setEditForm(f => ({ ...f, report_filename: null }));
-      setReportSuccess(false);
-      setReportFile(null);
+        setReportFile(null);
       fetchActivities();
     } catch (err) {
       setReportError(err?.response?.data?.error || "Erreur lors de la suppression.");
@@ -551,6 +526,21 @@ export default function Activities({
       if (role === "admin") payload.partner_id = editForm.partner_id || null;
 
       await api.put(`/activities/${editForm.id}`, payload);
+
+      /* Le rapport voyage sur une route separee (multipart), mais il fait
+         partie de ce que l'utilisateur vient de remplir : l'envoyer ici evite
+         le piege d'un fichier choisi puis perdu parce qu'un second bouton
+         n'avait pas ete actionne. */
+      if (reportFile) {
+        setReportError("");
+        const fd = new FormData();
+        fd.append("report", reportFile);
+        await api.post(`/activities/${editForm.id}/report`, fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        setReportFile(null);
+      }
+
       setEditOpen(false);
       fetchActivities();
     } catch (err) {
@@ -1096,8 +1086,23 @@ export default function Activities({
           title="Modifier activité"
           error={editError}
           onClose={() => setEditOpen(false)}
+          footer={
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setEditOpen(false)} className="btn-ghost border">
+                Annuler
+              </button>
+              <button
+                type="submit"
+                form="edit-activity-form"
+                disabled={editSaving}
+                className="btn-primary disabled:opacity-60"
+              >
+                {editSaving ? "Sauvegarde..." : "Enregistrer"}
+              </button>
+            </div>
+          }
         >
-          <form onSubmit={handleEditSave} className="space-y-4">
+          <form id="edit-activity-form" onSubmit={handleEditSave} className="space-y-4">
             <FormActivityFields
               role={role}
               form={editForm}
@@ -1106,15 +1111,6 @@ export default function Activities({
               devices={devices}
               regions={senegalRegions}
             />
-
-            <div className="flex justify-end gap-3 pt-4">
-              <button type="button" onClick={() => setEditOpen(false)} className="btn-ghost border">
-                Annuler
-              </button>
-              <button type="submit" disabled={editSaving} className="btn-primary disabled:opacity-60">
-                {editSaving ? "Sauvegarde..." : "Enregistrer"}
-              </button>
-            </div>
           </form>
 
           {/* Rapport d'activité */}
@@ -1151,24 +1147,21 @@ export default function Activities({
               <input
                 type="file"
                 accept=".pdf"
-                onChange={e => { setReportFile(e.target.files[0] || null); setReportError(""); setReportSuccess(false); }}
+                onChange={e => { setReportFile(e.target.files[0] || null); setReportError(""); }}
                 className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
               />
               {reportError && (
                 <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{reportError}</p>
               )}
-              {reportSuccess && (
-                <p className="rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs text-emerald-700">Rapport uploadé avec succès.</p>
+              {reportFile && (
+                <p className="flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
+                  <Upload className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>{reportFile.name}</strong> sera envoyé en cliquant sur{" "}
+                    <strong>« Enregistrer »</strong>.
+                  </span>
+                </p>
               )}
-              <button
-                type="button"
-                disabled={!reportFile || reportUploading}
-                onClick={handleReportUpload}
-                className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
-              >
-                <Upload className="w-4 h-4" />
-                {reportUploading ? "Upload en cours..." : "Uploader le rapport"}
-              </button>
             </div>
           </div>
 
@@ -1253,7 +1246,7 @@ export default function Activities({
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                     <span>
                       Fichier sélectionné mais pas encore importé. Cliquez sur <strong>« Analyser le fichier »</strong>{" "}
-                      ci-dessous — le bouton <strong>« Enregistrer »</strong> en haut de la fiche ne traite pas ce fichier.
+                      ci-dessous — le bouton <strong>« Enregistrer »</strong> en bas de la fiche ne traite pas ce fichier.
                     </span>
                   </div>
                 )}
@@ -1998,6 +1991,7 @@ function ActivityModal({
   children,
   error = "",
   onClose,
+  footer = null,
   maxWidthClass = "max-w-lg",
 }) {
   return createPortal(
@@ -2020,6 +2014,15 @@ function ActivityModal({
           )}
           {children}
         </div>
+
+        {/* Barre d'action fixe : elle reste visible quel que soit le
+            defilement, pour ne jamais laisser croire que le formulaire se
+            termine au milieu de la fiche. */}
+        {footer && (
+          <div className="flex-shrink-0 border-t border-slate-200 px-6 py-4">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body
