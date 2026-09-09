@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./layout/Layout";
 import Login from "./Login";
 import SetPassword from "./pages/SetPassword";
@@ -10,14 +10,13 @@ import AdminRoute from "./routes/AdminRoute";
 import TeamOdcRoute from "./routes/TeamOdcRoute";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
-const OperationsHub = lazy(() => import("./pages/OperationsHub"));
+const Activities = lazy(() => import("./pages/Activities"));
 const Participants = lazy(() => import("./pages/Participants"));
 const Campagnes = lazy(() => import("./pages/Campagnes"));
 const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
 const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
-const SocialDashboard = lazy(() => import("./pages/SocialDashboard"));
 const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
 const FormulaireEditor = lazy(() => import("./pages/FormulaireEditor"));
@@ -120,7 +119,7 @@ export default function App() {
           path="activities"
           element={
             <Suspense fallback={<PageLoader />}>
-              <OperationsHub />
+              <Activities />
             </Suspense>
           }
         />
@@ -156,16 +155,6 @@ export default function App() {
         />
 
         {/* ===== ADMIN ONLY ===== */}
-        <Route
-          path="social-dashboard"
-          element={
-            <AdminRoute>
-              <Suspense fallback={<PageLoader />}>
-                <SocialDashboard />
-              </Suspense>
-            </AdminRoute>
-          }
-        />
         <Route
           path="assistant-ia"
           element={
@@ -306,6 +295,11 @@ export default function App() {
             </AdminRoute>
           }
         />
+
+        {/* Toute adresse inconnue de l'application ramene au tableau de bord.
+            Sans cela, un lien en favori vers une page retiree — /social-dashboard,
+            par exemple — n'affichait rien du tout. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   );
