@@ -4,7 +4,6 @@
   ],
   "headers": [
     {
-      "comment": "Le script du service worker ne doit jamais etre servi depuis le cache HTTP : sinon une nouvelle version deployee ne serait pas detectee.",
       "source": "/sw.js",
       "headers": [
         { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
@@ -12,7 +11,6 @@
       ]
     },
     {
-      "comment": "Meme raison pour le manifeste et la page hors ligne, qui changent rarement mais doivent pouvoir changer.",
       "source": "/manifest.webmanifest",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     },
