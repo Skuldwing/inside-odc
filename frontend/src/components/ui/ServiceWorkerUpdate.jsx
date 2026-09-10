@@ -60,8 +60,19 @@ export default function ServiceWorkerUpdate() {
     /* Le service worker peut aussi signaler une version en attente, quand
        c'est sw.js lui-meme qui a change. */
     let reloading = false;
+
+    /* Au tout premier chargement il n'y a pas encore de controleur : quand le
+       worker s'installe puis reclame la page, controllerchange se declenche
+       sans qu'aucune mise a jour n'ait eu lieu. Recharger la  serait un
+       rechargement surprise des la premiere visite — sur la page d'accueil
+       publique, ou au milieu de la saisie du mot de passe. On ne recharge donc
+       que si la page etait deja controlee par une version precedente. */
+    const avaitControleur = Boolean(
+      "serviceWorker" in navigator && navigator.serviceWorker.controller
+    );
+
     const onControllerChange = () => {
-      if (reloading) return;
+      if (reloading || !avaitControleur) return;
       reloading = true;
       window.location.reload();
     };

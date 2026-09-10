@@ -33,7 +33,7 @@ const ICONS = {
 /* Raccourcis de navigation : la palette sert aussi a aller quelque part,
    pas seulement a retrouver une fiche. Filtres par role a l'affichage. */
 const PAGES = [
-  { label: "Tableau de bord", url: "/", keywords: "dashboard accueil kpi" },
+  { label: "Tableau de bord", url: "/dashboard", keywords: "dashboard accueil kpi" },
   { label: "Activités", url: "/activities", keywords: "activites formations sessions" },
   { label: "Participants", url: "/participants", keywords: "beneficiaires apprenants" },
   { label: "Partenaires", url: "/partenaires", admin: true, keywords: "crm structures" },

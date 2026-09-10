@@ -15,7 +15,7 @@ export default function TeamOdcRoute({ children }) {
   }
 
   if (!isTeamOdc) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;

@@ -21,6 +21,7 @@ export default function Layout() {
   const PAGE_TITLES = [
     ["/mbootay", "Mbootay"],
     ["/activities", "Activités"],
+    ["/dashboard", "Tableau de bord"],
     ["/participants", "Participants"],
     ["/profil", "Profil"],
     ["/partenaires", "Partenaires"],
@@ -36,10 +37,8 @@ export default function Layout() {
   ];
 
   const currentPageName =
-    location.pathname === "/"
-      ? "Tableau de bord"
-      : PAGE_TITLES.find(([prefix]) => location.pathname.startsWith(prefix))?.[1] ||
-        location.pathname.replace("/", "");
+    PAGE_TITLES.find(([prefix]) => location.pathname.startsWith(prefix))?.[1] ||
+    location.pathname.replace("/", "");
 
   /* Ctrl/Cmd + K depuis n'importe ou, sauf quand on est deja en train de
      saisir du texte ailleurs. La touche « / » ouvre aussi la recherche, comme

@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import Layout from "./layout/Layout";
 import Login from "./Login";
+import Landing from "./pages/Landing";
 import SetPassword from "./pages/SetPassword";
 import PageLoader from "./components/PageLoader";
 
@@ -99,9 +100,15 @@ export default function App() {
         }
       />
 
-      {/* ===== PROTECTED APP ===== */}
+      {/* La racine est publique : c'est la page d'accueil du domaine. */}
+      <Route path="/" element={<Landing />} />
+
+      {/* ===== PROTECTED APP =====
+          Route sans chemin propre : si on lui laissait « / », elle entrerait en
+          concurrence avec la page d'accueil publique — et c'est elle qui
+          gagnait, renvoyant tout visiteur non connecte vers /login. Ses enfants
+          portent des chemins relatifs, qui se resolvent donc a la racine. */}
       <Route
-        path="/"
         element={
           <PrivateRoute>
             <Layout />
@@ -109,7 +116,7 @@ export default function App() {
         }
       >
         <Route
-          index
+          path="dashboard"
           element={
             <Suspense fallback={<PageLoader />}>
               <Dashboard />
@@ -305,11 +312,13 @@ export default function App() {
           }
         />
 
-        {/* Toute adresse inconnue de l'application ramene au tableau de bord.
-            Sans cela, un lien en favori vers une page retiree — /social-dashboard,
-            par exemple — n'affichait rien du tout. */}
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
+
+      {/* Toute adresse inconnue ramene a l'accueil. Cette route doit rester au
+          premier niveau : placee dans le bloc protege, son motif « * » captait
+          aussi la racine et renvoyait les visiteurs vers /login au lieu de la
+          page d'accueil. */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
