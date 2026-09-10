@@ -955,3 +955,155 @@
   [data-reveal] { opacity: 1; transform: none; }
   .lp-faux-graphe span { transform: scaleY(1); opacity: 1; }
 }
+
+/* ── Ajouts : page centree sur le centre, plus sur l'outil ── */
+
+.lp-titre-large {
+  max-width: 17ch;
+}
+
+/* Trait de defilement sous le hero, qui invite a descendre. */
+.lp-defile {
+  margin: 54px auto 0;
+  width: 1px;
+  height: 56px;
+  background: rgb(255 255 255 / 0.14);
+  position: relative;
+  overflow: hidden;
+}
+
+.lp-defile-trait {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent, var(--orange), transparent);
+  animation: lp-descend 2.4s ease-in-out infinite;
+}
+
+@keyframes lp-descend {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* Section a fond legerement teinte, pour separer sans passer au sombre. */
+.lp-section-douce {
+  background: linear-gradient(180deg, #fffaf5 0%, #ffffff 100%);
+}
+
+/* Manifeste : un paragraphe qui porte, sans grille ni carte. */
+/* Largeur en pixels et non en « ch » : a cette taille de police, 46ch donnait
+   une colonne etroite et une phrase etiree sur huit lignes. */
+.lp-manifeste {
+  max-width: 880px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.lp-manifeste-texte {
+  font-size: clamp(1.28rem, 2.5vw, 1.85rem);
+  line-height: 1.46;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.lp-manifeste-texte strong {
+  font-weight: 700;
+  background: linear-gradient(100deg, #f97316, var(--orange));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lp-manifeste-note {
+  margin-top: 26px;
+  font-size: 0.95rem;
+  line-height: 1.66;
+  color: #64748b;
+}
+
+/* Numero discret en haut des cartes de pole. */
+.lp-carte-pole {
+  padding-top: 30px;
+}
+
+.lp-carte-numero {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #f1a06a;
+  transition: color 0.35s ease;
+}
+
+.lp-carte:hover .lp-carte-numero { color: var(--orange); }
+
+/* Section plateforme : texte a gauche, apercu a droite. */
+.lp-plateforme {
+  display: grid;
+  gap: 48px;
+  align-items: center;
+}
+
+@media (min-width: 980px) {
+  .lp-plateforme {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 56px;
+  }
+}
+
+.lp-plateforme .lp-surtitre { text-align: left; }
+
+.lp-plateforme-texte .lp-h2 { text-align: left; }
+
+.lp-plateforme-texte .lp-texte-section {
+  margin-left: 0;
+  text-align: left;
+}
+
+.lp-plateforme-acces {
+  margin: 20px 0 28px;
+  padding-left: 14px;
+  border-left: 2px solid rgb(255 121 0 / 0.55);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: rgb(226 232 240 / 0.62);
+}
+
+/* Dans cette section l'apercu n'a plus besoin de la marge du hero.
+   Les marges laterales « auto » heritees doivent disparaitre : dans une
+   grille, un element qui les porte ne s'etire pas, il se reduit a son contenu
+   puis se centre — la maquette n'occupait que 354 px dans une colonne de 581. */
+.lp-plateforme .lp-apercu {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.lp-plateforme .lp-fenetre {
+  transform: none;
+  animation: none;
+}
+
+/* Pied : la colonne de droite porte aussi le lien d'acces. */
+.lp-pied-liens {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+@media (min-width: 760px) {
+  .lp-pied-liens { align-items: flex-end; }
+}
+
+.lp-pied-liens a {
+  font-size: 0.9rem;
+  color: var(--orange-clair);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.25s ease;
+}
+
+.lp-pied-liens a:hover { border-bottom-color: var(--orange-clair); }

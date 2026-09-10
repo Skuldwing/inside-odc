@@ -2,117 +2,79 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
-  Award,
-  Bot,
-  Calendar,
-  FileText,
-  KanbanSquare,
+  Code2,
+  GraduationCap,
+  Lightbulb,
   LogIn,
-  MessageSquare,
-  QrCode,
-  ShieldCheck,
-  Smartphone,
+  Rocket,
+  School,
   Sparkles,
+  TrendingUp,
   Users,
-  WifiOff,
+  Wrench,
 } from "lucide-react";
 import ODCLogo from "../components/branding/ODCLogo";
 import { useAuth } from "../auth/useAuth";
 import "../styles/landing.css";
 
-/* Les modules reellement presents dans la plateforme. Une page d'accueil qui
-   promet plus que ce qui existe se retourne contre elle des la premiere
-   connexion. */
-const MODULES = [
+/* ─────────────────────────────────────────────────────────────────────────
+   TEXTES A VALIDER PAR L'EQUIPE ODC
+
+   Tout ce qui decrit le centre est regroupe ici pour etre relu et corrige en
+   un seul endroit, sans toucher a la mise en page.
+
+   Ces formulations decrivent le modele Orange Digital Center tel qu'il est
+   presente publiquement. Elles n'avancent volontairement aucun chiffre —
+   nombre de personnes formees, de projets accompagnes, dates — car aucune
+   source interne ne les a fournies. Mieux vaut une page sobre qu'une page
+   qui affiche des donnees inventees au nom du centre.
+   ───────────────────────────────────────────────────────────────────────── */
+
+const POLES = [
   {
-    icon: Calendar,
-    titre: "Activités",
+    icon: Code2,
+    titre: "École du code",
     texte:
-      "Planification, import Excel des listes de présence, pointage par QR code, rapport et photos rattachés à chaque session.",
+      "Une formation aux métiers du développement, gratuite et ouverte sans condition de diplôme, pour entrer dans le numérique par la pratique.",
   },
   {
-    icon: Users,
-    titre: "Participants",
+    icon: Wrench,
+    titre: "FabLab Solidaire",
     texte:
-      "Base nominative consolidée, recherche instantanée, répartition par genre et par dispositif, export complet.",
+      "Un atelier de fabrication numérique : impression 3D, prototypage, électronique, et l'initiation des plus jeunes à la création.",
   },
   {
-    icon: KanbanSquare,
-    titre: "Mbootay",
+    icon: Rocket,
+    titre: "Accélérateur",
     texte:
-      "L'espace collaboratif de l'équipe : projets, tâches, tableau Kanban et calendrier partagé.",
+      "L'accompagnement des jeunes entreprises déjà lancées : mentorat, mise en relation, accès à l'écosystème du groupe.",
   },
   {
-    icon: Award,
-    titre: "Vote / Jury",
+    icon: TrendingUp,
+    titre: "Investissement",
     texte:
-      "Sessions de notation par critères pondérés, accès jury sur mobile, écran public pour la salle.",
-  },
-  {
-    icon: Bot,
-    titre: "Pobarr",
-    texte:
-      "L'assistant qui répond en langage courant sur les données du centre, sans passer par un tableur.",
-  },
-  {
-    icon: ShieldCheck,
-    titre: "Fiabilité",
-    texte:
-      "Un score de qualité par activité : ce qui manque, ce qui semble incohérent, ce qui est prêt à être publié.",
-  },
-  {
-    icon: FileText,
-    titre: "Formulaires",
-    texte:
-      "Formulaires d'inscription publics, réponses rattachées directement aux activités concernées.",
-  },
-  {
-    icon: MessageSquare,
-    titre: "Campagnes",
-    texte:
-      "Messages aux participants et aux partenaires, depuis les listes déjà présentes dans la plateforme.",
+      "Le relais de financement pour les projets prêts à changer d'échelle, une fois le modèle éprouvé.",
   },
 ];
 
-const ETAPES = [
+const PUBLICS = [
   {
-    numero: "01",
-    titre: "On crée l'activité",
+    icon: GraduationCap,
+    titre: "Celles et ceux qui se forment",
     texte:
-      "Titre, dates, lieu, dispositif, partenaire. Une fiche suffit pour ouvrir le suivi.",
+      "Jeunes en recherche de compétences, en reconversion, ou simplement curieux d'un métier du numérique.",
   },
   {
-    numero: "02",
-    titre: "Les présences arrivent",
+    icon: Lightbulb,
+    titre: "Les porteurs de projet",
     texte:
-      "Les participants scannent le QR code sur place, ou la liste Excel est importée en une fois.",
+      "D'une idée griffonnée à une entreprise qui recrute, chaque étape trouve un interlocuteur au centre.",
   },
   {
-    numero: "03",
-    titre: "Le bilan se construit seul",
+    icon: School,
+    titre: "Les scolaires et les enseignants",
     texte:
-      "Indicateurs, répartitions et exports se mettent à jour à mesure. Le rapport n'est plus à reconstituer.",
-  },
-];
-
-const TERRAIN = [
-  {
-    icon: WifiOff,
-    titre: "Résiste aux coupures",
-    texte:
-      "La plateforme reste ouverte quand le réseau lâche en salle, et reprend dès qu'il revient.",
-  },
-  {
-    icon: Smartphone,
-    titre: "S'installe sur le téléphone",
-    texte:
-      "Depuis le navigateur, sans passer par un magasin d'applications : l'icône se pose sur l'écran d'accueil.",
-  },
-  {
-    icon: ShieldCheck,
-    titre: "Chacun voit ce qui le concerne",
-    texte:
-      "Administrateur, partenaire, coach ou lecteur : les données affichées suivent le rôle, jamais l'inverse.",
+      "Ateliers d'initiation, découverte du code et de la fabrication numérique, encadrés par l'équipe.",
   },
 ];
 
@@ -186,18 +148,19 @@ export default function Landing() {
       {/* ===== EN-TETE ===== */}
       <header className={`lp-header ${enHaut ? "" : "lp-header-fixe"}`}>
         <div className="lp-conteneur lp-header-inner">
-          <a href="#top" className="lp-marque" aria-label="Inside ODC, accueil">
+          <a href="#top" className="lp-marque" aria-label="Orange Digital Center Sénégal, accueil">
             <ODCLogo variant="mark" className="h-9 w-9 rounded-xl" />
             <span className="lp-marque-texte">
-              <strong>Inside ODC</strong>
-              <span>Orange Digital Center · Sénégal</span>
+              <strong>Orange Digital Center</strong>
+              <span>Sénégal</span>
             </span>
           </a>
 
           <nav className="lp-nav" aria-label="Sections">
-            <a href="#modules">Modules</a>
-            <a href="#demarche">Démarche</a>
-            <a href="#terrain">Sur le terrain</a>
+            <a href="#centre">Le centre</a>
+            <a href="#poles">Les pôles</a>
+            <a href="#publics">Pour qui</a>
+            <a href="#plateforme">La plateforme</a>
           </nav>
 
           <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-connexion">
@@ -220,37 +183,166 @@ export default function Landing() {
         <div className="lp-conteneur lp-hero-inner">
           <p className="lp-eyebrow lp-monte" style={{ animationDelay: "80ms" }}>
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Plateforme interne du Digital Center
+            Orange Digital Center · Sénégal
           </p>
 
-          <h1 className="lp-titre">
+          <h1 className="lp-titre lp-titre-large">
             <span className="lp-monte" style={{ animationDelay: "160ms" }}>
-              Tout le centre,
+              Apprendre, créer,
             </span>{" "}
             <span className="lp-monte lp-degrade" style={{ animationDelay: "260ms" }}>
-              d&apos;un seul regard.
+              entreprendre.
             </span>
           </h1>
 
           <p className="lp-chapo lp-monte" style={{ animationDelay: "380ms" }}>
-            Activités, participants, partenaires, dispositifs : Inside ODC rassemble le suivi
-            du Digital Center, de l&apos;inscription au bilan. Fini les classeurs éparpillés et
-            les chiffres qu&apos;on recompte la veille du rapport.
+            Un même lieu pour se former aux métiers du numérique, fabriquer un premier
+            prototype et faire grandir un projet. Ouvert à celles et ceux qui veulent
+            s&apos;y mettre, quel que soit leur point de départ.
           </p>
 
           <div className="lp-actions lp-monte" style={{ animationDelay: "500ms" }}>
+            <a href="#centre" className="lp-btn lp-btn-primaire lp-btn-lg">
+              Découvrir le centre
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </a>
+            <Link to={lienApp} className="lp-btn lp-btn-fantome lp-btn-lg">
+              {libelleApp}
+            </Link>
+          </div>
+
+          <div className="lp-defile lp-monte" style={{ animationDelay: "760ms" }} aria-hidden="true">
+            <span className="lp-defile-trait" />
+          </div>
+        </div>
+      </section>
+
+      {/* ===== BANDEAU DEFILANT ===== */}
+      <div className="lp-bandeau" aria-hidden="true">
+        <div className="lp-bandeau-piste">
+          {[...Array(2)].map((_, boucle) => (
+            <div className="lp-bandeau-groupe" key={boucle}>
+              {[
+                "Code", "Fabrication numérique", "Entrepreneuriat", "Prototypage",
+                "Accompagnement", "Mentorat", "Découverte", "Écosystème",
+              ].map((mot) => (
+                <span key={mot}>
+                  {mot}
+                  <i />
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ===== LE CENTRE ===== */}
+      <section className="lp-section" id="centre">
+        <div className="lp-conteneur">
+          <div className="lp-manifeste" data-reveal>
+            <p className="lp-surtitre">Le centre</p>
+            <p className="lp-manifeste-texte">
+              Le <strong>Orange Digital Center Sénégal</strong> réunit sous un même toit la
+              formation, la fabrication et l&apos;accompagnement. On peut y pousser la porte
+              sans rien connaître au code, et en ressortir avec un métier, un prototype ou
+              une entreprise.
+            </p>
+            <p className="lp-manifeste-note">
+              Le centre s&apos;inscrit dans le réseau des Orange Digital Centers déployés en
+              Afrique et au Moyen-Orient, porté au Sénégal avec Sonatel.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== LES POLES ===== */}
+      <section className="lp-section lp-section-douce" id="poles">
+        <div className="lp-conteneur">
+          <div className="lp-section-tete" data-reveal>
+            <p className="lp-surtitre">Les pôles</p>
+            <h2 className="lp-h2">Quatre portes d&apos;entrée, un seul parcours</h2>
+            <p className="lp-texte-section">
+              Chacun répond à un moment différent. On peut n&apos;en pousser qu&apos;une, ou
+              les traverser toutes.
+            </p>
+          </div>
+
+          <div className="lp-cartes">
+            {POLES.map((pole, i) => {
+              const Icone = pole.icon;
+              return (
+                <article
+                  className="lp-carte lp-carte-pole"
+                  key={pole.titre}
+                  data-reveal
+                  style={{ transitionDelay: `${i * 70}ms` }}
+                >
+                  <span className="lp-carte-numero" aria-hidden="true">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="lp-carte-icone">
+                    <Icone className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <h3>{pole.titre}</h3>
+                  <p>{pole.texte}</p>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== POUR QUI ===== */}
+      <section className="lp-section" id="publics">
+        <div className="lp-conteneur">
+          <div className="lp-section-tete" data-reveal>
+            <p className="lp-surtitre">Pour qui</p>
+            <h2 className="lp-h2">Le centre s&apos;adresse à qui pousse la porte</h2>
+          </div>
+
+          <div className="lp-terrain">
+            {PUBLICS.map((item, i) => {
+              const Icone = item.icon;
+              return (
+                <div key={item.titre} data-reveal style={{ transitionDelay: `${i * 100}ms` }}>
+                  <span className="lp-terrain-icone">
+                    <Icone className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <h3>{item.titre}</h3>
+                  <p>{item.texte}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== LA PLATEFORME =====
+          La vitrine ne doit pas faire oublier a quoi sert cette adresse : c'est
+          aussi la porte d'entree de l'outil interne. */}
+      <section className="lp-section lp-section-sombre" id="plateforme">
+        <div className="lp-conteneur lp-plateforme">
+          <div className="lp-plateforme-texte" data-reveal>
+            <p className="lp-surtitre lp-surtitre-clair">Les coulisses</p>
+            <h2 className="lp-h2 lp-h2-clair">Inside ODC, l&apos;outil de l&apos;équipe</h2>
+            <p className="lp-texte-section">
+              Derrière chaque atelier, il y a des inscriptions, des présences, des
+              partenaires et un bilan à rendre. Inside ODC rassemble ce suivi en un seul
+              endroit, pour que le temps passe avec les participants plutôt que sur des
+              tableurs.
+            </p>
+            <p className="lp-plateforme-acces">
+              L&apos;accès est réservé à l&apos;équipe du centre et à ses partenaires.
+            </p>
             <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-lg">
               {libelleApp}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
-            <a href="#modules" className="lp-btn lp-btn-fantome lp-btn-lg">
-              Découvrir la plateforme
-            </a>
           </div>
 
-          {/* Apercu : une maquette, pas une capture — elle ne peut pas mentir
-              sur des chiffres qu'elle n'affiche pas. */}
-          <div className="lp-apercu lp-monte" style={{ animationDelay: "640ms" }} aria-hidden="true">
+          {/* Maquette volontairement abstraite : une fausse capture d'ecran
+              afficherait des chiffres qui n'existent pas. */}
+          <div className="lp-apercu" data-reveal aria-hidden="true">
             <div className="lp-fenetre">
               <div className="lp-fenetre-barre">
                 <span /><span /><span />
@@ -284,123 +376,21 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ===== BANDEAU DEFILANT ===== */}
-      <div className="lp-bandeau" aria-hidden="true">
-        <div className="lp-bandeau-piste">
-          {[...Array(2)].map((_, boucle) => (
-            <div className="lp-bandeau-groupe" key={boucle}>
-              {[
-                "Activités", "Participants", "Partenaires", "Dispositifs", "Mbootay",
-                "Vote & Jury", "Formulaires", "Campagnes", "Fiabilité", "Journaux d'audit",
-              ].map((mot) => (
-                <span key={mot}>
-                  {mot}
-                  <i />
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ===== MODULES ===== */}
-      <section className="lp-section" id="modules">
-        <div className="lp-conteneur">
-          <div className="lp-section-tete" data-reveal>
-            <p className="lp-surtitre">Les modules</p>
-            <h2 className="lp-h2">Une plateforme, pas une pile d&apos;outils</h2>
-            <p className="lp-texte-section">
-              Chaque module s&apos;appuie sur les mêmes données. Une présence pointée en salle
-              alimente aussitôt les participants, les indicateurs et le score de fiabilité.
-            </p>
-          </div>
-
-          <div className="lp-cartes">
-            {MODULES.map((module, i) => {
-              const Icone = module.icon;
-              return (
-                <article
-                  className="lp-carte"
-                  key={module.titre}
-                  data-reveal
-                  style={{ transitionDelay: `${i * 60}ms` }}
-                >
-                  <span className="lp-carte-icone">
-                    <Icone className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <h3>{module.titre}</h3>
-                  <p>{module.texte}</p>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== DEMARCHE ===== */}
-      <section className="lp-section lp-section-sombre" id="demarche">
-        <div className="lp-conteneur">
-          <div className="lp-section-tete" data-reveal>
-            <p className="lp-surtitre lp-surtitre-clair">La démarche</p>
-            <h2 className="lp-h2 lp-h2-clair">Trois gestes, et le suivi existe</h2>
-          </div>
-
-          <ol className="lp-etapes">
-            {ETAPES.map((etape, i) => (
-              <li key={etape.numero} data-reveal style={{ transitionDelay: `${i * 120}ms` }}>
-                <span className="lp-etape-numero">{etape.numero}</span>
-                <h3>{etape.titre}</h3>
-                <p>{etape.texte}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      {/* ===== TERRAIN ===== */}
-      <section className="lp-section" id="terrain">
-        <div className="lp-conteneur">
-          <div className="lp-section-tete" data-reveal>
-            <p className="lp-surtitre">Sur le terrain</p>
-            <h2 className="lp-h2">Conçu pour une salle, pas pour un bureau</h2>
-            <p className="lp-texte-section">
-              Les ateliers se tiennent là où le réseau est capricieux et où l&apos;outil de
-              travail tient dans une main.
-            </p>
-          </div>
-
-          <div className="lp-terrain">
-            {TERRAIN.map((item, i) => {
-              const Icone = item.icon;
-              return (
-                <div key={item.titre} data-reveal style={{ transitionDelay: `${i * 100}ms` }}>
-                  <span className="lp-terrain-icone">
-                    <Icone className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <h3>{item.titre}</h3>
-                  <p>{item.texte}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
       {/* ===== APPEL FINAL ===== */}
       <section className="lp-final">
         <div className="lp-conteneur lp-final-inner" data-reveal>
           <span className="lp-final-icone">
-            <QrCode className="h-6 w-6" aria-hidden="true" />
+            <Users className="h-6 w-6" aria-hidden="true" />
           </span>
-          <h2>Votre espace vous attend</h2>
+          <h2>Le numérique s&apos;apprend en le faisant</h2>
           <p>
-            L&apos;accès est réservé à l&apos;équipe du Digital Center et à ses partenaires.
-            Connectez-vous avec l&apos;adresse qui vous a été communiquée.
+            Le centre ouvre ses ateliers, ses machines et son accompagnement à celles et
+            ceux qui veulent s&apos;y mettre.
           </p>
-          <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-lg">
-            {libelleApp}
+          <a href="#poles" className="lp-btn lp-btn-primaire lp-btn-lg">
+            Voir les pôles
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
-          </Link>
+          </a>
         </div>
       </section>
 
@@ -410,12 +400,16 @@ export default function Landing() {
           <div className="lp-pied-marque">
             <ODCLogo variant="full" className="h-10" />
             <p>
-              Inside ODC — plateforme de pilotage du Orange Digital Center Sénégal.
+              Orange Digital Center Sénégal — formation, fabrication numérique et
+              accompagnement des porteurs de projet.
             </p>
           </div>
-          <p className="lp-pied-mentions">
-            © {new Date().getFullYear()} Orange Digital Center Sénégal · Sonatel
-          </p>
+          <div className="lp-pied-liens">
+            <Link to={lienApp}>{libelleApp}</Link>
+            <p className="lp-pied-mentions">
+              © {new Date().getFullYear()} Orange Digital Center Sénégal · Sonatel
+            </p>
+          </div>
         </div>
       </footer>
     </div>
