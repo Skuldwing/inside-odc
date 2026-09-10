@@ -22,6 +22,7 @@ export default function Layout() {
     ["/mbootay", "Mbootay"],
     ["/activities", "Activités"],
     ["/participants", "Participants"],
+    ["/profil", "Profil"],
     ["/partenaires", "Partenaires"],
     ["/dispositifs", "Dispositifs"],
     ["/campagnes", "Campagnes"],

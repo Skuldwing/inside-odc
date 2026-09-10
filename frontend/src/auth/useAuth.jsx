@@ -48,6 +48,18 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  /* Relit le compte apres une modification du profil : le nom et la photo
+     s'affichent dans la barre laterale, ils doivent suivre sans rechargement. */
+  const refreshUser = async () => {
+    try {
+      const res = await api.get("/auth/me");
+      const me = res.data?.user || null;
+      if (!me) return;
+      setUser(me);
+      localStorage.setItem("user", JSON.stringify(me));
+    } catch (_) {}
+  };
+
   /* ================= LOGIN ================= */
   const login = async (email, password) => {
     const res = await api.post("/auth/login", {
@@ -86,6 +98,7 @@ export function AuthProvider({ children }) {
         isTeamOdc: role === "admin" || !!user?.is_team_odc,
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}

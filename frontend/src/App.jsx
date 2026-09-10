@@ -33,6 +33,7 @@ const VoteManage = lazy(() => import("./pages/VoteManage"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Fiabilite = lazy(() => import("./pages/Fiabilite"));
 const Mbootay = lazy(() => import("./pages/Mbootay"));
+const Profil = lazy(() => import("./pages/Profil"));
 const MbootayProjet = lazy(() => import("./pages/MbootayProjet"));
 
 export default function App() {
@@ -128,6 +129,14 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <Participants />
+            </Suspense>
+          }
+        />
+        <Route
+          path="profil"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Profil />
             </Suspense>
           }
         />

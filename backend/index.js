@@ -26,6 +26,7 @@ const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes
 const auditRoutes = require("./routes/audit.routes");
 const reliabilityRoutes = require("./routes/reliability.routes");
 const mbootayRoutes = require("./routes/mbootay.routes");
+const profileRoutes = require("./routes/profile.routes");
 const searchRoutes = require("./routes/search.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
@@ -154,6 +155,7 @@ app.use("/email-templates", emailTemplatesRoutes);
 app.use("/audit-logs", auditRoutes);
 app.use("/reliability", reliabilityRoutes);
 app.use("/mbootay", mbootayRoutes);
+app.use("/profile", profileRoutes);
 app.use("/search", searchRoutes);
 
 app.use((req, res) => {
@@ -673,6 +675,38 @@ pool.query(`
     console.log("Migration OK: index Mbootay");
   } catch (e) {
     console.warn("Migration Mbootay:", e.message);
+  }
+})();
+
+/* ── Profil utilisateur ──
+   Sequence : user_avatars reference users.
+
+   L'image est volontairement rangee dans sa propre table plutot qu'en colonne
+   de users. Plusieurs requetes font « SELECT * FROM users » — la connexion,
+   notamment — et embarqueraient la photo a chaque appel. C'est exactement le
+   defaut qui rendait la liste des activites interminable : le PDF du rapport
+   vivait dans la table activities et partait dans chaque reponse.
+   users.avatar_updated_at suffit a savoir qu'une photo existe et a invalider
+   le cache du navigateur, sans jamais charger les octets. */
+(async () => {
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_updated_at TIMESTAMPTZ`);
+    console.log("Migration OK: users.profil");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_avatars (
+        user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        mime       TEXT NOT NULL,
+        data       BYTEA NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log("Migration OK: user_avatars");
+  } catch (e) {
+    console.warn("Migration profil:", e.message);
   }
 })();
 
