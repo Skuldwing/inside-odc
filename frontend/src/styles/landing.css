@@ -1,0 +1,1109 @@
+/* Page d'accueil publique.
+   Styles isoles dans ce fichier plutot que dans index.css : la landing a sa
+   propre identite, sombre en haut et claire ensuite, et ne doit pas etre
+   deformee par le theme choisi pour l'application. Toutes les couleurs y sont
+   donc explicites. Prefixe « lp- » pour ne croiser aucune classe existante. */
+
+.lp {
+  --orange: #ff7900;
+  --orange-clair: #ff9233;
+  --encre: #0b1220;
+  --encre-profonde: #050915;
+  --ardoise: #64748b;
+
+  background: #ffffff;
+  color: #0f172a;
+  overflow-x: hidden;
+}
+
+.lp-conteneur {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ── En-tete ── */
+.lp-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  transition: background-color 0.35s ease, border-color 0.35s ease, backdrop-filter 0.35s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.lp-header-fixe {
+  background: rgb(255 255 255 / 0.86);
+  backdrop-filter: blur(14px);
+  border-bottom-color: rgb(15 23 42 / 0.08);
+}
+
+.lp-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  height: 72px;
+}
+
+.lp-marque {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  min-width: 0;
+}
+
+.lp-marque-texte {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.lp-marque-texte strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  transition: color 0.35s ease;
+}
+
+/* Sur un petit ecran, la mention se replie sur trois lignes et ecrase le
+   bouton de connexion : elle disparait, le logo suffit a situer la marque. */
+.lp-marque-texte span {
+  display: none;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.6);
+  transition: color 0.35s ease;
+}
+
+@media (min-width: 560px) {
+  .lp-marque-texte span {
+    display: block;
+  }
+}
+
+.lp-header-fixe .lp-marque-texte strong {
+  color: #0f172a;
+}
+
+.lp-header-fixe .lp-marque-texte span {
+  color: var(--ardoise);
+}
+
+.lp-nav {
+  display: none;
+  gap: 28px;
+}
+
+.lp-nav a {
+  font-size: 14px;
+  color: rgb(255 255 255 / 0.72);
+  text-decoration: none;
+  position: relative;
+  padding: 4px 0;
+  transition: color 0.25s ease;
+}
+
+.lp-nav a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 1.5px;
+  width: 0;
+  background: var(--orange);
+  transition: width 0.28s ease;
+}
+
+.lp-nav a:hover {
+  color: #ffffff;
+}
+
+.lp-nav a:hover::after {
+  width: 100%;
+}
+
+.lp-header-fixe .lp-nav a {
+  color: #475569;
+}
+
+.lp-header-fixe .lp-nav a:hover {
+  color: #0f172a;
+}
+
+@media (min-width: 900px) {
+  .lp-nav {
+    display: flex;
+  }
+}
+
+/* ── Boutons ── */
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, background-color 0.25s ease,
+    border-color 0.25s ease, color 0.25s ease;
+}
+
+.lp-btn-lg {
+  padding: 14px 26px;
+  font-size: 15px;
+  border-radius: 14px;
+}
+
+.lp-btn-primaire {
+  position: relative;
+  overflow: hidden;
+  background: var(--orange);
+  color: #ffffff;
+  box-shadow: 0 10px 28px -12px rgb(255 121 0 / 0.9);
+}
+
+.lp-btn-primaire:hover {
+  background: #ff8c1a;
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -12px rgb(255 121 0 / 0.95);
+}
+
+.lp-btn-primaire:active {
+  transform: translateY(0);
+}
+
+/* Reflet qui traverse le bouton au survol. */
+.lp-btn-primaire::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 0.42), transparent);
+  transition: left 0.6s ease;
+}
+
+.lp-btn-primaire:hover::before {
+  left: 130%;
+}
+
+.lp-btn-fantome {
+  background: rgb(255 255 255 / 0.06);
+  color: #ffffff;
+  border-color: rgb(255 255 255 / 0.22);
+  backdrop-filter: blur(6px);
+}
+
+.lp-btn-fantome:hover {
+  background: rgb(255 255 255 / 0.14);
+  border-color: rgb(255 255 255 / 0.4);
+  transform: translateY(-2px);
+}
+
+.lp-btn:focus-visible {
+  outline: 2px solid var(--orange-clair);
+  outline-offset: 3px;
+}
+
+/* ── Hero ── */
+.lp-hero {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(1200px 700px at 12% -12%, #1e293b 0%, transparent 58%),
+    linear-gradient(180deg, var(--encre) 0%, var(--encre-profonde) 100%);
+  padding: 148px 0 96px;
+  overflow: hidden;
+}
+
+.lp-hero-inner {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+
+/* Nappes de couleur qui derivent lentement en arriere-plan. */
+.lp-aurore {
+  position: absolute;
+  inset: -25%;
+  z-index: 0;
+  filter: blur(90px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.lp-blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+}
+
+.lp-blob-1 {
+  width: 46vw;
+  height: 46vw;
+  left: 4%;
+  top: 6%;
+  background: radial-gradient(circle, rgb(255 121 0 / 0.85) 0%, transparent 68%);
+  animation: lp-derive-1 22s ease-in-out infinite;
+}
+
+.lp-blob-2 {
+  width: 40vw;
+  height: 40vw;
+  right: 6%;
+  top: 0%;
+  background: radial-gradient(circle, rgb(56 189 248 / 0.5) 0%, transparent 68%);
+  animation: lp-derive-2 27s ease-in-out infinite;
+}
+
+.lp-blob-3 {
+  width: 38vw;
+  height: 38vw;
+  left: 38%;
+  bottom: -6%;
+  background: radial-gradient(circle, rgb(244 114 182 / 0.42) 0%, transparent 68%);
+  animation: lp-derive-3 31s ease-in-out infinite;
+}
+
+@keyframes lp-derive-1 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(7%, 9%, 0) scale(1.16); }
+}
+
+@keyframes lp-derive-2 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1.08); }
+  50%      { transform: translate3d(-9%, 7%, 0) scale(0.94); }
+}
+
+@keyframes lp-derive-3 {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(0.96); }
+  50%      { transform: translate3d(5%, -8%, 0) scale(1.14); }
+}
+
+/* Trame technique, estompee vers le bas. */
+.lp-grille {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 78% 62% at 50% 32%, #000 35%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 78% 62% at 50% 32%, #000 35%, transparent 100%);
+  pointer-events: none;
+}
+
+/* Halo qui suit le pointeur. Les variables sont posees en JavaScript. */
+.lp-halo {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    380px circle at var(--mx, 50%) var(--my, 30%),
+    rgb(255 146 51 / 0.14),
+    transparent 70%
+  );
+  transition: background 0.18s ease-out;
+}
+
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.06);
+  color: rgb(255 255 255 / 0.82);
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+}
+
+.lp-titre {
+  margin: 26px auto 0;
+  max-width: 15ch;
+  font-size: clamp(2.6rem, 7.2vw, 5rem);
+  line-height: 1.03;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.lp-titre span {
+  display: inline-block;
+}
+
+.lp-degrade {
+  background: linear-gradient(100deg, #ffb066 0%, var(--orange) 42%, #ffd0a3 100%);
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: lp-glisse 7s ease-in-out infinite;
+}
+
+@keyframes lp-glisse {
+  0%, 100% { background-position: 0% center; }
+  50%      { background-position: 100% center; }
+}
+
+.lp-chapo {
+  margin: 26px auto 0;
+  max-width: 62ch;
+  font-size: clamp(1rem, 1.6vw, 1.14rem);
+  line-height: 1.68;
+  color: rgb(226 232 240 / 0.82);
+}
+
+.lp-actions {
+  margin-top: 36px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+/* Entree des elements du hero, decalee par un delai en ligne. */
+.lp-monte {
+  opacity: 0;
+  animation: lp-monte-anim 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes lp-monte-anim {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Apercu de l'application ── */
+.lp-apercu {
+  position: relative;
+  margin: 72px auto 0;
+  max-width: 940px;
+  perspective: 1600px;
+}
+
+.lp-fenetre {
+  position: relative;
+  z-index: 2;
+  border-radius: 16px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  background: #0f172a;
+  box-shadow: 0 50px 90px -40px rgb(0 0 0 / 0.9);
+  overflow: hidden;
+  transform: rotateX(8deg);
+  transform-origin: top center;
+  animation: lp-redresse 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.7s forwards;
+}
+
+@keyframes lp-redresse {
+  to { transform: rotateX(0deg); }
+}
+
+.lp-fenetre-barre {
+  display: flex;
+  gap: 7px;
+  padding: 13px 16px;
+  background: rgb(255 255 255 / 0.04);
+  border-bottom: 1px solid rgb(255 255 255 / 0.07);
+}
+
+.lp-fenetre-barre span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.16);
+}
+
+.lp-fenetre-barre span:first-child { background: rgb(255 121 0 / 0.6); }
+
+.lp-fenetre-corps {
+  display: grid;
+  grid-template-columns: 168px 1fr;
+  min-height: 300px;
+}
+
+.lp-faux-rail {
+  padding: 20px 16px;
+  border-right: 1px solid rgb(255 255 255 / 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  background: rgb(0 0 0 / 0.25);
+}
+
+.lp-faux-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, var(--orange-clair), var(--orange));
+  margin-bottom: 8px;
+}
+
+.lp-faux-ligne {
+  height: 9px;
+  border-radius: 5px;
+  background: rgb(255 255 255 / 0.09);
+}
+
+.lp-faux-ligne.lp-actif {
+  background: rgb(255 121 0 / 0.55);
+}
+
+.lp-w-50 { width: 50%; }
+.lp-w-60 { width: 60%; }
+.lp-w-70 { width: 70%; }
+.lp-w-80 { width: 80%; }
+.lp-w-90 { width: 90%; }
+
+.lp-faux-contenu {
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.lp-faux-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.lp-faux-kpi {
+  height: 62px;
+  border-radius: 11px;
+  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(255 255 255 / 0.03);
+  padding: 12px;
+  display: flex;
+  align-items: flex-end;
+}
+
+.lp-faux-barre {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--orange), var(--orange-clair));
+  width: 30%;
+  animation: lp-remplit 2.6s ease-in-out infinite;
+}
+
+.lp-pulse-1 { animation-delay: 0s; }
+.lp-pulse-2 { animation-delay: 0.35s; }
+.lp-pulse-3 { animation-delay: 0.7s; }
+.lp-pulse-4 { animation-delay: 1.05s; }
+
+@keyframes lp-remplit {
+  0%, 100% { width: 28%; opacity: 0.75; }
+  50%      { width: 78%; opacity: 1; }
+}
+
+.lp-faux-graphe {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  min-height: 132px;
+  padding-top: 8px;
+}
+
+.lp-faux-graphe span {
+  flex: 1;
+  height: var(--h);
+  border-radius: 6px 6px 3px 3px;
+  background: linear-gradient(180deg, rgb(255 121 0 / 0.85), rgb(255 121 0 / 0.14));
+  transform-origin: bottom;
+  animation: lp-pousse 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(1.1s + var(--d));
+}
+
+@keyframes lp-pousse {
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
+}
+
+.lp-fenetre-lueur {
+  position: absolute;
+  inset: 18% 8% -12%;
+  z-index: 1;
+  background: radial-gradient(ellipse at center, rgb(255 121 0 / 0.32), transparent 70%);
+  filter: blur(70px);
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .lp-fenetre-corps { grid-template-columns: 1fr; }
+  .lp-faux-rail { display: none; }
+  .lp-faux-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ── Bandeau defilant ── */
+.lp-bandeau {
+  background: var(--encre-profonde);
+  border-top: 1px solid rgb(255 255 255 / 0.07);
+  border-bottom: 1px solid rgb(255 255 255 / 0.07);
+  padding: 18px 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.lp-bandeau-piste {
+  display: flex;
+  width: max-content;
+  animation: lp-defile 34s linear infinite;
+}
+
+.lp-bandeau:hover .lp-bandeau-piste {
+  animation-play-state: paused;
+}
+
+.lp-bandeau-groupe {
+  display: flex;
+  align-items: center;
+}
+
+.lp-bandeau-groupe span {
+  display: inline-flex;
+  align-items: center;
+  gap: 30px;
+  padding: 0 30px;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.4);
+  white-space: nowrap;
+}
+
+.lp-bandeau-groupe i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--orange);
+  opacity: 0.7;
+}
+
+@keyframes lp-defile {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* ── Sections ── */
+.lp-section {
+  padding: 104px 0;
+  background: #ffffff;
+}
+
+/* L'en-tete est fixe : sans cette marge, le lien d'ancre amene le haut de la
+   section exactement dessous, et le surtitre disparait derriere. */
+.lp [id] {
+  scroll-margin-top: 92px;
+}
+
+.lp-section-sombre {
+  background:
+    radial-gradient(900px 500px at 82% 0%, #16233a 0%, transparent 58%),
+    linear-gradient(180deg, var(--encre) 0%, var(--encre-profonde) 100%);
+}
+
+.lp-section-tete {
+  max-width: 62ch;
+  margin: 0 auto 56px;
+  text-align: center;
+}
+
+.lp-surtitre {
+  font-size: 12px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--orange);
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.lp-surtitre-clair { color: var(--orange-clair); }
+
+.lp-h2 {
+  font-size: clamp(1.8rem, 3.6vw, 2.6rem);
+  line-height: 1.14;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.lp-h2-clair { color: #ffffff; }
+
+.lp-texte-section {
+  margin-top: 18px;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.lp-section-sombre .lp-texte-section { color: rgb(226 232 240 / 0.74); }
+
+/* ── Revelation au defilement ── */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-reveal].lp-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Cartes modules ── */
+.lp-cartes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 20px;
+}
+
+.lp-carte {
+  position: relative;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 26px 24px 28px;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease,
+    border-color 0.35s ease;
+}
+
+.lp-carte::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 18px;
+  padding: 1px;
+  background: linear-gradient(140deg, rgb(255 121 0 / 0.55), transparent 45%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.lp-carte:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 26px 48px -28px rgb(15 23 42 / 0.4);
+  border-color: transparent;
+}
+
+.lp-carte:hover::before { opacity: 1; }
+
+.lp-carte-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: linear-gradient(140deg, #fff1e3, #ffe0c4);
+  color: #c2410c;
+  margin-bottom: 18px;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lp-carte:hover .lp-carte-icone {
+  transform: scale(1.08) rotate(-4deg);
+}
+
+.lp-carte h3 {
+  font-size: 1.06rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 9px;
+}
+
+.lp-carte p {
+  font-size: 0.92rem;
+  line-height: 1.62;
+  color: #64748b;
+}
+
+/* ── Etapes ── */
+.lp-etapes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+  counter-reset: etape;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.lp-etapes li {
+  position: relative;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 0.035);
+  padding: 30px 26px;
+  backdrop-filter: blur(6px);
+  transition: border-color 0.35s ease, background-color 0.35s ease, transform 0.35s ease;
+}
+
+.lp-etapes li:hover {
+  border-color: rgb(255 121 0 / 0.4);
+  background: rgb(255 255 255 / 0.06);
+  transform: translateY(-4px);
+}
+
+.lp-etape-numero {
+  display: block;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  background: linear-gradient(140deg, var(--orange-clair), rgb(255 121 0 / 0.25));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 16px;
+}
+
+.lp-etapes h3 {
+  font-size: 1.06rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 10px;
+}
+
+.lp-etapes p {
+  font-size: 0.92rem;
+  line-height: 1.62;
+  color: rgb(226 232 240 / 0.7);
+}
+
+/* ── Terrain ── */
+.lp-terrain {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(272px, 1fr));
+  gap: 26px;
+}
+
+.lp-terrain > div {
+  border-left: 2px solid #ffe0c4;
+  padding-left: 22px;
+  transition: border-color 0.35s ease;
+}
+
+.lp-terrain > div:hover { border-left-color: var(--orange); }
+
+.lp-terrain-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #fff1e3;
+  color: #c2410c;
+  margin-bottom: 15px;
+}
+
+.lp-terrain h3 {
+  font-size: 1.04rem;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 9px;
+}
+
+.lp-terrain p {
+  font-size: 0.92rem;
+  line-height: 1.62;
+  color: #64748b;
+}
+
+/* ── Appel final ── */
+.lp-final {
+  position: relative;
+  padding: 104px 0;
+  background: linear-gradient(135deg, #ff7900 0%, #f45d00 52%, #d94800 100%);
+  overflow: hidden;
+}
+
+.lp-final::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000, transparent);
+  -webkit-mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000, transparent);
+  pointer-events: none;
+}
+
+.lp-final-inner {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+}
+
+.lp-final-icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+  background: rgb(255 255 255 / 0.18);
+  border: 1px solid rgb(255 255 255 / 0.32);
+  color: #ffffff;
+  margin-bottom: 24px;
+}
+
+.lp-final h2 {
+  font-size: clamp(1.8rem, 3.6vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+}
+
+.lp-final p {
+  margin: 18px auto 32px;
+  max-width: 56ch;
+  font-size: 1.02rem;
+  line-height: 1.68;
+  color: rgb(255 255 255 / 0.9);
+}
+
+.lp-final .lp-btn-primaire {
+  background: #ffffff;
+  color: #b34600;
+  box-shadow: 0 14px 34px -14px rgb(0 0 0 / 0.55);
+}
+
+.lp-final .lp-btn-primaire:hover {
+  background: #fff7ef;
+}
+
+/* ── Pied ── */
+.lp-pied {
+  background: var(--encre-profonde);
+  padding: 52px 0;
+}
+
+.lp-pied-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.lp-pied-marque {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.lp-pied-marque > div,
+.lp-pied-marque img {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.lp-pied-marque p {
+  font-size: 0.9rem;
+  color: rgb(226 232 240 / 0.66);
+  max-width: 42ch;
+  line-height: 1.6;
+}
+
+.lp-pied-mentions {
+  font-size: 0.82rem;
+  color: rgb(148 163 184 / 0.7);
+}
+
+/* ── Animations reduites ──
+   Le systeme peut demander l'arret des animations : vestibulaire, epilepsie,
+   simple preference. Tout devient alors immediat, rien ne disparait. */
+@media (prefers-reduced-motion: reduce) {
+  .lp *,
+  .lp *::before,
+  .lp *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .lp-monte { opacity: 1; }
+  .lp-fenetre { transform: none; }
+  [data-reveal] { opacity: 1; transform: none; }
+  .lp-faux-graphe span { transform: scaleY(1); opacity: 1; }
+}
+
+/* ── Ajouts : page centree sur le centre, plus sur l'outil ── */
+
+.lp-titre-large {
+  max-width: 17ch;
+}
+
+/* Trait de defilement sous le hero, qui invite a descendre. */
+.lp-defile {
+  margin: 54px auto 0;
+  width: 1px;
+  height: 56px;
+  background: rgb(255 255 255 / 0.14);
+  position: relative;
+  overflow: hidden;
+}
+
+.lp-defile-trait {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent, var(--orange), transparent);
+  animation: lp-descend 2.4s ease-in-out infinite;
+}
+
+@keyframes lp-descend {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* Section a fond legerement teinte, pour separer sans passer au sombre. */
+.lp-section-douce {
+  background: linear-gradient(180deg, #fffaf5 0%, #ffffff 100%);
+}
+
+/* Manifeste : un paragraphe qui porte, sans grille ni carte. */
+/* Largeur en pixels et non en « ch » : a cette taille de police, 46ch donnait
+   une colonne etroite et une phrase etiree sur huit lignes. */
+.lp-manifeste {
+  max-width: 880px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.lp-manifeste-texte {
+  font-size: clamp(1.28rem, 2.5vw, 1.85rem);
+  line-height: 1.46;
+  letter-spacing: -0.02em;
+  color: #0f172a;
+  font-weight: 500;
+}
+
+.lp-manifeste-texte strong {
+  font-weight: 700;
+  background: linear-gradient(100deg, #f97316, var(--orange));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lp-manifeste-note {
+  margin-top: 26px;
+  font-size: 0.95rem;
+  line-height: 1.66;
+  color: #64748b;
+}
+
+/* Numero discret en haut des cartes de pole. */
+.lp-carte-pole {
+  padding-top: 30px;
+}
+
+.lp-carte-numero {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #f1a06a;
+  transition: color 0.35s ease;
+}
+
+.lp-carte:hover .lp-carte-numero { color: var(--orange); }
+
+/* Section plateforme : texte a gauche, apercu a droite. */
+.lp-plateforme {
+  display: grid;
+  gap: 48px;
+  align-items: center;
+}
+
+@media (min-width: 980px) {
+  .lp-plateforme {
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    gap: 56px;
+  }
+}
+
+.lp-plateforme .lp-surtitre { text-align: left; }
+
+.lp-plateforme-texte .lp-h2 { text-align: left; }
+
+.lp-plateforme-texte .lp-texte-section {
+  margin-left: 0;
+  text-align: left;
+}
+
+.lp-plateforme-acces {
+  margin: 20px 0 28px;
+  padding-left: 14px;
+  border-left: 2px solid rgb(255 121 0 / 0.55);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: rgb(226 232 240 / 0.62);
+}
+
+/* Dans cette section l'apercu n'a plus besoin de la marge du hero.
+   Les marges laterales « auto » heritees doivent disparaitre : dans une
+   grille, un element qui les porte ne s'etire pas, il se reduit a son contenu
+   puis se centre — la maquette n'occupait que 354 px dans une colonne de 581. */
+.lp-plateforme .lp-apercu {
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.lp-plateforme .lp-fenetre {
+  transform: none;
+  animation: none;
+}
+
+/* Pied : la colonne de droite porte aussi le lien d'acces. */
+.lp-pied-liens {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+@media (min-width: 760px) {
+  .lp-pied-liens { align-items: flex-end; }
+}
+
+.lp-pied-liens a {
+  font-size: 0.9rem;
+  color: var(--orange-clair);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.25s ease;
+}
+
+.lp-pied-liens a:hover { border-bottom-color: var(--orange-clair); }

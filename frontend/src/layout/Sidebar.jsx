@@ -26,7 +26,7 @@ const navigation = [
   {
     name: "Dashboard",
     icon: LayoutDashboard,
-    path: "/",
+    path: "/dashboard",
     roles: ["admin", "partner", "coach", "viewer"],
     tourId: "nav-dashboard",
   },

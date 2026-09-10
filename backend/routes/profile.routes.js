@@ -4,8 +4,29 @@ const bcrypt = require("bcrypt");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
+const { ensureProfileSchema, estSchemaManquant } = require("../migrations/profileSchema");
 
 const router = express.Router();
+
+/**
+ * Execute une requete, et si le schema du profil manque encore, le cree puis
+ * reessaie une fois.
+ *
+ * Les migrations de demarrage ne sont pas attendues et n'echouent qu'en
+ * avertissement console : sans ce filet, une migration qui n'est pas passee
+ * condamne la page Profil silencieusement et definitivement. Un seul essai
+ * supplementaire — si la seconde tentative echoue, l'erreur remonte.
+ */
+async function avecSchema(operation) {
+  try {
+    return await operation();
+  } catch (err) {
+    if (!estSchemaManquant(err)) throw err;
+    console.warn("[PROFIL] schema absent, creation puis nouvel essai :", err.message);
+    await ensureProfileSchema();
+    return operation();
+  }
+}
 
 /* La photo est redimensionnee par le navigateur avant l'envoi ; cette limite
    n'est qu'un garde-fou contre un client qui ne le ferait pas. */
@@ -41,7 +62,7 @@ async function readProfile(userId) {
 /* ===== MON PROFIL ===== */
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    const profile = await readProfile(req.user.id);
+    const profile = await avecSchema(() => readProfile(req.user.id));
     if (!profile) return res.status(404).json({ error: "Compte introuvable" });
     res.json(profile);
   } catch (err) {
@@ -64,7 +85,7 @@ router.put("/", authMiddleware, async (req, res) => {
       return res.status(400).json({ error: "Le nom complet est obligatoire" });
     }
 
-    const result = await pool.query(
+    const result = await avecSchema(() => pool.query(
       `UPDATE users
        SET full_name = $1, job_title = $2, phone = $3, bio = $4
        WHERE id = $5
@@ -76,11 +97,11 @@ router.put("/", authMiddleware, async (req, res) => {
         clean(req.body.bio, 500),
         req.user.id,
       ]
-    );
+    ));
     if (!result.rowCount) return res.status(404).json({ error: "Compte introuvable" });
 
     logAudit(req, "UPDATE", "profil", req.user.id, full_name, { champs: "informations" });
-    res.json(await readProfile(req.user.id));
+    res.json(await avecSchema(() => readProfile(req.user.id)));
   } catch (err) {
     console.error("[PROFIL]", err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -103,13 +124,13 @@ router.post("/avatar", authMiddleware, (req, res) => {
 
     try {
       const now = new Date();
-      await pool.query(
+      await avecSchema(() => pool.query(
         `INSERT INTO user_avatars (user_id, mime, data, updated_at)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (user_id)
          DO UPDATE SET mime = EXCLUDED.mime, data = EXCLUDED.data, updated_at = EXCLUDED.updated_at`,
         [req.user.id, req.file.mimetype, req.file.buffer, now]
-      );
+      ));
       await pool.query(`UPDATE users SET avatar_updated_at = $1 WHERE id = $2`, [now, req.user.id]);
 
       logAudit(req, "UPDATE", "profil", req.user.id, req.user.email, { champs: "photo" });
@@ -123,7 +144,9 @@ router.post("/avatar", authMiddleware, (req, res) => {
 
 router.delete("/avatar", authMiddleware, async (req, res) => {
   try {
-    await pool.query(`DELETE FROM user_avatars WHERE user_id = $1`, [req.user.id]);
+    await avecSchema(() =>
+      pool.query(`DELETE FROM user_avatars WHERE user_id = $1`, [req.user.id])
+    );
     await pool.query(`UPDATE users SET avatar_updated_at = NULL WHERE id = $1`, [req.user.id]);
     logAudit(req, "DELETE", "profil", req.user.id, req.user.email, { champs: "photo" });
     res.json({ success: true });
@@ -140,9 +163,8 @@ router.get("/avatar/:userId", authMiddleware, async (req, res) => {
     const userId = parseInt(req.params.userId, 10);
     if (!Number.isInteger(userId)) return res.status(400).json({ error: "Identifiant invalide" });
 
-    const result = await pool.query(
-      `SELECT mime, data, updated_at FROM user_avatars WHERE user_id = $1`,
-      [userId]
+    const result = await avecSchema(() =>
+      pool.query(`SELECT mime, data, updated_at FROM user_avatars WHERE user_id = $1`, [userId])
     );
     const row = result.rows[0];
     if (!row) return res.status(404).json({ error: "Aucune photo" });

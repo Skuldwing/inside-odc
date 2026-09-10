@@ -24,7 +24,9 @@ export default function Login() {
 
     try {
       await login(email.trim(), password);
-      navigate("/");
+      /* La racine est la page d'accueil publique : apres connexion on va au
+         tableau de bord, pas a la vitrine. */
+      navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.error || "Erreur de connexion");
     } finally {

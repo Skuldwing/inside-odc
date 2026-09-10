@@ -38,6 +38,15 @@ api.interceptors.request.use(
 
 const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/", "/vote/join/", "/vote/jury/", "/vote/guest-join/", "/vote/guest/", "/vote/project/"];
 
+/* La racine est comparee a l'identique, pas en prefixe : « / » est le prefixe
+   de toutes les adresses, l'ajouter a la liste ci-dessus desactiverait la
+   redirection partout. */
+const PUBLIC_EXACTES = ["/"];
+
+function estPagePublique(chemin) {
+  return PUBLIC_EXACTES.includes(chemin) || PUBLIC_PREFIXES.some((p) => chemin.startsWith(p));
+}
+
 api.interceptors.response.use(
   (response) => {
     setActiveRequests(activeRequests - 1);
@@ -49,8 +58,10 @@ api.interceptors.response.use(
       localStorage.removeItem("user");
       sessionStorage.removeItem("admin_pin");
       sessionStorage.removeItem("admin_pin_time");
-      const isPublic = PUBLIC_PREFIXES.some(p => window.location.pathname.startsWith(p));
-      if (!isPublic) {
+      /* Sur la page d'accueil publique, un 401 sur /auth/me est le cas normal
+         d'un visiteur non connecte : le rediriger vers /login rendrait la
+         vitrine inaccessible. */
+      if (!estPagePublique(window.location.pathname)) {
         window.location.href = "/login";
       }
     }
