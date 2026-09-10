@@ -27,6 +27,21 @@ const photoUpload = multer({
   },
 });
 
+/* Colonnes d'activites renvoyees par l'API — report_data en est volontairement
+   absente. C'est le PDF du rapport, jusqu'a 10 Mo, stocke dans la table : un
+   « SELECT a.* » l'embarquait dans chaque reponse. Node serialise un Buffer en
+   { "type": "Buffer", "data": [171, 205, ...] }, soit environ quatre octets de
+   JSON par octet de PDF — la liste des activites pesait des dizaines de Mo.
+   Le fichier se telecharge par /activities/:id/report, et report_filename
+   suffit a savoir qu'il existe. */
+const ACTIVITY_COLUMNS = `
+  a.id, a.title, a.description, a.activity_date, a.duration_hours, a.location,
+  a.device_id, a.partner_id, a.created_by, a.created_at, a.participants_manual,
+  a.date_fin, a.coach_id, a.report_filename, a.mode, a.reliability_score,
+  a.reliability_status, a.reliability_details, a.reliability_manual_override,
+  a.duplicate_of
+`;
+
 function requireWriteAccess(req, res, next) {
   if (req.user.role === "viewer") {
     return res.status(403).json({ error: "Accès refusé" });
@@ -44,7 +59,7 @@ function isOwner(req, activity) {
 router.get("/", authMiddleware, async (req, res) => {
   try {
     let query = `
-      SELECT a.*,
+      SELECT ${ACTIVITY_COLUMNS},
              p.name AS partner_name,
              d.name AS device_name,
              u.full_name AS coach_name,
@@ -363,7 +378,7 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
     const { id } = req.params;
 
     const actRes = await pool.query(
-      `SELECT a.*, p.name AS partner_name, d.name AS device_name, u.full_name AS coach_name
+      `SELECT ${ACTIVITY_COLUMNS}, p.name AS partner_name, d.name AS device_name, u.full_name AS coach_name
        FROM activities a
        LEFT JOIN partners p ON p.id = a.partner_id
        LEFT JOIN devices  d ON d.id  = a.device_id
