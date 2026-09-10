@@ -20,6 +20,7 @@ import {
 import clsx from "clsx";
 import { useAuth } from "../auth/useAuth";
 import ODCLogo from "../components/branding/ODCLogo";
+import { Avatar } from "../components/ui";
 
 const navigation = [
   {
@@ -144,7 +145,7 @@ function NavLink({ item, collapsed, location, onClick, index = 0 }) {
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onToggle }) {
   const location = useLocation();
-  const { role, isTeamOdc } = useAuth();
+  const { role, isTeamOdc, user } = useAuth();
   const safeRole = role || "viewer";
 
   const roleLabel =
@@ -152,10 +153,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
     safeRole === "partner" ? "Partenaire" :
     safeRole === "coach" ? "Coach / Formateur" : "Lecteur";
 
-  const roleDesc =
-    safeRole === "admin" ? "Administrateur" :
-    safeRole === "partner" ? "Compte partenaire" :
-    safeRole === "coach" ? "Compte formateur" : "Lecture seule";
+  const displayName = user?.full_name || user?.email || roleLabel;
+  const profilActif = location.pathname === "/profil";
 
   return (
     <aside
@@ -300,28 +299,38 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
           )}
         </nav>
 
-        {/* Footer */}
+        {/* Footer — acces au profil.
+            Il n'affichait que l'initiale du role : on y lisait « A / Admin /
+            Administrateur », jamais le nom de la personne connectee. */}
         <div className={clsx("border-t border-white/10 bg-black/20", collapsed ? "p-2" : "p-4")}>
-          {collapsed ? (
-            <div className="flex justify-center">
-              <div
-                className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-white flex items-center justify-center font-semibold text-sm"
-                title={roleLabel}
-              >
-                {safeRole.charAt(0).toUpperCase()}
+          <Link
+            to="/profil"
+            onClick={() => setSidebarOpen(false)}
+            title={collapsed ? `${displayName} — ${roleLabel}` : "Voir mon profil"}
+            className={clsx(
+              "group flex items-center transition",
+              collapsed
+                ? "justify-center rounded-xl py-1 hover:bg-white/10"
+                : "gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 hover:border-white/20 hover:bg-white/10",
+              profilActif && "ring-1 ring-orange-400/60"
+            )}
+          >
+            <Avatar
+              userId={user?.id}
+              name={user?.full_name}
+              email={user?.email}
+              updatedAt={user?.avatar_updated_at}
+              className="h-9 w-9 rounded-xl"
+            />
+            {!collapsed && (
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-white">{displayName}</p>
+                <p className="truncate text-xs text-slate-400">
+                  {user?.job_title || roleLabel}
+                </p>
               </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 text-white flex items-center justify-center font-semibold text-sm">
-                {safeRole.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <p className="text-white text-sm font-medium">{roleLabel}</p>
-                <p className="text-xs text-slate-400">{roleDesc}</p>
-              </div>
-            </div>
-          )}
+            )}
+          </Link>
         </div>
 
       </div>
