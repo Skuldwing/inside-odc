@@ -85,7 +85,7 @@ export default function AdminPinGate({ children }) {
             <button
               type="button"
               className="btn-ghost border"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/dashboard")}
               disabled={submitting}
             >
               Annuler

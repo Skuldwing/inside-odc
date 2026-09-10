@@ -22,95 +22,83 @@ import { useAuth } from "../auth/useAuth";
 import ODCLogo from "../components/branding/ODCLogo";
 import { Avatar } from "../components/ui";
 
-const navigation = [
-  {
-    name: "Dashboard",
-    icon: LayoutDashboard,
-    path: "/dashboard",
-    roles: ["admin", "partner", "coach", "viewer"],
-    tourId: "nav-dashboard",
-  },
-  {
-    name: "Pobarr",
-    icon: Bot,
-    path: "/assistant-ia",
-    roles: ["admin"],
-  },
-  {
-    name: "Activités",
-    icon: Calendar,
-    path: "/activities",
-    roles: ["admin", "partner", "coach", "viewer"],
-    tourId: "nav-activities",
-  },
-  {
-    name: "Participants",
-    icon: Users,
-    path: "/participants",
-    roles: ["admin", "partner", "coach", "viewer"],
-    tourId: "nav-participants",
-  },
-];
+/* Navigation, groupee par nature de tache.
+   Auparavant : « Pilotage » (4), « Equipe ODC » (1) et « Administration » (8).
+   Ce dernier groupe melangeait trois choses sans rapport — les donnees de
+   reference, ce qu'on adresse a l'exterieur, et la gouvernance — dans un ordre
+   arbitraire : Partenaires, Dispositifs, Campagnes, Utilisateurs, Formulaires,
+   Vote, Fiabilite, Audit. Un administrateur y lisait treize entrees d'affilee.
 
-/* Espace collaboratif interne : visible pour les admins et l'equipe ODC. */
-const teamNavigation = [
+   Les groupes vides pour un role donne ne s'affichent pas : un lecteur ne voit
+   que « Pilotage ». */
+const GROUPES = [
   {
-    name: "Mbootay",
-    icon: KanbanSquare,
-    path: "/mbootay",
-    matchPrefix: true,
-  },
-];
-
-const managementNavigation = [
-  {
-    name: "Partenaires",
-    icon: Building2,
-    path: "/partenaires",
-    roles: ["admin"],
-  },
-  {
-    name: "Dispositifs",
-    icon: Layers,
-    path: "/dispositifs",
-    roles: ["admin"],
-  },
-  {
-    name: "Campagnes",
-    icon: MessageSquare,
-    path: "/campagnes",
-    roles: ["admin"],
-  },
-  {
-    name: "Utilisateurs",
-    icon: UserCog,
-    path: "/utilisateurs",
-    roles: ["admin"],
-  },
-  {
-    name: "Formulaires",
-    icon: FileText,
-    path: "/formulaires",
-    roles: ["admin"],
+    titre: "Pilotage",
+    items: [
+      {
+        name: "Tableau de bord",
+        icon: LayoutDashboard,
+        path: "/dashboard",
+        roles: ["admin", "partner", "coach", "viewer"],
+        tourId: "nav-dashboard",
+      },
+      {
+        name: "Activités",
+        icon: Calendar,
+        path: "/activities",
+        roles: ["admin", "partner", "coach", "viewer"],
+        tourId: "nav-activities",
+      },
+      {
+        name: "Participants",
+        icon: Users,
+        path: "/participants",
+        roles: ["admin", "partner", "coach", "viewer"],
+        tourId: "nav-participants",
+      },
+      /* L'assistant se lit apres les pages qu'il commente, pas avant : il etait
+         place en deuxieme position, entre le tableau de bord et les activites. */
+      {
+        name: "Pobarr",
+        icon: Bot,
+        path: "/assistant-ia",
+        roles: ["admin"],
+      },
+    ],
   },
   {
-    name: "Vote / Jury",
-    icon: Award,
-    path: "/vote",
-    roles: ["admin"],
-    matchPrefix: true,
+    /* Ce qui s'adresse aux participants et aux partenaires. */
+    titre: "Animation",
+    items: [
+      { name: "Formulaires", icon: FileText, path: "/formulaires", roles: ["admin"] },
+      { name: "Campagnes", icon: MessageSquare, path: "/campagnes", roles: ["admin"] },
+      { name: "Vote / Jury", icon: Award, path: "/vote", roles: ["admin"], matchPrefix: true },
+    ],
   },
   {
-    name: "Fiabilité",
-    icon: ShieldAlert,
-    path: "/fiabilite",
-    roles: ["admin"],
+    /* Les donnees de reference, qu'on consulte rarement mais qui structurent
+       tout le reste. */
+    titre: "Référentiel",
+    items: [
+      { name: "Partenaires", icon: Building2, path: "/partenaires", roles: ["admin"] },
+      { name: "Dispositifs", icon: Layers, path: "/dispositifs", roles: ["admin"] },
+    ],
   },
   {
-    name: "Journaux d'audit",
-    icon: ShieldCheck,
-    path: "/audit",
-    roles: ["admin"],
+    titre: "Équipe ODC",
+    equipe: true,
+    items: [
+      { name: "Mbootay", icon: KanbanSquare, path: "/mbootay", matchPrefix: true },
+    ],
+  },
+  {
+    /* Qui a acces, ce qui est fiable, ce qui s'est passe. */
+    titre: "Administration",
+    items: [
+      { name: "Utilisateurs", icon: UserCog, path: "/utilisateurs", roles: ["admin"] },
+      { name: "Fiabilité", icon: ShieldAlert, path: "/fiabilite", roles: ["admin"] },
+      { name: "Journaux d'audit", icon: ShieldCheck, path: "/audit", roles: ["admin"] },
+    ],
   },
 ];
 
@@ -222,81 +210,53 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
 
         {/* Nav */}
         <nav className={clsx("flex-1 overflow-y-auto py-4 space-y-1", collapsed ? "px-2" : "px-4")}>
-          {!collapsed && (
-            <p className="px-3 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400">
-              Pilotage
-            </p>
-          )}
-          <div className="space-y-0.5">
-            {navigation
-              .filter((item) => item.roles.includes(safeRole))
-              .map((item, index) => (
-                <NavLink
-                  key={item.name}
-                  item={item}
-                  collapsed={collapsed}
-                  location={location}
-                  onClick={() => setSidebarOpen(false)}
-                  index={index}
-                />
-              ))}
-          </div>
+          {(() => {
+            /* Le decalage d'animation continue d'un groupe a l'autre, pour que
+               les entrees apparaissent de haut en bas et non par paquets. */
+            let rang = 0;
 
-          {isTeamOdc && (
-            <div className={collapsed ? "pt-2" : "pt-5"}>
-              {collapsed ? (
-                <div className="h-px bg-white/10 mx-1 mb-2" />
-              ) : (
-                <>
-                  <div className="px-3"><div className="h-px bg-white/10" /></div>
-                  <p className="px-3 mt-4 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400">
-                    Équipe ODC
-                  </p>
-                </>
-              )}
-              <div className="space-y-0.5">
-                {teamNavigation.map((item, index) => (
-                  <NavLink
-                    key={item.name}
-                    item={item}
-                    collapsed={collapsed}
-                    location={location}
-                    onClick={() => setSidebarOpen(false)}
-                    index={index + navigation.length}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+            return GROUPES.map((groupe) => {
+              if (groupe.equipe && !isTeamOdc) return null;
 
-          {managementNavigation.some((item) => item.roles.includes(safeRole)) && (
-            <div className={collapsed ? "pt-2" : "pt-5"}>
-              {collapsed ? (
-                <div className="h-px bg-white/10 mx-1 mb-2" />
-              ) : (
-                <>
-                  <div className="px-3"><div className="h-px bg-white/10" /></div>
-                  <p className="px-3 mt-4 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400">
-                    Administration
-                  </p>
-                </>
-              )}
-              <div className="space-y-0.5">
-                {managementNavigation
-                  .filter((item) => item.roles.includes(safeRole))
-                  .map((item, index) => (
-                    <NavLink
-                      key={item.name}
-                      item={item}
-                      collapsed={collapsed}
-                      location={location}
-                      onClick={() => setSidebarOpen(false)}
-                      index={index + navigation.length}
-                    />
-                  ))}
-              </div>
-            </div>
-          )}
+              const items = groupe.items.filter(
+                (item) => !item.roles || item.roles.includes(safeRole)
+              );
+              if (!items.length) return null;
+
+              const premier = groupe === GROUPES[0];
+
+              return (
+                <div key={groupe.titre} className={premier ? undefined : collapsed ? "pt-2" : "pt-5"}>
+                  {!premier && collapsed && <div className="h-px bg-white/10 mx-1 mb-2" />}
+                  {!premier && !collapsed && (
+                    <div className="px-3"><div className="h-px bg-white/10" /></div>
+                  )}
+                  {!collapsed && (
+                    <p
+                      className={clsx(
+                        "px-3 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400",
+                        premier ? undefined : "mt-4"
+                      )}
+                    >
+                      {groupe.titre}
+                    </p>
+                  )}
+                  <div className="space-y-0.5">
+                    {items.map((item) => (
+                      <NavLink
+                        key={item.name}
+                        item={item}
+                        collapsed={collapsed}
+                        location={location}
+                        onClick={() => setSidebarOpen(false)}
+                        index={rang++}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </nav>
 
         {/* Footer — acces au profil.

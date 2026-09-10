@@ -7,6 +7,7 @@ import SetPassword from "./pages/SetPassword";
 import PageLoader from "./components/PageLoader";
 
 import PrivateRoute from "./routes/PrivateRoute";
+import { useAuth } from "./auth/useAuth";
 import AdminRoute from "./routes/AdminRoute";
 import TeamOdcRoute from "./routes/TeamOdcRoute";
 
@@ -36,6 +37,16 @@ const Fiabilite = lazy(() => import("./pages/Fiabilite"));
 const Mbootay = lazy(() => import("./pages/Mbootay"));
 const Profil = lazy(() => import("./pages/Profil"));
 const MbootayProjet = lazy(() => import("./pages/MbootayProjet"));
+
+/* Adresse inconnue : une personne connectee revient a son tableau de bord,
+   un visiteur a la page d'accueil. Renvoyer tout le monde vers la vitrine
+   afficherait la page de presentation du centre a quelqu'un qui est deja
+   dedans. */
+function Ailleurs() {
+  const { isAuthenticated, authReady } = useAuth();
+  if (!authReady) return <PageLoader />;
+  return <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />;
+}
 
 export default function App() {
   return (
@@ -314,11 +325,10 @@ export default function App() {
 
       </Route>
 
-      {/* Toute adresse inconnue ramene a l'accueil. Cette route doit rester au
-          premier niveau : placee dans le bloc protege, son motif « * » captait
-          aussi la racine et renvoyait les visiteurs vers /login au lieu de la
-          page d'accueil. */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Cette route doit rester au premier niveau : placee dans le bloc
+          protege, son motif « * » captait aussi la racine et renvoyait les
+          visiteurs vers /login au lieu de la page d'accueil. */}
+      <Route path="*" element={<Ailleurs />} />
     </Routes>
   );
 }

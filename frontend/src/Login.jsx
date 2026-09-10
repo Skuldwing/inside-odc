@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "./auth/useAuth";
 import ODCLogo from "./components/branding/ODCLogo";
@@ -11,10 +11,26 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const { login } = useAuth();
+  const { login, isAuthenticated, authReady } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const redirectMessage = location.state?.message || "";
+
+  /* Ou aller une fois identifie : la page initialement demandee si elle existe,
+     le tableau de bord sinon. Deux provenances possibles — l'etat de navigation
+     quand le routeur a intercepte l'acces, le parametre « next » quand une
+     session a expire en cours d'utilisation et que la page a ete rechargee.
+     On se garde de renvoyer vers /login lui-meme, ce qui ferait tourner en
+     rond, et on n'accepte qu'un chemin interne : une adresse absolue permettrait
+     de rediriger ailleurs depuis un lien forge. */
+  const demandee =
+    location.state?.from || new URLSearchParams(location.search).get("next") || "";
+  const destination =
+    demandee.startsWith("/") &&
+    !demandee.startsWith("//") &&
+    !demandee.startsWith("/login")
+      ? demandee
+      : "/dashboard";
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,15 +40,18 @@ export default function Login() {
 
     try {
       await login(email.trim(), password);
-      /* La racine est la page d'accueil publique : apres connexion on va au
-         tableau de bord, pas a la vitrine. */
-      navigate("/dashboard");
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(err.response?.data?.error || "Erreur de connexion");
     } finally {
       setSubmitting(false);
     }
   };
+
+  /* Une session deja ouverte n'a rien a faire sur l'ecran de connexion. */
+  if (authReady && isAuthenticated) {
+    return <Navigate to={destination} replace />;
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden px-4 py-8 sm:px-6 lg:px-8">
