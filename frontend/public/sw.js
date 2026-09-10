@@ -16,7 +16,7 @@
  * des versions precedentes sont supprimes a l'activation.
  */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `inside-odc-shell-${VERSION}`;
 const ASSET_CACHE = `inside-odc-assets-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
@@ -41,8 +41,10 @@ self.addEventListener("install", (event) => {
       .then((cache) =>
         Promise.allSettled(SHELL_URLS.map((url) => cache.add(url)))
       )
-      .then(() => self.skipWaiting())
   );
+  /* Pas de skipWaiting() ici : une nouvelle version qui prend la main d'office
+     rechargerait la page sans prevenir, y compris au milieu d'un formulaire.
+     Elle attend que la personne clique sur « Recharger ». */
 });
 
 self.addEventListener("activate", (event) => {
