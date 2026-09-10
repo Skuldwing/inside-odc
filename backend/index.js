@@ -28,6 +28,7 @@ const reliabilityRoutes = require("./routes/reliability.routes");
 const mbootayRoutes = require("./routes/mbootay.routes");
 const profileRoutes = require("./routes/profile.routes");
 const searchRoutes = require("./routes/search.routes");
+const { ensureProfileSchema } = require("./migrations/profileSchema");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -679,34 +680,14 @@ pool.query(`
 })();
 
 /* ── Profil utilisateur ──
-   Sequence : user_avatars reference users.
-
-   L'image est volontairement rangee dans sa propre table plutot qu'en colonne
-   de users. Plusieurs requetes font « SELECT * FROM users » — la connexion,
-   notamment — et embarqueraient la photo a chaque appel. C'est exactement le
-   defaut qui rendait la liste des activites interminable : le PDF du rapport
-   vivait dans la table activities et partait dans chaque reponse.
-   users.avatar_updated_at suffit a savoir qu'une photo existe et a invalider
-   le cache du navigateur, sans jamais charger les octets. */
+   Le detail du schema vit dans migrations/profileSchema.js : la route Profil
+   sait le rejouer elle-meme si une migration de demarrage a echoue. */
 (async () => {
   try {
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT`);
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_updated_at TIMESTAMPTZ`);
-    console.log("Migration OK: users.profil");
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS user_avatars (
-        user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-        mime       TEXT NOT NULL,
-        data       BYTEA NOT NULL,
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    console.log("Migration OK: user_avatars");
+    await ensureProfileSchema();
+    console.log("Migration OK: profil (users + user_avatars)");
   } catch (e) {
-    console.warn("Migration profil:", e.message);
+    console.error("Migration profil ECHOUEE — la page Profil sera indisponible :", e.message);
   }
 })();
 

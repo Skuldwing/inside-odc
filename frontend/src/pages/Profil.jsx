@@ -64,6 +64,7 @@ export default function Profil() {
 
   const [profil, setProfil] = useState(null);
   const [chargement, setChargement] = useState(true);
+  const [erreurChargement, setErreurChargement] = useState("");
   const [form, setForm] = useState({ full_name: "", job_title: "", phone: "", bio: "" });
   const [enregistrement, setEnregistrement] = useState(false);
   const [photoEnCours, setPhotoEnCours] = useState(false);
@@ -86,7 +87,28 @@ export default function Profil() {
           bio: res.data.bio || "",
         });
       })
-      .catch(() => toast.error("Impossible de charger le profil."))
+      .catch((err) => {
+        if (!vivant) return;
+        /* « Impossible de charger le profil » ne dit rien de ce qu'il faut
+           faire. Le statut, lui, distingue trois situations tres differentes :
+           serveur pas encore a jour, panne serveur, ou simple coupure. */
+        const statut = err?.response?.status;
+        if (!err?.response) {
+          setErreurChargement(
+            "Le serveur n'a pas répondu. Vérifiez votre connexion, puis réessayez."
+          );
+        } else if (statut === 404) {
+          setErreurChargement(
+            "Cette page n'est pas encore disponible sur le serveur : le déploiement de l'API n'est probablement pas terminé. Réessayez dans quelques minutes."
+          );
+        } else {
+          setErreurChargement(
+            err.response?.data?.error
+              ? `Le serveur a refusé la demande : ${err.response.data.error} (code ${statut}).`
+              : `Le serveur a renvoyé une erreur (code ${statut}).`
+          );
+        }
+      })
       .finally(() => vivant && setChargement(false));
     return () => {
       vivant = false;
@@ -193,7 +215,23 @@ export default function Profil() {
     );
   }
 
-  if (!profil) return null;
+  if (!profil) {
+    return (
+      <div className="space-y-6">
+        <PageHeader eyebrow="Mon compte" title="Profil" icon={UserCircle} />
+        <div className="card-solid p-6">
+          <p className="text-sm text-slate-700">
+            {erreurChargement || "Profil indisponible."}
+          </p>
+          <div className="mt-4">
+            <Button variant="ghost" onClick={() => window.location.reload()}>
+              Réessayer
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const champ = "w-full rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100";
   const label = "mb-1 block text-xs font-medium text-slate-600";
