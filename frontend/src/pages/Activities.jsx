@@ -55,6 +55,7 @@ export default function Activities({
   const [activities, setActivities] = useState([]);
   const [devices, setDevices] = useState([]);
   const [partners, setPartners] = useState([]);
+  const [coaches, setCoaches] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [openUpload, setOpenUpload] = useState(false);
@@ -111,6 +112,7 @@ export default function Activities({
     location: "",
     device_id: "",
     partner_id: "",
+    coach_id: "",
     participants_manual: "",
     mode: "presentiel",
     file: null,
@@ -195,6 +197,17 @@ export default function Activities({
     }
   };
 
+  /* Liste des coachs pour le selecteur du formulaire. Reservee aux admins :
+     eux seuls peuvent confier une activite a quelqu'un. */
+  const fetchCoaches = async () => {
+    try {
+      const res = await api.get("/users/coaches");
+      setCoaches(res.data || []);
+    } catch {
+      setCoaches([]);
+    }
+  };
+
   const fetchPartners = async () => {
     try {
       const res = await api.get("/partners");
@@ -207,7 +220,10 @@ export default function Activities({
   useEffect(() => {
     fetchActivities();
     fetchDevices();
-    if (role === "admin") fetchPartners();
+    if (role === "admin") {
+      fetchPartners();
+      fetchCoaches();
+    }
   }, [role]);
 
   useEffect(() => {
@@ -271,6 +287,7 @@ export default function Activities({
       location: "",
       device_id: "",
       partner_id: "",
+      coach_id: "",
       participants_manual: "",
       mode: "presentiel",
       file: null,
@@ -319,6 +336,7 @@ export default function Activities({
       location: activity.location === "-" ? "" : activity.location || "",
       device_id: activity.device_id || "",
       partner_id: activity.partner_id || "",
+      coach_id: activity.coach_id || "",
       participants: activity.participants || 0,
       participants_manual: activity.participants_manual ?? "",
       report_filename: activity.report_filename || null,
@@ -523,7 +541,10 @@ export default function Activities({
         mode: editForm.mode || "presentiel",
         participants_manual: editForm.participants_manual !== "" ? Number(editForm.participants_manual) : null,
       };
-      if (role === "admin") payload.partner_id = editForm.partner_id || null;
+      if (role === "admin") {
+        payload.partner_id = editForm.partner_id || null;
+        payload.coach_id = editForm.coach_id || null;
+      }
 
       await api.put(`/activities/${editForm.id}`, payload);
 
@@ -633,7 +654,8 @@ export default function Activities({
           duration_hours: form.duration_hours || null,
           location: form.location || null,
           mode: form.mode || "presentiel",
-          device_id: role !== "coach" ? (form.device_id || null) : null,
+          device_id: form.device_id || null,
+          coach_id: role === "admin" ? (form.coach_id || null) : null,
           participants_manual: form.participants_manual !== "" ? Number(form.participants_manual) : null,
           partner_id:
             role === "admin"
@@ -972,6 +994,7 @@ export default function Activities({
                 partners={partners}
                 devices={devices}
                 regions={senegalRegions}
+                coaches={coaches}
               />
               <div className="border-t border-slate-100 pt-4">
                 <label className="text-sm font-medium flex items-center gap-2">
@@ -1110,6 +1133,7 @@ export default function Activities({
               partners={partners}
               devices={devices}
               regions={senegalRegions}
+              coaches={coaches}
             />
           </form>
 
@@ -1681,7 +1705,7 @@ function ColumnMappingInfo({ result }) {
   );
 }
 
-function FormActivityFields({ role, form, setForm, partners, devices, regions }) {
+function FormActivityFields({ role, form, setForm, partners, devices, regions, coaches = [] }) {
   return (
     <>
       <div>
@@ -1797,23 +1821,51 @@ function FormActivityFields({ role, form, setForm, partners, devices, regions })
         </div>
       )}
 
-      {role !== "coach" && (
+      {role === "admin" && (
         <div>
-          <label className="text-sm font-medium">Dispositif</label>
+          <label className="text-sm font-medium">Coach / Formateur</label>
           <select
             className="select mt-1"
-            value={form.device_id}
-            onChange={(e) => setForm({ ...form, device_id: e.target.value })}
+            value={form.coach_id ?? ""}
+            onChange={(e) => setForm({ ...form, coach_id: e.target.value })}
           >
-            <option value="">Selectionner</option>
-            {devices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
+            <option value="">Aucun</option>
+            {coaches.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.full_name || c.email}
               </option>
             ))}
           </select>
+          {coaches.length === 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              Aucun compte coach actif. Créez-en un depuis Utilisateurs.
+            </p>
+          )}
         </div>
       )}
+
+      {/* Le dispositif etait masque pour les coachs, qui n'en avaient aucun :
+          ils choisissent maintenant parmi ceux qui leur sont confies. */}
+      <div>
+        <label className="text-sm font-medium">Dispositif</label>
+        <select
+          className="select mt-1"
+          value={form.device_id}
+          onChange={(e) => setForm({ ...form, device_id: e.target.value })}
+        >
+          <option value="">Selectionner</option>
+          {devices.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        {role === "coach" && devices.length === 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            Aucun dispositif ne vous est encore confié. Demandez-le à un administrateur.
+          </p>
+        )}
+      </div>
     </>
   );
 }

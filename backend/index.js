@@ -29,6 +29,7 @@ const mbootayRoutes = require("./routes/mbootay.routes");
 const profileRoutes = require("./routes/profile.routes");
 const searchRoutes = require("./routes/search.routes");
 const { ensureProfileSchema } = require("./migrations/profileSchema");
+const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -688,6 +689,16 @@ pool.query(`
     console.log("Migration OK: profil (users + user_avatars)");
   } catch (e) {
     console.error("Migration profil ECHOUEE — la page Profil sera indisponible :", e.message);
+  }
+})();
+
+/* ── Dispositifs confies aux coachs ── */
+(async () => {
+  try {
+    await ensureCoachDevicesSchema();
+    console.log("Migration OK: user_devices");
+  } catch (e) {
+    console.error("Migration user_devices ECHOUEE :", e.message);
   }
 })();
 
