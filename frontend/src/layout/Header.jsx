@@ -78,7 +78,9 @@ export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/login", { replace: true });
+    /* Apres deconnexion on revient a l'accueil public du domaine : c'est la
+       page d'ou l'on repart, et elle porte deja le bouton de connexion. */
+    navigate("/", { replace: true });
   };
 
 

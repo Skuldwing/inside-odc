@@ -47,6 +47,16 @@ function estPagePublique(chemin) {
   return PUBLIC_EXACTES.includes(chemin) || PUBLIC_PREFIXES.some((p) => chemin.startsWith(p));
 }
 
+/* /auth/me est la verification de session lancee au demarrage. Un 401 y est
+   la reponse normale pour qui n'est pas connecte : ce n'est pas une session
+   expiree, c'est l'absence de session. Rediriger ici priverait le routeur de
+   sa decision — il envoyait un visiteur anonyme vers /login au lieu de la page
+   d'accueil, et faisait perdre l'adresse demandee puisque le rechargement
+   complet efface l'etat de navigation. */
+function estSondeDeSession(config) {
+  return String(config?.url || "").includes("/auth/me");
+}
+
 api.interceptors.response.use(
   (response) => {
     setActiveRequests(activeRequests - 1);
@@ -58,11 +68,14 @@ api.interceptors.response.use(
       localStorage.removeItem("user");
       sessionStorage.removeItem("admin_pin");
       sessionStorage.removeItem("admin_pin_time");
-      /* Sur la page d'accueil publique, un 401 sur /auth/me est le cas normal
-         d'un visiteur non connecte : le rediriger vers /login rendrait la
-         vitrine inaccessible. */
-      if (!estPagePublique(window.location.pathname)) {
-        window.location.href = "/login";
+      const { pathname, search } = window.location;
+
+      /* Ici, un 401 signifie une session expiree en cours d'utilisation. On
+         emmene vers la connexion en gardant l'adresse en cours, pour y revenir
+         une fois identifie plutot que de repartir du tableau de bord. */
+      if (!estSondeDeSession(error.config) && !estPagePublique(pathname)) {
+        const retour = encodeURIComponent(pathname + search);
+        window.location.href = `/login?next=${retour}`;
       }
     }
     return Promise.reject(error);
