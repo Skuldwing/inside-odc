@@ -9,10 +9,81 @@ const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const requireAdminPin = require("../middleware/pin.middleware");
 const crypto = require("crypto");
 const { logAudit } = require("../services/audit");
+const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 
 const router = express.Router();
 
+/* Liste des coachs, pour le selecteur du formulaire d'activite.
+   Declaree avant le verrou ci-dessous : exiger le PIN administrateur pour
+   remplir une liste deroulante empecherait de creer une activite tant qu'il
+   n'a pas ete saisi. Elle ne renvoie que le nom et l'identifiant. */
+router.get("/coaches", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, full_name, email
+       FROM users
+       WHERE role = 'coach' AND COALESCE(is_active, true) = true
+       ORDER BY full_name NULLS LAST, email`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("[COACHS]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 router.use(authMiddleware, requireAdmin, requireAdminPin);
+
+/* Remplace la liste des dispositifs confies a un coach.
+   Seul ce role en porte : un partenaire tient les siens par partner_devices,
+   un lecteur n'en a pas l'usage. Si la table manque encore — migration de
+   demarrage non passee — on la cree puis on reessaie. */
+async function remplacerDispositifsCoach(userId, role, deviceIds) {
+  if (role !== "coach") {
+    await pool.query("DELETE FROM user_devices WHERE user_id = $1", [userId]);
+    return [];
+  }
+
+  const ids = Array.isArray(deviceIds)
+    ? [...new Set(deviceIds.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+    : [];
+
+  await pool.query("DELETE FROM user_devices WHERE user_id = $1", [userId]);
+  if (ids.length) {
+    const valeurs = ids.map((_, i) => `($1, $${i + 2})`).join(", ");
+    await pool.query(
+      `INSERT INTO user_devices (user_id, device_id) VALUES ${valeurs}
+       ON CONFLICT DO NOTHING`,
+      [userId, ...ids]
+    );
+  }
+  return ids;
+}
+
+async function enregistrerDispositifsCoach(userId, role, deviceIds) {
+  try {
+    return await remplacerDispositifsCoach(userId, role, deviceIds);
+  } catch (err) {
+    if (!tableAbsente(err)) throw err;
+    console.warn("[UTILISATEURS] table user_devices absente, creation puis nouvel essai");
+    await ensureCoachDevicesSchema();
+    return remplacerDispositifsCoach(userId, role, deviceIds);
+  }
+}
+
+/* La liste des utilisateurs joint desormais user_devices : si la table manque,
+   c'est toute la page Utilisateurs qui tombe, pas seulement les dispositifs.
+   On la cree et on reessaie une fois. */
+async function avecTableDispositifs(operation) {
+  try {
+    return await operation();
+  } catch (err) {
+    if (!tableAbsente(err)) throw err;
+    console.warn("[UTILISATEURS] table user_devices absente, creation puis nouvel essai");
+    await ensureCoachDevicesSchema();
+    return operation();
+  }
+}
 
 async function hasUsersIsActiveColumn() {
   const result = await pool.query(
@@ -31,17 +102,27 @@ router.get("/", async (req, res) => {
       ? "CASE WHEN u.is_active = true THEN 'active' ELSE 'inactive' END"
       : "'active'";
 
-    const result = await pool.query(
+    const result = await avecTableDispositifs(() => pool.query(
       `SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
               u.objective_beneficiaries,
               u.last_seen_at,
               COALESCE(u.is_team_odc, false) AS is_team_odc,
               p.name AS partner,
-              ${statusExpr} AS status
+              ${statusExpr} AS status,
+              COALESCE(ud.device_ids, ARRAY[]::int[])   AS device_ids,
+              COALESCE(ud.device_names, ARRAY[]::text[]) AS device_names
        FROM users u
        LEFT JOIN partners p ON u.partner_id = p.id
+       LEFT JOIN (
+         SELECT ud.user_id,
+                array_agg(d.id  ORDER BY d.name) AS device_ids,
+                array_agg(d.name ORDER BY d.name) AS device_names
+         FROM user_devices ud
+         JOIN devices d ON d.id = ud.device_id
+         GROUP BY ud.user_id
+       ) ud ON ud.user_id = u.id
        ORDER BY u.created_at DESC`
-    );
+    ));
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -60,6 +141,7 @@ router.post("/", async (req, res) => {
       partner = null,
       status = "active",
       is_team_odc = false,
+      device_ids = [],
     } = req.body;
 
     if (!email) {
@@ -102,6 +184,9 @@ router.post("/", async (req, res) => {
         );
 
     const createdUser = result.rows[0];
+    createdUser.device_ids = await enregistrerDispositifsCoach(
+      createdUser.id, createdUser.role, device_ids
+    );
 
     let inviteLink = null;
     try {
@@ -147,6 +232,7 @@ router.put("/:id", async (req, res) => {
       status = "active",
       objective_beneficiaries = null,
       is_team_odc = false,
+      device_ids = [],
     } = req.body;
 
     if (!email) {
@@ -196,6 +282,10 @@ router.put("/:id", async (req, res) => {
     }
 
     const updatedUser = result.rows[0];
+    updatedUser.device_ids = await enregistrerDispositifsCoach(
+      updatedUser.id, updatedUser.role, device_ids
+    );
+
     logAudit(req, "UPDATE", "users", updatedUser.id, updatedUser.full_name || updatedUser.email, {
       email: updatedUser.email,
       role: updatedUser.role,

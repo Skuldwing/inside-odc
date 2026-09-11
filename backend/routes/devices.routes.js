@@ -4,17 +4,32 @@ const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const requireAdminPin = require("../middleware/pin.middleware");
 const { logAudit } = require("../services/audit");
+const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 
 const router = express.Router();
 
 /* ===== GET DEVICES ===== */
 router.get("/", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "coach") return res.json([]);
-
     let query, params = [];
 
-    if (req.user.role === "partner") {
+    /* Un coach recevait une liste vide : il ne pouvait donc rattacher aucune
+       activite a un dispositif. Il voit desormais ceux qui lui sont confies. */
+    if (req.user.role === "coach") {
+      query = `
+        SELECT d.*,
+               COUNT(DISTINCT a.id)::int AS activities_count,
+               COUNT(ap.participant_id)::int AS beneficiaries_count
+        FROM devices d
+        JOIN user_devices ud ON ud.device_id = d.id
+        LEFT JOIN activities a ON a.device_id = d.id
+        LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+        WHERE ud.user_id = $1
+        GROUP BY d.id
+        ORDER BY d.name
+      `;
+      params = [req.user.id];
+    } else if (req.user.role === "partner") {
       query = `
         SELECT d.*,
                COUNT(DISTINCT a.id)::int AS activities_count,
@@ -41,7 +56,16 @@ router.get("/", authMiddleware, async (req, res) => {
       `;
     }
 
-    const result = await pool.query(query, params);
+    let result;
+    try {
+      result = await pool.query(query, params);
+    } catch (err) {
+      /* La table des dispositifs confies peut manquer si la migration de
+         demarrage n'est pas passee : on la cree et on reessaie une fois. */
+      if (!tableAbsente(err)) throw err;
+      await ensureCoachDevicesSchema();
+      result = await pool.query(query, params);
+    }
     res.json(result.rows);
   } catch (err) {
     console.error(err);

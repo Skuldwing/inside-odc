@@ -8,6 +8,7 @@ const { generateAttestationPDF } = require("../services/attestation");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
+const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 
 const router = express.Router();
 
@@ -34,6 +35,16 @@ const photoUpload = multer({
    JSON par octet de PDF — la liste des activites pesait des dizaines de Mo.
    Le fichier se telecharge par /activities/:id/report, et report_filename
    suffit a savoir qu'il existe. */
+/* Les memes colonnes, sans prefixe de table : pour les clauses RETURNING, qui
+   renvoyaient « * » — donc le PDF du rapport a chaque enregistrement. */
+const ACTIVITY_RETURNING = `
+  id, title, description, activity_date, duration_hours, location,
+  device_id, partner_id, created_by, created_at, participants_manual,
+  date_fin, coach_id, report_filename, mode, reliability_score,
+  reliability_status, reliability_details, reliability_manual_override,
+  duplicate_of
+`;
+
 const ACTIVITY_COLUMNS = `
   a.id, a.title, a.description, a.activity_date, a.duration_hours, a.location,
   a.device_id, a.partner_id, a.created_by, a.created_at, a.participants_manual,
@@ -41,6 +52,45 @@ const ACTIVITY_COLUMNS = `
   a.reliability_status, a.reliability_details, a.reliability_manual_override,
   a.duplicate_of
 `;
+
+/* Un administrateur peut confier une activite a un coach. On verifie que
+   l'identifiant recu designe bien un compte de ce role : sans ce controle, on
+   pourrait rattacher une activite a un partenaire ou a un lecteur, qui la
+   verrait apparaitre sans rien y comprendre. */
+async function coachValide(coachId) {
+  if (!coachId) return null;
+  const res = await pool.query(
+    "SELECT id FROM users WHERE id = $1 AND role = 'coach'",
+    [coachId]
+  );
+  return res.rows[0]?.id ?? null;
+}
+
+/* Dispositifs confies au coach. Ses activites recevaient device_id = NULL
+   d'office : elles n'apparaissaient donc dans aucune repartition par
+   dispositif, alors que ce sont elles qui les remplissent. */
+async function dispositifsDuCoach(userId) {
+  try {
+    const res = await pool.query(
+      "SELECT device_id FROM user_devices WHERE user_id = $1",
+      [userId]
+    );
+    return res.rows.map((r) => r.device_id);
+  } catch (err) {
+    if (!tableAbsente(err)) throw err;
+    await ensureCoachDevicesSchema();
+    return [];
+  }
+}
+
+/* Le dispositif retenu pour un coach : celui demande s'il lui est confie,
+   rien sinon. Un coach ne choisit pas dans le catalogue entier. */
+async function dispositifAutorisePourCoach(userId, deviceId) {
+  const demande = Number(deviceId) || null;
+  if (!demande) return null;
+  const autorises = await dispositifsDuCoach(userId);
+  return autorises.includes(demande) ? demande : null;
+}
 
 function requireWriteAccess(req, res, next) {
   if (req.user.role === "viewer") {
@@ -128,8 +178,10 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
       resolvedPartnerId = req.user.partner_id;
     } else if (req.user.role === "coach") {
       resolvedPartnerId = null;
-      resolvedDeviceId = null;
       resolvedCoachId = req.user.id;
+      resolvedDeviceId = await dispositifAutorisePourCoach(req.user.id, device_id);
+    } else if (req.user.role === "admin") {
+      resolvedCoachId = await coachValide(req.body.coach_id);
     }
 
     const resolvedMode = ["ligne", "presentiel"].includes(req.body.mode)
@@ -141,7 +193,7 @@ router.post("/", authMiddleware, requireWriteAccess, async (req, res) => {
       INSERT INTO activities
       (title, description, activity_date, date_fin, duration_hours, location, device_id, partner_id, created_by, participants_manual, coach_id, mode)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      RETURNING *
+      RETURNING ${ACTIVITY_RETURNING}
       `,
       [
         title,
@@ -214,7 +266,17 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
       : req.user.role === "coach" ? null
       : partner_id || null;
 
-    const resolvedDeviceId = req.user.role === "coach" ? null : device_id || null;
+    const resolvedDeviceId =
+      req.user.role === "coach"
+        ? await dispositifAutorisePourCoach(req.user.id, device_id)
+        : device_id || null;
+
+    /* Seul un administrateur reaffecte une activite ; pour les autres roles le
+       coach en place est conserve tel quel. */
+    const resolvedCoachId =
+      req.user.role === "admin"
+        ? await coachValide(req.body.coach_id)
+        : before.coach_id;
 
     const resolvedMode = ["ligne", "presentiel"].includes(req.body.mode)
       ? req.body.mode
@@ -232,9 +294,10 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
           device_id = $7,
           partner_id = $8,
           participants_manual = $9,
-          mode = $10
-      WHERE id = $11
-      RETURNING *
+          mode = $10,
+          coach_id = $11
+      WHERE id = $12
+      RETURNING ${ACTIVITY_RETURNING}
       `,
       [
         title,
@@ -247,6 +310,7 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
         resolvedPartnerId,
         participants_manual != null && participants_manual !== "" ? Number(participants_manual) : null,
         resolvedMode,
+        resolvedCoachId,
         id,
       ]
     );
