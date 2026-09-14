@@ -298,6 +298,14 @@ function configurationEnvoi() {
       "Brevo et SMTP sont tous deux configures. Fixez MAIL_PROVIDER pour lever l'ambiguite."
     );
   }
+  /* Le cas qui a fait perdre le plus de temps : la cle Brevo est en place, mais
+     MAIL_PROVIDER pointe encore sur SMTP, et les envois continuent de buter sur
+     un port que l'hebergeur ferme. Rien ne le signalait. */
+  if (fournisseur === "smtp" && brevoConfigure) {
+    alertes.push(
+      "Une cle Brevo est presente mais inutilisee : l'envoi passe par SMTP. Si le port SMTP est bloque par l'hebergeur, basculez MAIL_PROVIDER sur « brevo » — Brevo envoie en HTTPS."
+    );
+  }
 
   return {
     expediteur: from,
