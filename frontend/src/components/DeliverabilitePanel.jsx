@@ -317,6 +317,26 @@ export default function DeliverabilitePanel() {
                     {/* Garde-fou : une bande rouge muette ne dit rien à personne. */}
                     <p className="font-medium">{essai.cause || "L'envoi a échoué, sans motif indiqué par le serveur."}</p>
                     {essai.remede && <p className="mt-1">{essai.remede}</p>}
+                    {/* Quand la connexion n'aboutit pas, savoir à quelle étape
+                        elle s'arrête vaut mieux que le motif seul. */}
+                    {essai.sonde?.etapes?.length > 0 && (
+                      <ul className="mt-2 space-y-1.5 border-t border-red-200 pt-2">
+                        {essai.sonde.etapes.map((e) => (
+                          <li key={e.nom} className="flex items-start gap-2">
+                            {e.ok ? (
+                              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-600" aria-hidden="true" />
+                            ) : (
+                              <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-red-600" aria-hidden="true" />
+                            )}
+                            <span className="min-w-0">
+                              <span className="font-medium">{e.nom}</span>
+                              {e.detail ? <span className="opacity-80"> — {e.detail}</span> : null}
+                              {e.remede ? <span className="mt-0.5 block opacity-90">{e.remede}</span> : null}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     {essai.brut && (
                       <p className="mt-2 break-all font-mono text-[11px] opacity-70">{essai.brut}</p>
                     )}

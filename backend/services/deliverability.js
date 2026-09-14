@@ -279,10 +279,13 @@ const CAUSES = [
     remede: "Verifiez SMTP_HOST — pour Microsoft 365 c'est « smtp.office365.com ».",
   },
   {
-    motif: /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET/i,
-    cause: "La connexion au serveur d'envoi n'aboutit pas.",
+    /* Nodemailer n'ecrit pas le code dans son message : « Connection timeout »
+       et « Greeting never received » sont ses propres formulations, et le code
+       ETIMEDOUT ne vit que sur l'objet d'erreur. Les deux sont reconnus ici. */
+    motif: /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET|Connection timeout|Greeting never received/i,
+    cause: "La connexion au serveur d'envoi n'aboutit jamais.",
     remede:
-      "Verifiez SMTP_PORT (587) et SMTP_SECURE (false sur le port 587, true sur le 465). L'hebergeur peut aussi bloquer le port.",
+      "Le port sortant est presque toujours en cause : beaucoup d'hebergeurs bloquent le trafic SMTP. Verifiez SMTP_PORT (587 pour Microsoft 365) et SMTP_SECURE (false sur le 587). Si le port est bloque par l'hebergeur, aucun reglage ne le debloquera : il faut passer par un service qui envoie en HTTPS.",
   },
   {
     motif: /Brevo error 401|unauthorized|invalid api key/i,

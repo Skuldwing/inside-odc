@@ -4,6 +4,7 @@ const requireAdmin = require("../middleware/role.middleware");
 const pool = require("../db");
 const { infoVersion } = require("../version");
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
+const { sonderSmtp } = require("../services/sondeSmtp");
 const {
   diagnostiquerDomaine,
   configurationEnvoi,
@@ -114,8 +115,27 @@ router.post("/test", authMiddleware, requireAdmin, async (req, res) => {
     });
   } catch (err) {
     console.error("[ESSAI ENVOI]", err);
-    const brut = String(err?.message || err);
-    res.status(502).json({ success: false, ...interpreterErreurEnvoi(brut), brut: brut.slice(0, 600) });
+
+    /* Nodemailer range l'essentiel hors du message : « Connection timeout » ne
+       porte pas son code ETIMEDOUT, et un refus SMTP met son numero dans
+       responseCode. On donne tout a lire a l'interprete. */
+    const brut = [err?.message, err?.code, err?.responseCode, err?.command, err?.response]
+      .filter(Boolean)
+      .join(" · ");
+    const lecture = interpreterErreurEnvoi(brut);
+
+    /* Quand la connexion elle-meme n'aboutit pas, le motif ne suffit pas : il
+       faut savoir a quelle etape elle s'arrete. La sonde le dit. */
+    let sonde = null;
+    if (/timeout|ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET|Greeting/i.test(brut)) {
+      try {
+        sonde = await sonderSmtp();
+      } catch (e) {
+        console.error("[SONDE SMTP]", e.message);
+      }
+    }
+
+    res.status(502).json({ success: false, ...lecture, brut: brut.slice(0, 600), sonde });
   }
 });
 
