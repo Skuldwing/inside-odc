@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   ChevronDown,
+  Copy,
   Loader2,
   RefreshCw,
   Send,
@@ -103,6 +104,97 @@ function echecLisible(err) {
   };
 }
 
+/**
+ * Les enregistrements qu'il reste a creer, noms deja calcules pour le domaine.
+ *
+ * Le panneau se contentait de renvoyer vers Brevo. Or recopier un nom
+ * d'enregistrement de tete — « brevo._domainkey. » suivi du domaine — est
+ * exactement la ou l'on se trompe, et une faute de frappe dans une zone DNS ne
+ * se voit pas : elle se traduit par un domaine qui reste non authentifie sans
+ * que rien n'indique pourquoi.
+ *
+ * Seules deux valeurs ne peuvent pas etre calculees ici : la cle DKIM et le
+ * code de verification, propres au compte Brevo.
+ */
+function enregistrementsAPoser(domaine, controles, adresseRapports) {
+  if (!domaine) return [];
+  const manque = (cle) => controles[cle] && controles[cle].statut !== "ok";
+  const liste = [];
+
+  if (manque("spf")) {
+    const existant = controles.spf?.valeur;
+    liste.push({
+      role: "SPF — qui a le droit d'envoyer",
+      nom: domaine,
+      /* Un domaine ne peut publier qu'un seul SPF : s'il en existe deja un, on
+         propose la version fusionnee plutot qu'un second enregistrement, qui
+         invaliderait les deux. */
+      valeur: existant
+        ? existant.replace(/\s*([~\-?+]all)\s*$/, " include:spf.brevo.com $1")
+        : "v=spf1 include:spf.brevo.com ~all",
+      note: existant
+        ? "Un SPF existe déjà sur ce domaine : modifiez-le, n'en créez pas un second."
+        : null,
+    });
+  }
+
+  if (manque("dkim")) {
+    liste.push({
+      role: "DKIM — signature des messages",
+      nom: `brevo._domainkey.${domaine}`,
+      valeur: null,
+    });
+  }
+
+  if (manque("verification_brevo")) {
+    liste.push({
+      role: "Vérification du domaine chez Brevo",
+      nom: domaine,
+      valeur: null,
+    });
+  }
+
+  if (manque("dmarc")) {
+    liste.push({
+      role: "DMARC — que faire en cas d'échec",
+      nom: `_dmarc.${domaine}`,
+      valeur: `v=DMARC1; p=none;${adresseRapports ? ` rua=mailto:${adresseRapports};` : ""}`,
+      note: "« p=none » n'impose aucun rejet : il satisfait l'exigence de Gmail tout en laissant observer le trafic avant de durcir.",
+    });
+  }
+
+  return liste;
+}
+
+/* Recopier un enregistrement DNS a la main est le moment ou la faute de frappe
+   arrive. Le presse-papiers peut etre refuse selon le contexte : l'echec est
+   silencieux, le texte reste selectionnable. */
+function BoutonCopier({ valeur }) {
+  const [copie, setCopie] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(valeur);
+          setCopie(true);
+          setTimeout(() => setCopie(false), 1500);
+        } catch {
+          /* rien : la valeur reste affichée et sélectionnable */
+        }
+      }}
+      className="flex-shrink-0 text-slate-400 hover:text-slate-700"
+      title="Copier"
+    >
+      {copie ? (
+        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+      )}
+    </button>
+  );
+}
+
 function Pastille({ statut }) {
   if (statut === "ok") {
     return <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" aria-hidden="true" />;
@@ -188,6 +280,14 @@ export default function DeliverabilitePanel() {
   const controles = data.controles || {};
   const alertes = data.configuration?.alertes || [];
   const bloquants = ORDRE.filter((c) => controles[c] && controles[c].statut === "manquant");
+  /* Les rapports DMARC vont vers une adresse relevée par un humain. L'adresse
+     d'expédition d'un domaine neuf n'a le plus souvent aucune boîte derrière :
+     les rapports y seraient perdus. L'adresse de réponse, elle, en a une. */
+  const aPoser = enregistrementsAPoser(
+    data.domaine,
+    controles,
+    data.configuration?.repondre_a || data.configuration?.expediteur
+  );
   const tout_ok = bloquants.length === 0 && alertes.length === 0;
 
   return (
@@ -258,14 +358,52 @@ export default function DeliverabilitePanel() {
             })}
           </ul>
 
-          {bloquants.length > 0 && (
+          {aPoser.length > 0 && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-700">
-              <p className="font-medium text-slate-800">Ces enregistrements se posent dans le DNS</p>
+              <p className="font-medium text-slate-800">
+                Ces {aPoser.length} enregistrement{aPoser.length > 1 ? "s" : ""} restent à créer dans le DNS
+              </p>
               <p className="mt-1">
-                Ils ne dépendent pas de la plateforme : c&apos;est l&apos;administrateur de la zone
-                DNS du domaine qui doit les créer. Les valeurs exactes de DKIM et du code de
-                vérification sont fournies par Brevo, dans <em>Expéditeurs &amp; IP → Domaines</em>.
-                Revenez ici ensuite : la propagation prend de quelques minutes à quelques heures.
+                Chez votre hébergeur de domaine, rubrique <em>Zone DNS</em>. Les noms ci-dessous sont
+                déjà calculés pour {data.domaine}.
+              </p>
+
+              <ul className="mt-3 space-y-2">
+                {aPoser.map((e) => (
+                  <li key={e.nom + e.role} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                    <p className="font-medium text-slate-800">{e.role}</p>
+                    <dl className="mt-1.5 space-y-1">
+                      <div className="flex gap-2">
+                        <dt className="w-14 flex-shrink-0 text-slate-500">Type</dt>
+                        <dd className="font-mono">TXT</dd>
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-14 flex-shrink-0 text-slate-500">Nom</dt>
+                        <dd className="min-w-0 flex-1 break-all font-mono">{e.nom}</dd>
+                        <BoutonCopier valeur={e.nom} />
+                      </div>
+                      <div className="flex gap-2">
+                        <dt className="w-14 flex-shrink-0 text-slate-500">Valeur</dt>
+                        {e.valeur ? (
+                          <>
+                            <dd className="min-w-0 flex-1 break-all font-mono">{e.valeur}</dd>
+                            <BoutonCopier valeur={e.valeur} />
+                          </>
+                        ) : (
+                          <dd className="min-w-0 flex-1 italic text-slate-500">
+                            fournie par Brevo, dans Expéditeurs &amp; IP → Domaines
+                          </dd>
+                        )}
+                      </div>
+                    </dl>
+                    {e.note && <p className="mt-1.5 text-slate-600">{e.note}</p>}
+                  </li>
+                ))}
+              </ul>
+
+              <p className="mt-2.5">
+                Revenez ensuite ici et cliquez sur <em>Revérifier</em> : la propagation prend de
+                quelques minutes à quelques heures.
               </p>
             </div>
           )}
