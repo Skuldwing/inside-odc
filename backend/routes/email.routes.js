@@ -29,7 +29,7 @@ router.get("/diagnostic", authMiddleware, requireAdmin, async (req, res) => {
       });
     }
 
-    const diagnostic = await diagnostiquerDomaine(domaine);
+    const diagnostic = await diagnostiquerDomaine(domaine, config.fournisseur);
     res.json({ configuration: config, ...diagnostic });
   } catch (err) {
     console.error("[DELIVRABILITE]", err);

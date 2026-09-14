@@ -44,17 +44,25 @@ export default function DeliverabilitePanel() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [ouvert, setOuvert] = useState(false);
+  /* Domaine explicitement demande par l'administrateur. Vide = celui qui est
+     configure sur le serveur. Sert a jauger un domaine candidat — par exemple
+     orange-sonatel.com — avant de basculer l'expedition dessus. */
+  const [domaineSaisi, setDomaineSaisi] = useState("");
+  const [domaineTeste, setDomaineTeste] = useState("");
 
-  const charger = useCallback(async () => {
+  const charger = useCallback(async (domaine = "") => {
     setChargement(true);
     setErreur("");
     try {
-      const res = await api.get("/email/diagnostic");
+      const res = await api.get("/email/diagnostic", domaine ? { params: { domaine } } : undefined);
       setData(res.data);
+      setDomaineTeste(domaine);
       /* On n'ouvre le detail d'office que s'il y a quelque chose a corriger :
          quand tout va bien, une ligne suffit. */
       const ko = Object.values(res.data.controles || {}).filter((c) => c.statut !== "ok").length;
-      setOuvert(ko > 0 || (res.data.configuration?.alertes || []).length > 0);
+      /* Une verification demandee a la main reste toujours visible : on vient
+         d'en faire la demande, la replier serait absurde. */
+      setOuvert(Boolean(domaine) || ko > 0 || (res.data.configuration?.alertes || []).length > 0);
     } catch (err) {
       setErreur(err?.response?.data?.error || "Diagnostic indisponible.");
     } finally {
@@ -108,7 +116,9 @@ export default function DeliverabilitePanel() {
         />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-slate-800">
-            {tout_ok
+            {domaineTeste
+              ? `Vérification de ${domaineTeste}`
+              : tout_ok
               ? "Domaine expéditeur authentifié"
               : `Envoi d'emails : ${bloquants.length + alertes.length} point${
                   bloquants.length + alertes.length > 1 ? "s" : ""
@@ -117,6 +127,7 @@ export default function DeliverabilitePanel() {
           <span className="block truncate text-xs text-slate-500">
             {data.domaine ? `${data.domaine} · ` : ""}
             envoi via {data.configuration?.fournisseur || "aucun service"}
+            {data.configuration?.repondre_a ? ` · réponses vers ${data.configuration.repondre_a}` : ""}
           </span>
         </span>
         <ChevronDown
@@ -167,13 +178,47 @@ export default function DeliverabilitePanel() {
             </div>
           )}
 
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              charger(domaineSaisi.trim());
+            }}
+            className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3"
+          >
+            <label className="min-w-[12rem] flex-1 text-xs text-slate-600">
+              Vérifier un autre domaine
+              <input
+                type="text"
+                value={domaineSaisi}
+                onChange={(e) => setDomaineSaisi(e.target.value)}
+                placeholder="orange-sonatel.com"
+                className="input mt-1 text-sm"
+              />
+            </label>
+            <button type="submit" disabled={chargement || !domaineSaisi.trim()} className="btn-ghost border text-xs">
+              Vérifier
+            </button>
+            {domaineTeste && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDomaineSaisi("");
+                  charger("");
+                }}
+                className="btn-ghost text-xs"
+              >
+                Revenir au domaine configuré
+              </button>
+            )}
+          </form>
+
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-slate-400">
               Vérifié le {new Date(data.verifie_le).toLocaleString("fr-FR")}
             </p>
             <button
               type="button"
-              onClick={charger}
+              onClick={() => charger(domaineTeste)}
               disabled={chargement}
               className="btn-ghost border text-xs"
             >
