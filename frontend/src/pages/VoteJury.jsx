@@ -507,6 +507,9 @@ export default function VoteJury() {
   const votedCount   = status.voted_count || 0;
   const juryTotal    = status.jury_total || 0;
   const juryList     = status.jury_list || [];
+  const cartonsActifs = status.cartons_actifs || false;
+  const maCarte       = status.ma_carte || null;          // « verte » | « rouge »
+  const cartonsProjet = status.cartons_projet || null;
 
   return (
     <>
@@ -540,6 +543,30 @@ export default function VoteJury() {
 
           {submitted ? (
             <div key={`done-${proj.id}`} className="space-y-3 anim-fade-in-up">
+              {/* Carton personnel — la note de ce juré atteint-elle la moyenne ? */}
+              {cartonsActifs && maCarte && (
+                <div
+                  className={`rounded-2xl p-5 text-center shadow-sm border-2 ${
+                    maCarte === "verte"
+                      ? "bg-emerald-500 border-emerald-600"
+                      : "bg-red-500 border-red-600"
+                  }`}
+                  role="status"
+                >
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/80">
+                    Votre carton
+                  </p>
+                  <p className="mt-1 text-3xl font-bold text-white">
+                    {maCarte === "verte" ? "Carton vert" : "Carton rouge"}
+                  </p>
+                  <p className="mt-1 text-sm text-white/90">
+                    {maCarte === "verte"
+                      ? "Votre note atteint la moyenne."
+                      : "Votre note est en dessous de la moyenne."}
+                  </p>
+                </div>
+              )}
+
               {/* Résumé votes */}
               <div className="rounded-2xl bg-white border border-green-200 shadow-sm p-5">
                 <div className="flex items-center gap-2 text-green-600 mb-3">
@@ -599,6 +626,42 @@ export default function VoteJury() {
                   </p>
                 )}
               </div>
+
+              {/* Verdict du projet — seulement une fois tout le jury passé.
+                  L'annoncer avant donnerait un résultat qui change sous les yeux
+                  de la salle à chaque vote qui tombe. */}
+              {cartonsActifs && cartonsProjet?.complet && (
+                <div
+                  className={`rounded-2xl border-2 p-5 text-center shadow-sm ${
+                    cartonsProjet.verdict === "valide"
+                      ? "border-emerald-300 bg-emerald-50"
+                      : cartonsProjet.verdict === "rejete"
+                      ? "border-red-300 bg-red-50"
+                      : "border-amber-300 bg-amber-50"
+                  }`}
+                  role="status"
+                >
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 px-3 py-1.5 text-sm font-bold text-white">
+                      {cartonsProjet.vertes} vert{cartonsProjet.vertes > 1 ? "s" : ""}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-3 py-1.5 text-sm font-bold text-white">
+                      {cartonsProjet.rouges} rouge{cartonsProjet.rouges > 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <p
+                    className={`mt-3 text-lg font-bold ${
+                      cartonsProjet.verdict === "valide"
+                        ? "text-emerald-700"
+                        : cartonsProjet.verdict === "rejete"
+                        ? "text-red-700"
+                        : "text-amber-700"
+                    }`}
+                  >
+                    {cartonsProjet.verdict_libelle}
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             /* Formulaire de notation */

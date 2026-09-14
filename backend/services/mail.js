@@ -7,8 +7,50 @@ const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS;
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false") === "true";
 
-async function sendEmail({ toEmail, toName, subject, html, text, attachments = [], bcc = [], cc = [] }) {
-  if (SMTP_HOST && SMTP_USER && SMTP_PASS && MAIL_FROM) {
+/* Quel service envoie reellement.
+   Auparavant SMTP l'emportait des qu'il etait configure, sans que rien ne
+   l'indique : une cle Brevo pouvait etre en place et ne jamais servir. Pire,
+   on envoyait par un compte @orange-sonatel.com en signant
+   @orangedigitalcenter.sn — deux domaines differents, donc ni SPF ni DKIM
+   alignes, donc rejet par Gmail depuis le durcissement de fevrier 2024.
+   MAIL_PROVIDER tranche explicitement ; a defaut, Brevo prime, car c'est le
+   service prevu pour l'envoi en nombre. */
+const PROVIDER = String(process.env.MAIL_PROVIDER || "").toLowerCase();
+const brevoPret = Boolean(BREVO_API_KEY && MAIL_FROM);
+const smtpPret = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && MAIL_FROM);
+
+function fournisseurRetenu() {
+  if (PROVIDER === "brevo") return brevoPret ? "brevo" : "aucun";
+  if (PROVIDER === "smtp") return smtpPret ? "smtp" : "aucun";
+  if (brevoPret) return "brevo";
+  if (smtpPret) return "smtp";
+  return "aucun";
+}
+
+/* Averti une seule fois au demarrage plutot qu'a chaque envoi : une alerte
+   repetee a chaque message finit par ne plus etre lue. */
+let alerteAlignementEmise = false;
+function verifierAlignement() {
+  if (alerteAlignementEmise) return;
+  alerteAlignementEmise = true;
+  const domaine = (a) => (a && a.includes("@") ? a.split("@")[1].toLowerCase() : null);
+  const dFrom = domaine(MAIL_FROM);
+  const dSmtp = domaine(SMTP_USER);
+  if (dFrom && dSmtp && dFrom !== dSmtp) {
+    console.warn(
+      `[MAIL] Expedition par ${SMTP_USER} en se presentant comme ${MAIL_FROM}. ` +
+        "Les domaines different : SPF et DKIM ne peuvent pas s'aligner, les messages " +
+        "seront rejetes ou classes en indesirable. Envoyez depuis le domaine du compte, " +
+        "ou passez par Brevo avec un domaine authentifie."
+    );
+  }
+}
+
+async function sendEmail({ toEmail, toName, subject, html, text, attachments = [], bcc = [], cc = [], headers = {} }) {
+  const fournisseur = fournisseurRetenu();
+
+  if (fournisseur === "smtp") {
+    verifierAlignement();
     const nodemailer = require("nodemailer");
     const transporter = nodemailer.createTransport({
       host: SMTP_HOST,
@@ -30,12 +72,15 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
       html,
       text,
       attachments,
+      headers,
     });
     return;
   }
 
-  if (!BREVO_API_KEY || !MAIL_FROM) {
-    console.warn("Email not configured. Skipping email send.");
+  if (fournisseur === "aucun") {
+    console.warn(
+      "[MAIL] Aucun service d'envoi configure (MAIL_PROVIDER / BREVO_API_KEY / SMTP_*). Message ignore."
+    );
     return;
   }
 
@@ -46,6 +91,10 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
     htmlContent: html,
     textContent: text,
   };
+
+  /* Les en-tetes personnalises portent notamment le desabonnement en un clic,
+     exige par Gmail et Yahoo pour les envois en nombre. */
+  if (headers && Object.keys(headers).length) payload.headers = headers;
 
   if (bcc.length) payload.bcc = bcc.map(r => ({ email: r.email, name: r.name || r.email }));
   if (cc.length)  payload.cc  = cc.map(r => ({ email: r.email, name: r.name || r.email }));
@@ -74,4 +123,4 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
   }
 }
 
-module.exports = { sendEmail };
+module.exports = { sendEmail, fournisseurRetenu };

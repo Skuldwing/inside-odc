@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Play, Square, CheckCircle2, Clock, Users, Loader2, BarChart3, Trophy,
-  MessageCircleQuestion, Download, X, StopCircle, Monitor, Heart, ListOrdered, UserCheck, ChevronUp, ChevronDown,
+  MessageCircleQuestion, Download, X, StopCircle, Monitor, Heart, ListOrdered, UserCheck, ChevronUp, ChevronDown, Flag,
 } from "lucide-react";
 import api from "../api";
 import { useToast, useConfirm } from "../components/ui";
@@ -126,6 +126,8 @@ export default function VoteManage() {
   const [guestPredictions, setGuestPredictions] = useState(null);
   const [participants, setParticipants] = useState(null);
   const [togglingCdc, setTogglingCdc] = useState(false);
+  const [savingCartons, setSavingCartons] = useState(false);
+  const [seuilSaisi, setSeuilSaisi] = useState(null);
   const [cdcResults, setCdcResults] = useState(null);
   const intervalRef = useRef(null);
 
@@ -290,6 +292,18 @@ export default function VoteManage() {
     setTogglingCdc(false);
   };
 
+  /* Les cartons changent la regle du jeu au milieu d'une seance : on enregistre
+     le reglage puis on relit l'etat, pour que l'ecran reflete ce que voient
+     les jures. */
+  const enregistrerCartons = async (actifs, pct) => {
+    setSavingCartons(true);
+    try {
+      await api.put(`/vote/sessions/${id}/cartons`, { actifs, seuil_pct: pct });
+      await fetchLive();
+    } catch { setError("Erreur enregistrement des cartons."); }
+    setSavingCartons(false);
+  };
+
   const exportPdf = async () => {
     setExportingPdf(true);
     try {
@@ -317,6 +331,9 @@ export default function VoteManage() {
   const qaDuration = data?.qa_duration_minutes ?? session?.qa_duration_minutes ?? 5;
   const femaleProjects = data?.female_projects || [];
   const cdcActive = data?.coup_de_coeur_active || false;
+  const cartonsActifs = data?.cartons_actifs || false;
+  const cartons = data?.cartons || null;
+  const seuilPct = seuilSaisi ?? data?.carton_seuil_pct ?? 50;
 
   return (
     <div>
@@ -783,6 +800,7 @@ export default function VoteManage() {
             { key: "predictions", label: "Pronostics invités", icon: ListOrdered },
             { key: "participants", label: "Participants",       icon: UserCheck },
             ...(femaleProjects.length > 0 ? [{ key: "cdc", label: "Coup de cœur ♀", icon: Heart }] : []),
+            { key: "cartons", label: "Cartons", icon: Flag },
           ].map(t => (
             <button
               key={t.key}
@@ -914,6 +932,101 @@ export default function VoteManage() {
                       );
                     })}
                   <p className="text-xs text-slate-500 mt-2 text-right">Mise à jour automatique toutes les 3s</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Cartons vert / rouge ── */}
+          {bottomTab === "cartons" && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-slate-800">Cartons vert et rouge</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Chaque juré voit un carton dès qu&apos;il a noté tous les critères. Le verdict
+                    n&apos;apparaît que lorsque tout le jury est passé.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={savingCartons}
+                  onClick={() => enregistrerCartons(!cartonsActifs, seuilPct)}
+                  className={`text-xs font-semibold rounded-full px-4 py-1.5 transition disabled:opacity-60 ${
+                    cartonsActifs ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {cartonsActifs ? "Activés" : "Désactivés"}
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600" htmlFor="seuil-carton">
+                    Seuil du carton vert
+                  </label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <input
+                      id="seuil-carton"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={seuilPct}
+                      onChange={(e) => setSeuilSaisi(e.target.value === "" ? "" : Number(e.target.value))}
+                      className="input w-24"
+                    />
+                    <span className="text-sm text-slate-600">% du maximum</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={savingCartons}
+                  onClick={() => enregistrerCartons(cartonsActifs, seuilPct)}
+                  className="btn-ghost border text-xs disabled:opacity-60"
+                >
+                  Enregistrer le seuil
+                </button>
+                {cartons?.seuil != null && (
+                  <p className="text-xs text-slate-500">
+                    Soit <strong>{Number(cartons.seuil).toFixed(2)}</strong> sur les critères de cette session.
+                    50 % correspond à la moyenne.
+                  </p>
+                )}
+              </div>
+
+              {!cartonsActifs ? (
+                <p className="text-sm text-slate-500 italic text-center py-4">
+                  Les cartons sont désactivés : les jurés notent sans voir de carton.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {projects.map((p) => {
+                    const c = cartons?.par_projet?.[p.id];
+                    const teinte =
+                      c?.verdict === "valide" ? "border-emerald-200 bg-emerald-50"
+                      : c?.verdict === "rejete" ? "border-red-200 bg-red-50"
+                      : c?.verdict === "egalite" ? "border-amber-200 bg-amber-50"
+                      : "border-slate-100 bg-slate-50";
+                    return (
+                      <div key={p.id} className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${teinte}`}>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-slate-800 truncate">{p.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {c?.verdict_libelle || "En attente des notations"}
+                            {c && !c.complet && c.manquants > 0 && ` · ${c.manquants} juré${c.manquants > 1 ? "s" : ""} à venir`}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500 text-white text-xs font-bold px-2.5 py-1">
+                            {c?.vertes ?? 0}
+                          </span>
+                          <span className="inline-flex items-center gap-1 rounded-lg bg-red-500 text-white text-xs font-bold px-2.5 py-1">
+                            {c?.rouges ?? 0}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
