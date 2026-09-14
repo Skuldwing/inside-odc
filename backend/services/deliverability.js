@@ -364,6 +364,16 @@ const CAUSES = [
     },
   },
   {
+    /* Rien de technique : Brevo examine a la main les comptes neufs avant
+       d'autoriser le premier envoi, pour ne pas servir de relais aux
+       expediteurs abusifs. Aucun reglage de la plateforme n'y changera rien —
+       autant le dire plutot que de laisser chercher. */
+    motif: /not yet activated|request activation|account is not activated/i,
+    cause: "Le compte Brevo n'est pas encore active pour l'envoi.",
+    remede:
+      "Brevo examine manuellement les comptes neufs avant le premier envoi. Verifiez d'abord que le profil du compte est complet (organisation, telephone verifie), puis demandez l'activation a contact@brevo.com ou par la messagerie de l'interface, en decrivant l'organisation, la nature des messages et l'origine des adresses. Comptez de quelques heures a deux jours ouvres. La plateforme, elle, n'a plus rien a corriger.",
+  },
+  {
     motif: /535 5\.7\.139|basic authentication is disabled|SmtpClientAuthentication is disabled/i,
     cause: "Microsoft 365 refuse l'authentification simple sur ce compte.",
     remede:
