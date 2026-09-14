@@ -345,6 +345,25 @@ function configurationEnvoi() {
  */
 const CAUSES = [
   {
+    /* A placer avant le 401 generique : Brevo rend « unauthorized » dans les
+       deux cas, et l'ordre de la table decide du verdict. Un premier jet
+       concluait « cle inconnue » sur une cle parfaitement valide, refusee pour
+       une tout autre raison — c'est le message brut, conserve a cote, qui a
+       revele l'erreur. */
+    motif: /unrecognised IP address|unrecognized IP address|authorised_ips/i,
+    cause: "Brevo bloque l'adresse IP du serveur. La cle, elle, est valide.",
+    remede: (texte) => {
+      const ip = (texte.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/) || [])[1];
+      return (
+        `Autorisez ${ip ? `l'adresse ${ip}` : "l'adresse de sortie du serveur"} dans Brevo, ` +
+        "page Securite → Adresses IP autorisees (app.brevo.com/security/authorised_ips). " +
+        "Attention : l'adresse de sortie d'un hebergement mutualise change sans prevenir, " +
+        "et le blocage reviendra alors. Si cela se reproduit, desactivez la restriction par IP " +
+        "plutot que d'ajouter chaque nouvelle adresse."
+      );
+    },
+  },
+  {
     motif: /535 5\.7\.139|basic authentication is disabled|SmtpClientAuthentication is disabled/i,
     cause: "Microsoft 365 refuse l'authentification simple sur ce compte.",
     remede:
@@ -402,7 +421,14 @@ const CAUSES = [
 function interpreterErreurEnvoi(message) {
   const texte = String(message || "");
   const trouve = CAUSES.find((c) => c.motif.test(texte));
-  if (trouve) return { cause: trouve.cause, remede: trouve.remede };
+  /* Certains remedes dependent du message : l'adresse IP a autoriser n'a de
+     sens que recopiee telle quelle. */
+  if (trouve) {
+    return {
+      cause: trouve.cause,
+      remede: typeof trouve.remede === "function" ? trouve.remede(texte) : trouve.remede,
+    };
+  }
   return {
     cause: "Le service d'envoi a refuse le message.",
     remede: "Le message brut ci-dessous vient du serveur d'envoi : il indique en general la manoeuvre exacte.",
