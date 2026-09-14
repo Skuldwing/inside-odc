@@ -11,6 +11,16 @@ const crypto = require("crypto");
 const { logAudit } = require("../services/audit");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 
+
+/* Adresse publique du site, telle qu'elle apparaitra dans les liens envoyes
+   par email — invitations, creation de mot de passe. Le repli n'est qu'un
+   filet : APP_BASE_URL doit etre renseignee sur le serveur. Il vaut le domaine
+   du centre depuis l'abandon de l'adresse vercel.app, mais un lien deja parti
+   vers l'ancienne adresse continue de fonctionner : elle redirige. */
+function adresseDuSite() {
+  return String(process.env.APP_BASE_URL || "https://inside-odc.com").replace(/\/+$/, "");
+}
+
 const router = express.Router();
 
 /* Liste des coachs, pour le selecteur du formulaire d'activite.
@@ -190,7 +200,7 @@ router.post("/", async (req, res) => {
 
     let inviteLink = null;
     try {
-      const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
+      const appUrl = adresseDuSite();
       const token = await createPasswordToken(createdUser.id);
       const link = `${appUrl}/set-password?token=${token}`;
       inviteLink = link;
@@ -391,7 +401,7 @@ router.post("/:id/reset-password", async (req, res) => {
       return res.status(503).json({ error: "Email non configuré. Ajoutez BREVO_API_KEY dans les variables Railway." });
     }
 
-    const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
+    const appUrl = adresseDuSite();
     const token = await createPasswordToken(user.id);
     const link = `${appUrl}/set-password?token=${token}`;
 
@@ -425,7 +435,7 @@ router.post("/:id/reset-link", async (req, res) => {
       return res.status(404).json({ error: "Utilisateur introuvable" });
     }
 
-    const appUrl = process.env.APP_BASE_URL || "https://inside-odc.vercel.app";
+    const appUrl = adresseDuSite();
     const token = await createPasswordToken(id);
     const link = `${appUrl}/set-password?token=${token}`;
 

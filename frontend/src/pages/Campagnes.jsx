@@ -92,7 +92,10 @@ const BLOCS = [
   {
     label: "Signature",
     icon: "✍️",
-    html: `<div style="border-top:2px solid #FF7900;padding-top:14px;margin-top:24px;font-family:Arial,sans-serif;color:#64748B;font-size:13px"><strong style="color:#0F172A">L'équipe Inside ODC</strong><br/>Orange Digital Center<br/><a href="#" style="color:#FF7900">inside-odc.vercel.app</a></div>`,
+    /* Le lien portait « inside-odc.vercel.app » sur un href vide : l'adresse
+       affichée n'était pas cliquable, et elle désigne désormais l'ancien
+       domaine. Les deux pointent sur le domaine du centre. */
+    html: `<div style="border-top:2px solid #FF7900;padding-top:14px;margin-top:24px;font-family:Arial,sans-serif;color:#64748B;font-size:13px"><strong style="color:#0F172A">L'équipe Inside ODC</strong><br/>Orange Digital Center Sénégal<br/><a href="https://inside-odc.com" style="color:#FF7900">inside-odc.com</a></div>`,
   },
 ];
 
