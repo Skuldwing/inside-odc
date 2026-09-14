@@ -274,6 +274,12 @@ export default function VoteJury() {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 1700);
       if (navigator?.vibrate) navigator.vibrate([60, 40, 100]);
+
+      /* Le carton et le decompte viennent du serveur. Sans cette relecture
+         immediate, ils n'apparaissaient qu'au sondage suivant — jusqu'a cinq
+         secondes apres la validation. Devant un jury reuni, cinq secondes de
+         rien suffisent a croire que la fonction ne marche pas. */
+      await poll();
     } catch (err) {
       setSubmitError(err?.response?.data?.error || "Erreur lors de l'envoi.");
     }

@@ -800,7 +800,10 @@ export default function VoteManage() {
             { key: "predictions", label: "Pronostics invités", icon: ListOrdered },
             { key: "participants", label: "Participants",       icon: UserCheck },
             ...(femaleProjects.length > 0 ? [{ key: "cdc", label: "Coup de cœur ♀", icon: Heart }] : []),
-            { key: "cartons", label: "Cartons", icon: Flag },
+            /* L'etat se lit sur l'onglet lui-meme : sans cela, il fallait
+               ouvrir le panneau pour savoir si les cartons etaient actifs — et
+               un jury qui ne voit rien croit a une panne. */
+            { key: "cartons", label: cartonsActifs ? "Cartons · actifs" : "Cartons · inactifs", icon: Flag, pastille: cartonsActifs },
           ].map(t => (
             <button
               key={t.key}
@@ -812,6 +815,12 @@ export default function VoteManage() {
               className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${bottomTab === t.key ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
             >
               <t.icon className="w-3.5 h-3.5" /> {t.label}
+              {t.pastille !== undefined && (
+                <span
+                  aria-hidden="true"
+                  className={`w-1.5 h-1.5 rounded-full ${t.pastille ? "bg-emerald-500" : "bg-slate-300"}`}
+                />
+              )}
             </button>
           ))}
         </div>
