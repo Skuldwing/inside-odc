@@ -28,6 +28,49 @@ Une fois le domaine acheté, vous avez accès à sa **zone DNS** dans l'interfac
 
 Brevo affiche alors les enregistrements à créer. **Gardez cette page ouverte** : deux valeurs n'existent que là — la clé DKIM et le code de vérification.
 
+## Étape 2 bis — Chez OVH, dans l'ordre
+
+Le domaine du centre est enregistré chez OVH, avec la boîte Zimbra Starter offerte. Trois précisions propres à cette interface.
+
+### Activez la boîte avant de toucher au DNS
+
+*Espace client → Web Cloud → E-mails* (ou *Zimbra* selon la version de l'interface). Créez `contact@votredomaine.com` — une adresse au nom du centre, pas au nom d'une personne : elle doit survivre à un changement de poste.
+
+Faites-le **avant** d'ajouter les enregistrements Brevo. En activant la messagerie, OVH pose ses propres MX et, surtout, **son propre SPF** (`v=spf1 include:mx.ovh.com ~all`). Il faut le voir avant d'écrire le vôtre, sinon on se retrouve avec deux SPF — et deux SPF s'annulent.
+
+Ajoutez ensuite une **redirection** de cette boîte vers l'adresse professionnelle qui la relève réellement. Sans cela, c'est une seconde boîte à consulter, et personne ne la consultera.
+
+### Le champ « Sous-domaine » est relatif
+
+*Web Cloud → Noms de domaine → votre domaine → onglet **Zone DNS** → **Ajouter une entrée** → **TXT***.
+
+OVH ne demande pas le nom complet : il demande la partie **devant** le domaine, qu'il complète lui-même. Saisir le nom entier produirait `brevo._domainkey.votredomaine.com.votredomaine.com`.
+
+| Enregistrement | Ce qu'on saisit dans « Sous-domaine » |
+|---|---|
+| SPF | *laisser vide* |
+| Code de vérification Brevo | *laisser vide* |
+| DKIM | `brevo._domainkey` |
+| DMARC | `_dmarc` |
+
+N'encadrez pas les valeurs de guillemets : OVH les ajoute.
+
+### Le SPF se modifie, il ne se duplique pas
+
+Celui d'OVH existe déjà. Ouvrez-le et remplacez sa valeur par la version fusionnée :
+
+```
+v=spf1 include:mx.ovh.com include:spf.brevo.com ~all
+```
+
+Le panneau *Envoi d'emails* de la plateforme détecte le SPF en place et affiche directement cette fusion, avec un bouton pour la copier. Ne créez pas de seconde entrée SPF.
+
+### Envoyer depuis le domaine racine
+
+Ce guide-ci concerne un domaine dédié à la plateforme : `contact@votredomaine.com` convient très bien, et c'est le plus simple.
+
+La recommandation d'un sous-domaine dédié, faite dans `demande-dns-delivrabilite.md`, visait un autre cas : y isoler la réputation des envois en nombre pour ne pas exposer la messagerie d'entreprise de Sonatel. Ici le domaine ne sert qu'à cela — la précaution est sans objet.
+
 ## Étape 3 — Poser les enregistrements DNS
 
 Dans la zone DNS de votre domaine, créez quatre enregistrements de type **TXT**.
