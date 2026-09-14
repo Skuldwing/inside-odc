@@ -355,11 +355,10 @@ const CAUSES = [
     remede: (texte) => {
       const ip = (texte.match(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/) || [])[1];
       return (
-        `Autorisez ${ip ? `l'adresse ${ip}` : "l'adresse de sortie du serveur"} dans Brevo, ` +
-        "page Securite → Adresses IP autorisees (app.brevo.com/security/authorised_ips). " +
-        "Attention : l'adresse de sortie d'un hebergement mutualise change sans prevenir, " +
-        "et le blocage reviendra alors. Si cela se reproduit, desactivez la restriction par IP " +
-        "plutot que d'ajouter chaque nouvelle adresse."
+        "Desactivez la restriction par IP dans Brevo, page Securite → Adresses IP autorisees " +
+        "(app.brevo.com/security/authorised_ips). L'adresse de sortie de l'hebergement n'est pas " +
+        "fixe : elle change a chaque redeploiement, et ajouter chaque nouvelle adresse est une " +
+        `course perdue d'avance. ${ip ? `Pour debloquer l'envoi sur-le-champ sans rien desactiver, autorisez ${ip} — mais le blocage reviendra.` : ""}`
       );
     },
   },

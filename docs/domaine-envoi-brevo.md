@@ -129,6 +129,22 @@ L'adresse d'expédition ne sera plus `@orange-sonatel.com`. Pour un bénéficiai
 
 Si un jour la DSI accepte de poser ces mêmes enregistrements sur un sous-domaine de `orangedigitalcenter.sn`, la bascule ne demandera que de changer `MAIL_FROM` : tout le reste est déjà en place. La demande toute prête est dans `demande-dns-delivrabilite.md`.
 
+## La restriction par IP de Brevo : à désactiver
+
+Brevo propose de n'accepter les appels d'API que depuis des adresses déclarées. Sur un hébergement comme Railway, **c'est une mauvaise idée** : l'adresse de sortie n'est pas fixe. Elle change à un redéploiement, à un redémarrage, parfois sans raison visible. Chaque changement casse les envois, avec ce message :
+
+```
+401 — We have detected you are using an unrecognised IP address <adresse>
+```
+
+Ajouter la nouvelle adresse débloque… jusqu'à la suivante. C'est une course perdue d'avance.
+
+**Le réglage se trouve sur `app.brevo.com/security/authorised_ips`.** Désactivez-y la restriction.
+
+Ce que cela change côté sécurité : la clé d'API redevient le seul identifiant. C'est le fonctionnement normal d'une API, et les précautions qui vont avec suffisent — la clé ne vit que dans les variables de l'hébergeur, jamais dans le dépôt, et se révoque en un clic si elle fuit.
+
+L'alternative serait une adresse de sortie fixe côté hébergeur, une option payante sur certaines formules. À ne considérer que si une politique interne impose la restriction par IP.
+
 ## Volumes
 
 Le compte gratuit de Brevo permet 300 messages par jour, ce qui couvre les emails automatiques et les attestations. Une campagne vers plusieurs centaines de bénéficiaires demande un compte payant — l'entrée de gamme se situe autour de 20 000 messages par mois.
