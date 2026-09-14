@@ -116,14 +116,19 @@ function echecLisible(err) {
  * Seules deux valeurs ne peuvent pas etre calculees ici : la cle DKIM et le
  * code de verification, propres au compte Brevo.
  */
-function enregistrementsAPoser(domaine, controles, adresseRapports) {
+function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur) {
   if (!domaine) return [];
   const manque = (cle) => controles[cle] && controles[cle].statut !== "ok";
+  const brevo = fournisseur === "brevo";
   const liste = [];
 
-  if (manque("spf")) {
+  /* Avec Brevo, on ne propose jamais de toucher au SPF : ses messages partent
+     avec un Return-Path à lui, et c'est DKIM qui porte l'alignement. Envoyer
+     modifier un SPF en service pour rien serait un risque, pas une aide. */
+  if (!brevo && manque("spf")) {
     const existant = controles.spf?.valeur;
     liste.push({
+      type: "TXT",
       role: "SPF — qui a le droit d'envoyer",
       nom: domaine,
       /* Un domaine ne peut publier qu'un seul SPF : s'il en existe deja un, on
@@ -139,15 +144,31 @@ function enregistrementsAPoser(domaine, controles, adresseRapports) {
   }
 
   if (manque("dkim")) {
-    liste.push({
-      role: "DKIM — signature des messages",
-      nom: `brevo._domainkey.${domaine}`,
-      valeur: null,
-    });
+    if (brevo) {
+      /* Brevo délègue la signature par deux CNAME plutôt qu'une clé en clair :
+         il peut ainsi renouveler ses clés sans rien redemander. */
+      for (const n of [1, 2]) {
+        liste.push({
+          type: "CNAME",
+          role: `DKIM ${n} — signature des messages`,
+          nom: `brevo${n}._domainkey.${domaine}`,
+          valeur: null,
+          note: n === 1 ? "Deux enregistrements, et de type CNAME — pas TXT." : null,
+        });
+      }
+    } else {
+      liste.push({
+        type: "TXT",
+        role: "DKIM — signature des messages",
+        nom: `brevo._domainkey.${domaine}`,
+        valeur: null,
+      });
+    }
   }
 
   if (manque("verification_brevo")) {
     liste.push({
+      type: "TXT",
       role: "Vérification du domaine chez Brevo",
       nom: domaine,
       valeur: null,
@@ -156,6 +177,7 @@ function enregistrementsAPoser(domaine, controles, adresseRapports) {
 
   if (manque("dmarc")) {
     liste.push({
+      type: "TXT",
       role: "DMARC — que faire en cas d'échec",
       nom: `_dmarc.${domaine}`,
       valeur: `v=DMARC1; p=none;${adresseRapports ? ` rua=mailto:${adresseRapports};` : ""}`,
@@ -286,7 +308,8 @@ export default function DeliverabilitePanel() {
   const aPoser = enregistrementsAPoser(
     data.domaine,
     controles,
-    data.configuration?.repondre_a || data.configuration?.expediteur
+    data.configuration?.repondre_a || data.configuration?.expediteur,
+    data.fournisseur || data.configuration?.fournisseur
   );
   const tout_ok = bloquants.length === 0 && alertes.length === 0;
 
@@ -375,7 +398,7 @@ export default function DeliverabilitePanel() {
                     <dl className="mt-1.5 space-y-1">
                       <div className="flex gap-2">
                         <dt className="w-14 flex-shrink-0 text-slate-500">Type</dt>
-                        <dd className="font-mono">TXT</dd>
+                        <dd className="font-mono">{e.type}</dd>
                       </div>
                       <div className="flex gap-2">
                         <dt className="w-14 flex-shrink-0 text-slate-500">Nom</dt>
