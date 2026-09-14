@@ -2,6 +2,7 @@ const express = require("express");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const pool = require("../db");
+const { infoVersion } = require("../version");
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
 const {
   diagnostiquerDomaine,
@@ -36,7 +37,14 @@ router.get("/diagnostic", authMiddleware, requireAdmin, async (req, res) => {
     }
 
     const diagnostic = await diagnostiquerDomaine(domaine, config.fournisseur);
-    res.json({ configuration: config, ...diagnostic });
+    /* Le panneau affiche la date de demarrage du serveur : si elle est
+       anterieure au dernier deploiement attendu, c'est que l'hebergeur n'a pas
+       repris le code, et aucun reglage n'y changera rien. */
+    res.json({
+      configuration: config,
+      serveur: infoVersion(),
+      ...diagnostic,
+    });
   } catch (err) {
     console.error("[DELIVRABILITE]", err);
     res.status(500).json({ error: "Erreur serveur" });

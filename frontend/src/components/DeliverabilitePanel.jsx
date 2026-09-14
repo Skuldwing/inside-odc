@@ -30,6 +30,79 @@ const LIBELLES = {
 
 const ORDRE = ["spf", "dkim", "dmarc", "verification_brevo", "reception"];
 
+/* Refus qui ne viennent pas du service d'envoi mais de la route elle-meme :
+   ils n'ont donc ni cause ni remede dans le corps de la reponse. */
+const ECHECS_HTTP = {
+  401: {
+    cause: "Votre session a expiré.",
+    remede: "Reconnectez-vous, puis relancez l'essai.",
+  },
+  403: {
+    cause: "Cette action est réservée aux administrateurs.",
+    remede: "Connectez-vous avec un compte administrateur.",
+  },
+  404: {
+    cause: "Cette version du serveur ne connaît pas l'envoi d'essai.",
+    remede:
+      "Le site a été mis à jour avant l'API : le bouton existe, la route pas encore. Attendez la fin du déploiement du serveur, puis rechargez avec Ctrl+Maj+R. Si cela persiste, c'est que le déploiement a échoué.",
+  },
+  429: {
+    cause: "Trop de requêtes en peu de temps.",
+    remede: "Attendez une minute avant de relancer l'essai.",
+  },
+  502: { cause: "Le serveur est injoignable.", remede: "Il redémarre peut-être. Réessayez dans une minute." },
+  503: { cause: "Le serveur est indisponible.", remede: "Il redémarre peut-être. Réessayez dans une minute." },
+  504: { cause: "Le serveur n'a pas répondu à temps.", remede: "Réessayez dans une minute." },
+};
+
+/**
+ * Rend un echec lisible, quelle que soit la forme de la reponse.
+ *
+ * Un premier jet affichait directement le corps de l'erreur en supposant qu'il
+ * portait toujours « cause » et « remede ». Un 404 rend la page HTML d'Express,
+ * un mandataire en panne rend la sienne, une reponse peut etre vide : il ne
+ * restait alors qu'une bande rouge sans un mot, ce qui est pire que rien. Le
+ * statut est toujours affiche, ne serait-ce que pour pouvoir le rapporter.
+ */
+function echecLisible(err) {
+  const reponse = err?.response;
+  const corps = reponse?.data;
+
+  /* Le cas nominal : la route a repondu dans sa propre forme. */
+  if (corps && typeof corps === "object" && (corps.cause || corps.remede)) {
+    return { success: false, ...corps };
+  }
+
+  if (!reponse) {
+    return {
+      success: false,
+      cause: "Le serveur n'a pas répondu.",
+      remede:
+        "Vérifiez que l'API est en ligne et que l'adresse du site est bien autorisée dans CORS_ORIGIN.",
+      brut: String(err?.message || "").slice(0, 300),
+    };
+  }
+
+  const statut = reponse.status;
+  const connu = ECHECS_HTTP[statut];
+
+  /* On garde une trace du corps, mais lisible : une page d'erreur HTML sans
+     ses balises tient en une ligne et dit souvent l'essentiel. */
+  let brut = "";
+  if (typeof corps === "string") {
+    brut = corps.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  } else if (corps && typeof corps === "object") {
+    brut = corps.error || corps.message || JSON.stringify(corps);
+  }
+
+  return {
+    success: false,
+    cause: connu?.cause || `Le serveur a refusé la demande (HTTP ${statut}).`,
+    remede: connu?.remede || "Le message ci-dessous vient du serveur.",
+    brut: `HTTP ${statut}${brut ? ` — ${brut.slice(0, 300)}` : ""}`,
+  };
+}
+
 function Pastille({ statut }) {
   if (statut === "ok") {
     return <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" aria-hidden="true" />;
@@ -87,9 +160,7 @@ export default function DeliverabilitePanel() {
       const res = await api.post("/email/test", adresseEssai.trim() ? { destinataire: adresseEssai.trim() } : {});
       setEssai(res.data);
     } catch (err) {
-      /* Le corps d'erreur porte la cause et le remède : c'est justement ce
-         qu'on veut montrer, pas un « une erreur est survenue ». */
-      setEssai(err?.response?.data || { success: false, cause: "Le serveur n'a pas répondu." });
+      setEssai(echecLisible(err));
     } finally {
       setEssaiEnCours(false);
     }
@@ -243,7 +314,8 @@ export default function DeliverabilitePanel() {
                   </>
                 ) : (
                   <>
-                    <p className="font-medium">{essai.cause}</p>
+                    {/* Garde-fou : une bande rouge muette ne dit rien à personne. */}
+                    <p className="font-medium">{essai.cause || "L'envoi a échoué, sans motif indiqué par le serveur."}</p>
                     {essai.remede && <p className="mt-1">{essai.remede}</p>}
                     {essai.brut && (
                       <p className="mt-2 break-all font-mono text-[11px] opacity-70">{essai.brut}</p>
@@ -291,6 +363,13 @@ export default function DeliverabilitePanel() {
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-slate-400">
               Vérifié le {new Date(data.verifie_le).toLocaleString("fr-FR")}
+              {data.serveur?.demarre_le && (
+                <>
+                  {" · API démarrée le "}
+                  {new Date(data.serveur.demarre_le).toLocaleString("fr-FR")}
+                  {data.serveur.commit ? ` (${data.serveur.commit})` : ""}
+                </>
+              )}
             </p>
             <button
               type="button"
