@@ -492,6 +492,14 @@ pool.query(`
 pool.query(`ALTER TABLE vote_projects ADD COLUMN IF NOT EXISTS is_female_led BOOLEAN DEFAULT FALSE`)
   .then(() => console.log("Migration OK: vote_projects.is_female_led")).catch(e => console.warn("Migration is_female_led:", e.message));
 
+/* Cartons vert / rouge : desactives par defaut, une session existante ne doit
+   pas changer de regle du jour au lendemain. Le seuil est exprime en pourcentage
+   du maximum pondere — 50 % correspond a « la moyenne ». */
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS cartons_actifs BOOLEAN DEFAULT FALSE`)
+  .then(() => console.log("Migration OK: vote_sessions.cartons_actifs")).catch(e => console.warn("Migration cartons_actifs:", e.message));
+pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS carton_seuil_pct INT DEFAULT 50`)
+  .then(() => console.log("Migration OK: vote_sessions.carton_seuil_pct")).catch(e => console.warn("Migration carton_seuil_pct:", e.message));
+
 pool.query(`ALTER TABLE vote_sessions ADD COLUMN IF NOT EXISTS coup_de_coeur_active BOOLEAN DEFAULT FALSE`)
   .then(() => console.log("Migration OK: vote_sessions.coup_de_coeur_active")).catch(e => console.warn("Migration coup_de_coeur_active:", e.message));
 

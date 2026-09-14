@@ -5,7 +5,23 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 
+const { seuilDeValidation, cartonDuJure, decompteProjet } = require("../services/voteCartons");
+
 const router = express.Router();
+
+/* Regroupe les notes d'un projet par jure, pour alimenter le decompte des
+   cartons. */
+async function notesParJure(projectId) {
+  const r = await pool.query(
+    "SELECT jury_id, criteria_id, score FROM vote_scores WHERE project_id = $1",
+    [projectId]
+  );
+  const parJure = {};
+  for (const row of r.rows) {
+    (parJure[row.jury_id] ||= []).push({ criteria_id: row.criteria_id, score: row.score });
+  }
+  return parJure;
+}
 
 /* ── Stockage présentations en base (persistant face aux redéploiements Railway) ── */
 const PRESENTATION_MIMES = {
@@ -346,7 +362,23 @@ router.get("/sessions/:id/live", authMiddleware, requireAdmin, async (req, res) 
       cdc_votes_total: (cdcMap[p.id]?.jury || 0) + (cdcMap[p.id]?.guest || 0),
     }));
 
-    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5, qa_duration_minutes: session.qa_duration_minutes ?? 5, female_projects, coup_de_coeur_active: session.coup_de_coeur_active || false });
+    /* Decompte des cartons pour chaque projet : l'administrateur suit l'etat du
+       tour en cours et retrouve le verdict des projets deja clotures. */
+    let cartons = null;
+    if (session.cartons_actifs) {
+      const seuil = seuilDeValidation(criteria, session.carton_seuil_pct);
+      cartons = { seuil, seuil_pct: session.carton_seuil_pct ?? 50, par_projet: {} };
+      for (const p of projRes.rows) {
+        cartons.par_projet[p.id] = decompteProjet(
+          await notesParJure(p.id),
+          criteria,
+          seuil,
+          juryRes.rows.length
+        );
+      }
+    }
+
+    res.json({ session, projects: projRes.rows, active_project, jury, criteria, voted_count, jury_total: juryRes.rows.length, pitch_duration_minutes: session.pitch_duration_minutes ?? 5, qa_duration_minutes: session.qa_duration_minutes ?? 5, female_projects, coup_de_coeur_active: session.coup_de_coeur_active || false, cartons_actifs: session.cartons_actifs || false, carton_seuil_pct: session.carton_seuil_pct ?? 50, cartons });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -972,7 +1004,7 @@ router.get("/jury/status", juryAuth, async (req, res) => {
     const sessionId = req.jury.session_id;
 
     const [sessRes, critRes, projectsRes, juryRes] = await Promise.all([
-      pool.query("SELECT id, status, active_project_id, pitch_duration_minutes, qa_duration_minutes, coup_de_coeur_active FROM vote_sessions WHERE id=$1", [sessionId]),
+      pool.query("SELECT id, status, active_project_id, pitch_duration_minutes, qa_duration_minutes, coup_de_coeur_active, cartons_actifs, carton_seuil_pct FROM vote_sessions WHERE id=$1", [sessionId]),
       pool.query("SELECT * FROM vote_criteria WHERE session_id=$1 ORDER BY order_num", [sessionId]),
       pool.query("SELECT id, name, porteur, is_female_led, status FROM vote_projects WHERE session_id=$1 ORDER BY order_num, created_at", [sessionId]),
       pool.query("SELECT id, pseudo, avatar FROM vote_jury WHERE session_id=$1 ORDER BY joined_at", [sessionId]),
@@ -987,6 +1019,9 @@ router.get("/jury/status", juryAuth, async (req, res) => {
     let voted_count = 0;
     let project_index = null;
     let jury_list = juryMembers.map(j => ({ id: j.id, pseudo: j.pseudo, avatar: j.avatar, voted: false }));
+    let ma_carte = null;
+    let cartons_projet = null;
+    let seuil_carton = null;
 
     if (session.active_project_id) {
       const idx = projects.findIndex(p => p.id === session.active_project_id);
@@ -1009,6 +1044,26 @@ router.get("/jury/status", juryAuth, async (req, res) => {
       const votedIds = new Set(votedRes.rows.map(r => r.jury_id));
       voted_count = votedIds.size;
       jury_list = juryMembers.map(j => ({ id: j.id, pseudo: j.pseudo, avatar: j.avatar, voted: votedIds.has(j.id) }));
+
+      /* Cartons : la carte personnelle des que ce jure a note tous les
+         criteres, le verdict du projet seulement quand tout le jury est passe.
+         Annoncer un verdict a mi-parcours donnerait un resultat qui change
+         sous les yeux de la salle. */
+      if (session.cartons_actifs) {
+        const criteres = critRes.rows;
+        seuil_carton = seuilDeValidation(criteres, session.carton_seuil_pct);
+        const mesNotes = Object.entries(my_scores).map(([criteria_id, v]) => ({
+          criteria_id,
+          score: v.score,
+        }));
+        ma_carte = cartonDuJure(mesNotes, criteres, seuil_carton);
+        cartons_projet = decompteProjet(
+          await notesParJure(session.active_project_id),
+          criteres,
+          seuil_carton,
+          juryMembers.length
+        );
+      }
     }
 
     const closed_count = projects.filter(p => p.status === "closed").length;
@@ -1041,6 +1096,11 @@ router.get("/jury/status", juryAuth, async (req, res) => {
       coup_de_coeur_active: session.coup_de_coeur_active || false,
       female_projects,
       my_cdc_vote,
+      cartons_actifs: session.cartons_actifs || false,
+      carton_seuil_pct: session.carton_seuil_pct ?? 50,
+      seuil_carton,
+      ma_carte,
+      cartons_projet,
     });
   } catch (err) {
     console.error(err);
@@ -1303,6 +1363,24 @@ router.get("/sessions/:id/participants", authMiddleware, requireAdmin, async (re
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* PUT /vote/sessions/:id/cartons — activer les cartons et regler le seuil (admin) */
+router.put("/sessions/:id/cartons", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { actifs, seuil_pct } = req.body;
+    const seuil = Number(seuil_pct);
+    const borne = Number.isFinite(seuil) ? Math.min(100, Math.max(0, Math.round(seuil))) : 50;
+    const r = await pool.query(
+      "UPDATE vote_sessions SET cartons_actifs=$1, carton_seuil_pct=$2 WHERE id=$3 RETURNING cartons_actifs, carton_seuil_pct",
+      [!!actifs, borne, req.params.id]
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Session introuvable" });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error("[CARTONS]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
