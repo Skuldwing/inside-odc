@@ -38,6 +38,14 @@ async function txt(nom) {
   }
 }
 
+async function cname(nom) {
+  try {
+    return await avecDelai(dns.resolveCname(nom), nom);
+  } catch (err) {
+    return { erreur: err.code || "ERREUR" };
+  }
+}
+
 async function mx(nom) {
   try {
     return await avecDelai(dns.resolveMx(nom), nom);
@@ -65,7 +73,19 @@ const EXPEDITEURS = {
   },
 };
 
-function verdictSpf(enregistrements, fournisseur) {
+/**
+ * @param dkimAligne  DKIM signe-t-il deja au nom du domaine ?
+ *
+ * Brevo ne demande plus d'include SPF : ses messages partent avec un
+ * Return-Path sur un domaine a lui, et c'est la signature DKIM — posee par les
+ * deux CNAME brevo1/brevo2 — qui porte l'alignement avec le domaine. Gmail et
+ * Yahoo exigent que SPF *ou* DKIM passe et soit aligne : DKIM suffit.
+ *
+ * Reclamer malgre tout « include:spf.brevo.com » enverrait l'administrateur
+ * modifier un SPF qui fonctionne, pour rien — et toucher a un SPF en service
+ * est un risque, pas une precaution.
+ */
+function verdictSpf(enregistrements, fournisseur, dkimAligne = false) {
   if (introuvable(enregistrements)) {
     return {
       statut: "manquant",
@@ -92,12 +112,23 @@ function verdictSpf(enregistrements, fournisseur) {
   }
 
   const autorise = attendu.motif.test(spf);
+  if (autorise) {
+    return { statut: "ok", valeur: spf, detail: `SPF present et autorisant ${attendu.nom}.` };
+  }
+
+  if (fournisseur === "brevo" && dkimAligne) {
+    return {
+      statut: "ok",
+      valeur: spf,
+      detail:
+        "SPF present. Il n'autorise pas Brevo, et c'est normal : Brevo signe les messages en DKIM au nom du domaine, ce qui suffit a l'alignement exige par Gmail et Yahoo. Ne modifiez pas ce SPF.",
+    };
+  }
+
   return {
-    statut: autorise ? "ok" : "attention",
+    statut: "attention",
     valeur: spf,
-    detail: autorise
-      ? `SPF present et autorisant ${attendu.nom}.`
-      : `SPF present, mais il n'autorise pas ${attendu.nom}. ${attendu.remede}`,
+    detail: `SPF present, mais il n'autorise pas ${attendu.nom}. ${attendu.remede}`,
   };
 }
 
@@ -119,18 +150,45 @@ function verdictDmarc(enregistrements) {
   };
 }
 
-function verdictDkim(resultats) {
-  const trouve = Object.entries(resultats).find(([, v]) => Array.isArray(v) && v.length);
-  if (!trouve) {
+/**
+ * DKIM se publie de deux facons, et ne chercher que la premiere revient a
+ * declarer absente une configuration parfaitement en place.
+ *
+ * Historiquement la cle etait un TXT sous le selecteur. Brevo delegue
+ * desormais par deux CNAME — brevo1._domainkey et brevo2._domainkey — pointant
+ * vers ses propres serveurs, ce qui lui permet de faire tourner ses cles sans
+ * rien demander a personne. Un premier jet ne connaissait que le selecteur
+ * « brevo » en TXT : il annoncait « aucune cle publiee » sur un domaine
+ * correctement authentifie, et envoyait corriger une panne inexistante.
+ */
+function verdictDkim(txtParSelecteur, cnameParSelecteur) {
+  const enTxt = Object.entries(txtParSelecteur).find(([, v]) => Array.isArray(v) && v.length);
+  const enCname = Object.entries(cnameParSelecteur).find(([, v]) => Array.isArray(v) && v.length);
+
+  if (!enTxt && !enCname) {
     return {
       statut: "manquant",
       detail:
         "Aucune cle DKIM publiee. Sans signature, un message ne peut pas prouver son origine : c'est le point que Brevo signale.",
     };
   }
+
+  if (enCname) {
+    const selecteurs = Object.entries(cnameParSelecteur)
+      .filter(([, v]) => Array.isArray(v) && v.length)
+      .map(([s]) => s);
+    return {
+      statut: "ok",
+      valeur: selecteurs.map((s) => `${s}._domainkey → ${cnameParSelecteur[s][0]}`).join(", "),
+      detail: `Signature DKIM deleguee au service d'envoi (${selecteurs.length} enregistrement${
+        selecteurs.length > 1 ? "s" : ""
+      } CNAME).`,
+    };
+  }
+
   return {
     statut: "ok",
-    valeur: `selecteur « ${trouve[0]} »`,
+    valeur: `selecteur « ${enTxt[0]} »`,
     detail: "Une cle DKIM est publiee pour ce domaine.",
   };
 }
@@ -150,19 +208,27 @@ function verdictMx(enregistrements) {
   };
 }
 
-/* Selecteurs DKIM courants. Brevo utilise « brevo » aujourd'hui et « mail »
-   pour les comptes plus anciens ; Microsoft 365 signe avec selector1/2. */
-const SELECTEURS_DKIM = ["brevo", "mail", "selector1", "selector2"];
+/* Selecteurs DKIM courants. Brevo delegue aujourd'hui par brevo1/brevo2 en
+   CNAME ; « brevo » et « mail » restent en TXT sur les comptes plus anciens ;
+   Microsoft 365 signe avec selector1/2. */
+const SELECTEURS_DKIM = ["brevo", "brevo1", "brevo2", "mail", "selector1", "selector2"];
 
 async function diagnostiquerDomaine(domaine, fournisseur = "brevo") {
-  const [txtDomaine, dmarc, mxDomaine, ...dkims] = await Promise.all([
+  const nbSel = SELECTEURS_DKIM.length;
+  const resultats = await Promise.all([
     txt(domaine),
     txt(`_dmarc.${domaine}`),
     mx(domaine),
     ...SELECTEURS_DKIM.map((s) => txt(`${s}._domainkey.${domaine}`)),
+    ...SELECTEURS_DKIM.map((s) => cname(`${s}._domainkey.${domaine}`)),
   ]);
 
-  const parSelecteur = Object.fromEntries(SELECTEURS_DKIM.map((s, i) => [s, dkims[i]]));
+  const [txtDomaine, dmarc, mxDomaine] = resultats;
+  const dkimsTxt = resultats.slice(3, 3 + nbSel);
+  const dkimsCname = resultats.slice(3 + nbSel);
+
+  const parSelecteur = Object.fromEntries(SELECTEURS_DKIM.map((s, i) => [s, dkimsTxt[i]]));
+  const parSelecteurCname = Object.fromEntries(SELECTEURS_DKIM.map((s, i) => [s, dkimsCname[i]]));
 
   /* Brevo demande un TXT « brevo-code:... » pour prouver qu'on possede bien
      le domaine avant d'autoriser l'envoi en son nom. */
@@ -170,9 +236,10 @@ async function diagnostiquerDomaine(domaine, fournisseur = "brevo") {
     ? txtDomaine.find((v) => v.toLowerCase().startsWith("brevo-code:"))
     : null;
 
+  const dkim = verdictDkim(parSelecteur, parSelecteurCname);
   const controles = {
-    spf: verdictSpf(txtDomaine, fournisseur),
-    dkim: verdictDkim(parSelecteur),
+    spf: verdictSpf(txtDomaine, fournisseur, dkim.statut === "ok"),
+    dkim,
     dmarc: verdictDmarc(dmarc),
     reception: verdictMx(mxDomaine),
   };
