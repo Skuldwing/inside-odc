@@ -31,6 +31,8 @@ const searchRoutes = require("./routes/search.routes");
 const emailRoutes = require("./routes/email.routes");
 const { ensureProfileSchema } = require("./migrations/profileSchema");
 const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
+const { ensureCampagnesSchema } = require("./migrations/campagnesSchema");
+const desabonnementRoutes = require("./routes/desabonnement.routes");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -107,6 +109,14 @@ if (process.env.NODE_ENV === "production" && allowedOrigins.length === 0) {
     "Warning: CORS_ORIGIN not set — toutes les origines sont autorisees temporairement."
   );
 }
+
+/* Le desabonnement se monte AVANT le filtre d'origines, et c'est deliberé.
+   Ses pages sont servies par l'API elle-meme : le formulaire de reabonnement
+   renvoie donc une origine qui n'est pas celle du site, et le filtre la
+   refusait — le destinataire recevait « Origine non autorisee » en guise de
+   confirmation. Gmail, lui, appelle l'adresse sans origine du tout. Rien ici
+   ne lit de session : il n'y a aucun acces a proteger. */
+app.use("/desabonnement", desabonnementRoutes);
 
 app.use(
   cors({
@@ -699,6 +709,18 @@ pool.query(`
     console.log("Migration OK: profil (users + user_avatars)");
   } catch (e) {
     console.error("Migration profil ECHOUEE — la page Profil sera indisponible :", e.message);
+  }
+})();
+
+/* ── Campagnes emailing ──
+   Journal par destinataire et liste d'opposition. La route Campagnes sait
+   rejouer ce schema elle-meme si cette migration a echoue. */
+(async () => {
+  try {
+    await ensureCampagnesSchema();
+    console.log("Migration OK: campagnes (campagne_envois + email_optout)");
+  } catch (e) {
+    console.error("Migration campagnes ECHOUEE :", e.message);
   }
 })();
 
