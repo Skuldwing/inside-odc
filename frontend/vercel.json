@@ -1,4 +1,12 @@
 {
+  "redirects": [
+    {
+      "source": "/:chemin*",
+      "has": [{ "type": "host", "value": "inside-odc.vercel.app" }],
+      "destination": "https://inside-odc.com/:chemin*",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
