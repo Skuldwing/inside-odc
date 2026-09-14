@@ -73,10 +73,9 @@ function cartonDuJure(notes, criteres, seuil) {
 /**
  * Verdict d'un projet a partir du decompte des cartons.
  *
- * L'egalite n'a pas ete tranchee par l'equipe : plutot que de la faire pencher
- * arbitrairement d'un cote, on la nomme. Un jury qui voit « egalite » sait
- * qu'il doit departager ; un projet affiche « valide » par defaut aurait
- * laisse croire a une decision qui n'a pas eu lieu.
+ * Autant de verts que de rouges : « Egalite », sans plus. L'equipe a choisi de
+ * ne pas faire pencher le resultat d'un cote — le jury tranche lui-meme, la
+ * plateforme se contente de constater.
  */
 function verdictProjet({ vertes = 0, rouges = 0 }) {
   if (vertes === 0 && rouges === 0) return "en_attente";
@@ -88,7 +87,7 @@ function verdictProjet({ vertes = 0, rouges = 0 }) {
 const LIBELLE_VERDICT = {
   valide: "Projet validé",
   rejete: "Projet rejeté",
-  egalite: "Égalité — départage nécessaire",
+  egalite: "Égalité",
   en_attente: "En attente des notations",
 };
 
