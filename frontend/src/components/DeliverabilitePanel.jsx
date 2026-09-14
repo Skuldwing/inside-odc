@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Loader2,
   RefreshCw,
+  Send,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -49,6 +50,11 @@ export default function DeliverabilitePanel() {
      orange-sonatel.com — avant de basculer l'expedition dessus. */
   const [domaineSaisi, setDomaineSaisi] = useState("");
   const [domaineTeste, setDomaineTeste] = useState("");
+  /* Résultat du dernier envoi d'essai : succès, ou le refus du serveur tel
+     qu'il l'a formulé. */
+  const [essai, setEssai] = useState(null);
+  const [essaiEnCours, setEssaiEnCours] = useState(false);
+  const [adresseEssai, setAdresseEssai] = useState("");
 
   const charger = useCallback(async (domaine = "") => {
     setChargement(true);
@@ -73,6 +79,21 @@ export default function DeliverabilitePanel() {
   useEffect(() => {
     charger();
   }, [charger]);
+
+  const envoyerEssai = async () => {
+    setEssaiEnCours(true);
+    setEssai(null);
+    try {
+      const res = await api.post("/email/test", adresseEssai.trim() ? { destinataire: adresseEssai.trim() } : {});
+      setEssai(res.data);
+    } catch (err) {
+      /* Le corps d'erreur porte la cause et le remède : c'est justement ce
+         qu'on veut montrer, pas un « une erreur est survenue ». */
+      setEssai(err?.response?.data || { success: false, cause: "Le serveur n'a pas répondu." });
+    } finally {
+      setEssaiEnCours(false);
+    }
+  };
 
   if (chargement && !data) {
     return (
@@ -177,6 +198,61 @@ export default function DeliverabilitePanel() {
               </p>
             </div>
           )}
+
+          {/* Un envoi réel vaut mieux que cinq contrôles DNS : c'est le seul
+              test qui dise si le service d'envoi accepte nos messages. */}
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[12rem] flex-1 text-xs text-slate-600">
+                Envoyer un email d&apos;essai
+                <input
+                  type="email"
+                  value={adresseEssai}
+                  onChange={(e) => setAdresseEssai(e.target.value)}
+                  placeholder="votre adresse (par défaut)"
+                  className="input mt-1 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={envoyerEssai}
+                disabled={essaiEnCours}
+                className="btn-ghost border text-xs"
+              >
+                {essaiEnCours ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Envoyer
+              </button>
+            </div>
+
+            {essai && (
+              <div
+                className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                  essai.success
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : "border-red-200 bg-red-50 text-red-900"
+                }`}
+              >
+                {essai.success ? (
+                  <>
+                    <p className="font-medium">Message accepté pour {essai.destinataire}</p>
+                    <p className="mt-1">{essai.message}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">{essai.cause}</p>
+                    {essai.remede && <p className="mt-1">{essai.remede}</p>}
+                    {essai.brut && (
+                      <p className="mt-2 break-all font-mono text-[11px] opacity-70">{essai.brut}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
           <form
             onSubmit={(e) => {

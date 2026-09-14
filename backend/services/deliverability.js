@@ -246,4 +246,70 @@ function configurationEnvoi() {
   };
 }
 
-module.exports = { diagnostiquerDomaine, configurationEnvoi };
+/**
+ * Traduction des refus du serveur d'envoi.
+ *
+ * « Erreur lors de l'envoi » ne dit rien. Or les messages bruts, eux, disent
+ * presque toujours exactement quoi corriger — encore faut-il les avoir lus une
+ * fois. Chaque motif ci-dessous correspond a un refus reellement rencontre
+ * chez Exchange Online ou Brevo, avec la manoeuvre correspondante.
+ */
+const CAUSES = [
+  {
+    motif: /535 5\.7\.139|basic authentication is disabled|SmtpClientAuthentication is disabled/i,
+    cause: "Microsoft 365 refuse l'authentification simple sur ce compte.",
+    remede:
+      "La DSI doit activer « SMTP AUTH (Authenticated SMTP) » sur cette boite. C'est un reglage par boite, desactive par defaut depuis 2020.",
+  },
+  {
+    motif: /535 5\.7\.3|authentication unsuccessful|invalid login|EAUTH/i,
+    cause: "Le compte ou le mot de passe est refuse.",
+    remede:
+      "Verifiez SMTP_USER et SMTP_PASS. Si l'authentification multifacteur est active sur le compte, un mot de passe ordinaire ne passe pas : il faut un mot de passe d'application.",
+  },
+  {
+    motif: /5\.7\.60|does not have permissions to send as|SendAsDenied/i,
+    cause: "Le compte n'a pas le droit d'envoyer au nom de l'adresse annoncee.",
+    remede:
+      "MAIL_FROM doit etre l'adresse du compte lui-meme (SMTP_USER), ou une adresse sur laquelle ce compte a recu un droit « Envoyer en tant que ».",
+  },
+  {
+    motif: /ENOTFOUND|EAI_AGAIN/i,
+    cause: "Le serveur d'envoi est introuvable.",
+    remede: "Verifiez SMTP_HOST — pour Microsoft 365 c'est « smtp.office365.com ».",
+  },
+  {
+    motif: /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET/i,
+    cause: "La connexion au serveur d'envoi n'aboutit pas.",
+    remede:
+      "Verifiez SMTP_PORT (587) et SMTP_SECURE (false sur le port 587, true sur le 465). L'hebergeur peut aussi bloquer le port.",
+  },
+  {
+    motif: /Brevo error 401|unauthorized|invalid api key/i,
+    cause: "Brevo refuse la cle d'API.",
+    remede: "Regenerez une cle dans Brevo, SMTP & API → Cles d'API, et reportez-la dans BREVO_API_KEY.",
+  },
+  {
+    motif: /sender.*not.*valid|Sender not found|unrecognised sender/i,
+    cause: "Brevo ne reconnait pas l'adresse d'expedition.",
+    remede:
+      "L'adresse de MAIL_FROM doit etre declaree et validee dans Brevo, Expediteurs & IP.",
+  },
+  {
+    motif: /quota|rate limit|too many|throttl/i,
+    cause: "Le service d'envoi limite le debit.",
+    remede: "Baissez MAIL_DEBIT_PAR_MINUTE, ou attendez la fin de la periode de limitation.",
+  },
+];
+
+function interpreterErreurEnvoi(message) {
+  const texte = String(message || "");
+  const trouve = CAUSES.find((c) => c.motif.test(texte));
+  if (trouve) return { cause: trouve.cause, remede: trouve.remede };
+  return {
+    cause: "Le service d'envoi a refuse le message.",
+    remede: "Le message brut ci-dessous vient du serveur d'envoi : il indique en general la manoeuvre exacte.",
+  };
+}
+
+module.exports = { diagnostiquerDomaine, configurationEnvoi, interpreterErreurEnvoi };
