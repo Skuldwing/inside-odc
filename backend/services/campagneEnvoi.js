@@ -1,6 +1,7 @@
 const pool = require("../db");
 const { sendEmail } = require("./mail");
 const { entetesDesabonnement, lienDesabonnement, separerDesabonnes, normaliser } = require("./desabonnement");
+const { interpreterErreurEnvoi } = require("./deliverability");
 
 /**
  * Envoi d'une campagne.
@@ -28,6 +29,16 @@ const INTERVALLE_MS = Math.ceil(60000 / DEBIT_PAR_MINUTE);
 const enCours = new Set();
 
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Le journal affichait le message brut du service d'envoi — « Brevo error
+   401: {"message":"Key not found"} » repete sur chaque destinataire. Exact,
+   mais illisible, et surtout muet sur la manoeuvre. On garde le message
+   d'origine, precede de ce qu'il veut dire. */
+function erreurLisible(err) {
+  const brut = [err?.message, err?.code, err?.responseCode].filter(Boolean).join(" · ");
+  const { cause } = interpreterErreurEnvoi(brut);
+  return `${cause} — ${brut}`.slice(0, 500);
+}
 
 /* ===== DESTINATAIRES ===== */
 
@@ -250,7 +261,7 @@ async function envoyerUnParUn(camp, baseUrl) {
         console.error(`[campagne ${camp.id}] échec ${ligne.email} :`, err.message);
         await pool.query(
           `UPDATE campagne_envois SET statut='echec', erreur=$1, traite_le=NOW() WHERE id=$2`,
-          [String(err.message || "erreur inconnue").slice(0, 500), ligne.id]
+          [erreurLisible(err), ligne.id]
         );
       }
 
@@ -310,7 +321,7 @@ async function envoyerEnCopieCachee(camp, baseUrl) {
       console.error(`[campagne ${camp.id}] échec du lot Cci :`, err.message);
       await pool.query(
         `UPDATE campagne_envois SET statut='echec', erreur=$1, traite_le=NOW() WHERE id = ANY($2::int[])`,
-        [String(err.message || "erreur inconnue").slice(0, 500), ids]
+        [erreurLisible(err), ids]
       );
     }
     await majCompteurs(camp.id);
