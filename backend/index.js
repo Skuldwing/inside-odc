@@ -33,6 +33,7 @@ const { ensureProfileSchema } = require("./migrations/profileSchema");
 const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
 const { ensureCampagnesSchema } = require("./migrations/campagnesSchema");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
+const { infoVersion } = require("./version");
 
 const requiredEnv = ["DATABASE_URL", "JWT_SECRET"];
 const missingEnv = requiredEnv.filter((name) => !process.env[name]);
@@ -138,12 +139,13 @@ app.get("/", (req, res) => {
 });
 
 app.get("/healthz", async (req, res) => {
+  const version = infoVersion();
   try {
     await pool.query("SELECT 1");
-    res.json({ status: "ok", db: "up" });
+    res.json({ status: "ok", db: "up", version });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ status: "error", db: "down" });
+    res.status(500).json({ status: "error", db: "down", version });
   }
 });
 

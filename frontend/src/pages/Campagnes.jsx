@@ -881,7 +881,14 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
       setData(res.data);
       return res.data;
     } catch (err) {
-      setErreur(err?.response?.data?.error || "Suivi indisponible.");
+      /* « Route introuvable » est la réponse du serveur quand il ne connaît
+         pas l'adresse appelée : le code déployé est antérieur à celui du
+         site. Le dire, plutôt que de répéter le message brut. */
+      setErreur(
+        err?.response?.status === 404
+          ? "Le serveur exécute une version antérieure, qui ne connaît pas encore le journal d'envoi. Attendez la fin du déploiement de l'API."
+          : err?.response?.data?.error || "Suivi indisponible."
+      );
       return null;
     }
   }, [campagneId]);
