@@ -28,6 +28,7 @@ import {
   Send, Eye, X, Loader2, Pencil, Users,
 } from "lucide-react";
 import api from "../api";
+import DeliverabilitePanel from "../components/DeliverabilitePanel";
 import { useToast, useConfirm, EmptyState } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
@@ -961,6 +962,10 @@ export default function Campagnes() {
           </button>
         )}
       </div>
+
+      {/* Etat du domaine expediteur : sans authentification DNS, aucune
+          campagne n'arrive, et rien ne le signalait dans la plateforme. */}
+      <DeliverabilitePanel />
 
       <div className="flex gap-1 border-b border-slate-200">
         {[

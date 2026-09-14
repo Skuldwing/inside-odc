@@ -28,6 +28,7 @@ const reliabilityRoutes = require("./routes/reliability.routes");
 const mbootayRoutes = require("./routes/mbootay.routes");
 const profileRoutes = require("./routes/profile.routes");
 const searchRoutes = require("./routes/search.routes");
+const emailRoutes = require("./routes/email.routes");
 const { ensureProfileSchema } = require("./migrations/profileSchema");
 const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
 
@@ -159,6 +160,7 @@ app.use("/reliability", reliabilityRoutes);
 app.use("/mbootay", mbootayRoutes);
 app.use("/profile", profileRoutes);
 app.use("/search", searchRoutes);
+app.use("/email", emailRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
