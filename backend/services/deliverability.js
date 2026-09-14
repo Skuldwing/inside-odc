@@ -301,6 +301,20 @@ function configurationEnvoi() {
   /* Le cas qui a fait perdre le plus de temps : la cle Brevo est en place, mais
      MAIL_PROVIDER pointe encore sur SMTP, et les envois continuent de buter sur
      un port que l'hebergeur ferme. Rien ne le signalait. */
+  /* Se voit avant le premier envoi plutot qu'apres deux cents echecs. */
+  if (fournisseur === "brevo") {
+    const cle = String(process.env.BREVO_API_KEY || "").trim();
+    if (cle.startsWith("xsmtpsib-")) {
+      alertes.push(
+        "BREVO_API_KEY contient le mot de passe SMTP de Brevo (« xsmtpsib- »), pas la cle d'API. Brevo refusera chaque envoi. La cle d'API commence par « xkeysib- » et se cree dans SMTP & API, onglet Cles d'API."
+      );
+    } else if (cle && !cle.startsWith("xkeysib-")) {
+      alertes.push(
+        "BREVO_API_KEY ne ressemble pas a une cle d'API Brevo : celles-ci commencent par « xkeysib- ». Verifiez que la valeur collee est bien la cle d'API, et qu'aucune espace ne s'y est glissee."
+      );
+    }
+  }
+
   if (fournisseur === "smtp" && brevoConfigure) {
     alertes.push(
       "Une cle Brevo est presente mais inutilisee : l'envoi passe par SMTP. Si le port SMTP est bloque par l'hebergeur, basculez MAIL_PROVIDER sur « brevo » — Brevo envoie en HTTPS."
@@ -363,9 +377,14 @@ const CAUSES = [
       "Le port sortant est presque toujours en cause : beaucoup d'hebergeurs bloquent le trafic SMTP. Verifiez SMTP_PORT (587 pour Microsoft 365) et SMTP_SECURE (false sur le 587). Si le port est bloque par l'hebergeur, aucun reglage ne le debloquera : il faut passer par un service qui envoie en HTTPS.",
   },
   {
-    motif: /Brevo error 401|unauthorized|invalid api key/i,
-    cause: "Brevo refuse la cle d'API.",
-    remede: "Regenerez une cle dans Brevo, SMTP & API → Cles d'API, et reportez-la dans BREVO_API_KEY.",
+    motif: /Brevo error 401|Key not found|unauthorized|invalid api key/i,
+    cause: "Brevo ne reconnait pas la cle (« Key not found »).",
+    /* Brevo delivre deux identifiants d'apparence tres proche, sur la meme
+       page : la cle d'API (xkeysib-) et le mot de passe SMTP (xsmtpsib-).
+       Seule la premiere fonctionne avec l'API HTTPS ; la seconde donne
+       exactement cette erreur. C'est la confusion la plus frequente. */
+    remede:
+      "Verifiez que BREVO_API_KEY commence par « xkeysib- ». Une valeur commencant par « xsmtpsib- » est le mot de passe SMTP, pas la cle d'API : Brevo les presente cote a cote et ils se confondent facilement. La cle d'API se cree dans Brevo, SMTP & API → onglet Cles d'API.",
   },
   {
     motif: /sender.*not.*valid|Sender not found|unrecognised sender/i,

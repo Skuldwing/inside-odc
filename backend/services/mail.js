@@ -1,15 +1,20 @@
-const BREVO_API_KEY = process.env.BREVO_API_KEY;
-const MAIL_FROM = process.env.MAIL_FROM;
+/* Un copier-coller dans une interface d'hebergeur ramene volontiers une
+   espace ou un retour a la ligne. Invisible a l'oeil, mais la cle part alors
+   avec, et le service repond « cle inconnue » sur une cle pourtant juste. */
+const propre = (v) => (typeof v === "string" ? v.trim() : v);
+
+const BREVO_API_KEY = propre(process.env.BREVO_API_KEY);
+const MAIL_FROM = propre(process.env.MAIL_FROM);
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || "Inside ODC";
 /* L'adresse d'expedition doit appartenir au domaine qui authentifie l'envoi :
    elle n'est donc pas libre. L'adresse de reponse, elle, l'est. C'est ce qui
    permet d'envoyer depuis une boite institutionnelle tout en recevant les
    reponses sur une adresse personnelle. */
-const MAIL_REPLY_TO = process.env.MAIL_REPLY_TO || null;
-const SMTP_HOST = process.env.SMTP_HOST;
+const MAIL_REPLY_TO = propre(process.env.MAIL_REPLY_TO) || null;
+const SMTP_HOST = propre(process.env.SMTP_HOST);
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
+const SMTP_USER = propre(process.env.SMTP_USER);
+const SMTP_PASS = propre(process.env.SMTP_PASS);
 const SMTP_SECURE = String(process.env.SMTP_SECURE || "false") === "true";
 
 /* Quel service envoie reellement.
