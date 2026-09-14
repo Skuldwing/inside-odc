@@ -5,6 +5,7 @@ import {
   ChevronDown,
   Loader2,
   RefreshCw,
+  Send,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -44,17 +45,30 @@ export default function DeliverabilitePanel() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [ouvert, setOuvert] = useState(false);
+  /* Domaine explicitement demande par l'administrateur. Vide = celui qui est
+     configure sur le serveur. Sert a jauger un domaine candidat — par exemple
+     orange-sonatel.com — avant de basculer l'expedition dessus. */
+  const [domaineSaisi, setDomaineSaisi] = useState("");
+  const [domaineTeste, setDomaineTeste] = useState("");
+  /* Résultat du dernier envoi d'essai : succès, ou le refus du serveur tel
+     qu'il l'a formulé. */
+  const [essai, setEssai] = useState(null);
+  const [essaiEnCours, setEssaiEnCours] = useState(false);
+  const [adresseEssai, setAdresseEssai] = useState("");
 
-  const charger = useCallback(async () => {
+  const charger = useCallback(async (domaine = "") => {
     setChargement(true);
     setErreur("");
     try {
-      const res = await api.get("/email/diagnostic");
+      const res = await api.get("/email/diagnostic", domaine ? { params: { domaine } } : undefined);
       setData(res.data);
+      setDomaineTeste(domaine);
       /* On n'ouvre le detail d'office que s'il y a quelque chose a corriger :
          quand tout va bien, une ligne suffit. */
       const ko = Object.values(res.data.controles || {}).filter((c) => c.statut !== "ok").length;
-      setOuvert(ko > 0 || (res.data.configuration?.alertes || []).length > 0);
+      /* Une verification demandee a la main reste toujours visible : on vient
+         d'en faire la demande, la replier serait absurde. */
+      setOuvert(Boolean(domaine) || ko > 0 || (res.data.configuration?.alertes || []).length > 0);
     } catch (err) {
       setErreur(err?.response?.data?.error || "Diagnostic indisponible.");
     } finally {
@@ -65,6 +79,21 @@ export default function DeliverabilitePanel() {
   useEffect(() => {
     charger();
   }, [charger]);
+
+  const envoyerEssai = async () => {
+    setEssaiEnCours(true);
+    setEssai(null);
+    try {
+      const res = await api.post("/email/test", adresseEssai.trim() ? { destinataire: adresseEssai.trim() } : {});
+      setEssai(res.data);
+    } catch (err) {
+      /* Le corps d'erreur porte la cause et le remède : c'est justement ce
+         qu'on veut montrer, pas un « une erreur est survenue ». */
+      setEssai(err?.response?.data || { success: false, cause: "Le serveur n'a pas répondu." });
+    } finally {
+      setEssaiEnCours(false);
+    }
+  };
 
   if (chargement && !data) {
     return (
@@ -108,7 +137,9 @@ export default function DeliverabilitePanel() {
         />
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-semibold text-slate-800">
-            {tout_ok
+            {domaineTeste
+              ? `Vérification de ${domaineTeste}`
+              : tout_ok
               ? "Domaine expéditeur authentifié"
               : `Envoi d'emails : ${bloquants.length + alertes.length} point${
                   bloquants.length + alertes.length > 1 ? "s" : ""
@@ -117,6 +148,7 @@ export default function DeliverabilitePanel() {
           <span className="block truncate text-xs text-slate-500">
             {data.domaine ? `${data.domaine} · ` : ""}
             envoi via {data.configuration?.fournisseur || "aucun service"}
+            {data.configuration?.repondre_a ? ` · réponses vers ${data.configuration.repondre_a}` : ""}
           </span>
         </span>
         <ChevronDown
@@ -167,13 +199,102 @@ export default function DeliverabilitePanel() {
             </div>
           )}
 
+          {/* Un envoi réel vaut mieux que cinq contrôles DNS : c'est le seul
+              test qui dise si le service d'envoi accepte nos messages. */}
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[12rem] flex-1 text-xs text-slate-600">
+                Envoyer un email d&apos;essai
+                <input
+                  type="email"
+                  value={adresseEssai}
+                  onChange={(e) => setAdresseEssai(e.target.value)}
+                  placeholder="votre adresse (par défaut)"
+                  className="input mt-1 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={envoyerEssai}
+                disabled={essaiEnCours}
+                className="btn-ghost border text-xs"
+              >
+                {essaiEnCours ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Envoyer
+              </button>
+            </div>
+
+            {essai && (
+              <div
+                className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
+                  essai.success
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                    : "border-red-200 bg-red-50 text-red-900"
+                }`}
+              >
+                {essai.success ? (
+                  <>
+                    <p className="font-medium">Message accepté pour {essai.destinataire}</p>
+                    <p className="mt-1">{essai.message}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium">{essai.cause}</p>
+                    {essai.remede && <p className="mt-1">{essai.remede}</p>}
+                    {essai.brut && (
+                      <p className="mt-2 break-all font-mono text-[11px] opacity-70">{essai.brut}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              charger(domaineSaisi.trim());
+            }}
+            className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-200 bg-white px-3 py-3"
+          >
+            <label className="min-w-[12rem] flex-1 text-xs text-slate-600">
+              Vérifier un autre domaine
+              <input
+                type="text"
+                value={domaineSaisi}
+                onChange={(e) => setDomaineSaisi(e.target.value)}
+                placeholder="orange-sonatel.com"
+                className="input mt-1 text-sm"
+              />
+            </label>
+            <button type="submit" disabled={chargement || !domaineSaisi.trim()} className="btn-ghost border text-xs">
+              Vérifier
+            </button>
+            {domaineTeste && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDomaineSaisi("");
+                  charger("");
+                }}
+                className="btn-ghost text-xs"
+              >
+                Revenir au domaine configuré
+              </button>
+            )}
+          </form>
+
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-slate-400">
               Vérifié le {new Date(data.verifie_le).toLocaleString("fr-FR")}
             </p>
             <button
               type="button"
-              onClick={charger}
+              onClick={() => charger(domaineTeste)}
               disabled={chargement}
               className="btn-ghost border text-xs"
             >

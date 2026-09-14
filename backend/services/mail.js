@@ -1,6 +1,11 @@
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const MAIL_FROM = process.env.MAIL_FROM;
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || "Inside ODC";
+/* L'adresse d'expedition doit appartenir au domaine qui authentifie l'envoi :
+   elle n'est donc pas libre. L'adresse de reponse, elle, l'est. C'est ce qui
+   permet d'envoyer depuis une boite institutionnelle tout en recevant les
+   reponses sur une adresse personnelle. */
+const MAIL_REPLY_TO = process.env.MAIL_REPLY_TO || null;
 const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
 const SMTP_USER = process.env.SMTP_USER;
@@ -46,8 +51,9 @@ function verifierAlignement() {
   }
 }
 
-async function sendEmail({ toEmail, toName, subject, html, text, attachments = [], bcc = [], cc = [], headers = {} }) {
+async function sendEmail({ toEmail, toName, subject, html, text, attachments = [], bcc = [], cc = [], headers = {}, replyTo = null }) {
   const fournisseur = fournisseurRetenu();
+  const repondreA = replyTo || MAIL_REPLY_TO;
 
   if (fournisseur === "smtp") {
     verifierAlignement();
@@ -66,6 +72,7 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
     await transporter.sendMail({
       from: `"${MAIL_FROM_NAME}" <${MAIL_FROM}>`,
       to: toName ? `"${toName}" <${toEmail}>` : toEmail,
+      replyTo: repondreA || undefined,
       bcc: bcc.length ? bcc.map(formatAddr).join(", ") : undefined,
       cc:  cc.length  ? cc.map(formatAddr).join(", ")  : undefined,
       subject,
@@ -95,6 +102,8 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
   /* Les en-tetes personnalises portent notamment le desabonnement en un clic,
      exige par Gmail et Yahoo pour les envois en nombre. */
   if (headers && Object.keys(headers).length) payload.headers = headers;
+
+  if (repondreA) payload.replyTo = { email: repondreA };
 
   if (bcc.length) payload.bcc = bcc.map(r => ({ email: r.email, name: r.name || r.email }));
   if (cc.length)  payload.cc  = cc.map(r => ({ email: r.email, name: r.name || r.email }));

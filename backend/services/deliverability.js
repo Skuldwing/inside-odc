@@ -48,7 +48,24 @@ async function mx(nom) {
 
 const introuvable = (r) => !Array.isArray(r);
 
-function verdictSpf(enregistrements) {
+/* Un SPF ne se juge pas dans l'absolu : il doit autoriser le service qui
+   envoie reellement. Un domaine Microsoft 365 parfaitement configure n'a
+   aucune raison d'autoriser Brevo, et inversement. */
+const EXPEDITEURS = {
+  brevo: {
+    nom: "Brevo",
+    motif: /include:spf\.brevo\.com|include:sendinblue\.com/i,
+    remede: "Ajoutez « include:spf.brevo.com » avant le « ~all ».",
+  },
+  smtp: {
+    nom: "Microsoft 365",
+    motif: /include:spf\.protection\.outlook\.com/i,
+    remede:
+      "Si l'envoi passe par Exchange Online, le domaine doit inclure « include:spf.protection.outlook.com ».",
+  },
+};
+
+function verdictSpf(enregistrements, fournisseur) {
   if (introuvable(enregistrements)) {
     return {
       statut: "manquant",
@@ -63,13 +80,24 @@ function verdictSpf(enregistrements) {
         "Aucun enregistrement SPF. Les serveurs destinataires n'ont aucun moyen de savoir qui a le droit d'envoyer pour ce domaine.",
     };
   }
-  const brevo = /include:spf\.brevo\.com|include:sendinblue\.com/i.test(spf);
+
+  const attendu = EXPEDITEURS[fournisseur];
+  if (!attendu) {
+    return {
+      statut: "attention",
+      valeur: spf,
+      detail:
+        "SPF present. Aucun service d'envoi n'etant configure, impossible de dire s'il autorise le bon expediteur.",
+    };
+  }
+
+  const autorise = attendu.motif.test(spf);
   return {
-    statut: brevo ? "ok" : "attention",
+    statut: autorise ? "ok" : "attention",
     valeur: spf,
-    detail: brevo
-      ? "SPF present et autorisant Brevo."
-      : "SPF present, mais il n'autorise pas Brevo. Ajoutez « include:spf.brevo.com » avant le « ~all ».",
+    detail: autorise
+      ? `SPF present et autorisant ${attendu.nom}.`
+      : `SPF present, mais il n'autorise pas ${attendu.nom}. ${attendu.remede}`,
   };
 }
 
@@ -126,7 +154,7 @@ function verdictMx(enregistrements) {
    pour les comptes plus anciens ; Microsoft 365 signe avec selector1/2. */
 const SELECTEURS_DKIM = ["brevo", "mail", "selector1", "selector2"];
 
-async function diagnostiquerDomaine(domaine) {
+async function diagnostiquerDomaine(domaine, fournisseur = "brevo") {
   const [txtDomaine, dmarc, mxDomaine, ...dkims] = await Promise.all([
     txt(domaine),
     txt(`_dmarc.${domaine}`),
@@ -142,23 +170,26 @@ async function diagnostiquerDomaine(domaine) {
     ? txtDomaine.find((v) => v.toLowerCase().startsWith("brevo-code:"))
     : null;
 
-  return {
-    domaine,
-    verifie_le: new Date().toISOString(),
-    controles: {
-      spf: verdictSpf(txtDomaine),
-      dkim: verdictDkim(parSelecteur),
-      dmarc: verdictDmarc(dmarc),
-      verification_brevo: codeBrevo
-        ? { statut: "ok", valeur: codeBrevo, detail: "Le domaine est verifie aupres de Brevo." }
-        : {
-            statut: "manquant",
-            detail:
-              "Le code de verification Brevo n'est pas publie. Brevo le fournit dans Expediteurs & IP, onglet Domaines.",
-          },
-      reception: verdictMx(mxDomaine),
-    },
+  const controles = {
+    spf: verdictSpf(txtDomaine, fournisseur),
+    dkim: verdictDkim(parSelecteur),
+    dmarc: verdictDmarc(dmarc),
+    reception: verdictMx(mxDomaine),
   };
+
+  /* Le code de verification ne concerne que Brevo : l'exiger d'un domaine qui
+     envoie par Exchange Online signalerait une panne la ou tout va bien. */
+  if (fournisseur === "brevo") {
+    controles.verification_brevo = codeBrevo
+      ? { statut: "ok", valeur: codeBrevo, detail: "Le domaine est verifie aupres de Brevo." }
+      : {
+          statut: "manquant",
+          detail:
+            "Le code de verification Brevo n'est pas publie. Brevo le fournit dans Expediteurs & IP, onglet Domaines.",
+        };
+  }
+
+  return { domaine, fournisseur, verifie_le: new Date().toISOString(), controles };
 }
 
 /* Configuration effective du serveur. On n'expose ni cle d'API ni mot de
@@ -204,6 +235,7 @@ function configurationEnvoi() {
   return {
     expediteur: from,
     nom_expediteur: process.env.MAIL_FROM_NAME || null,
+    repondre_a: process.env.MAIL_REPLY_TO || null,
     fournisseur,
     fournisseur_force: choix || null,
     brevo_configure: brevoConfigure,
@@ -214,4 +246,70 @@ function configurationEnvoi() {
   };
 }
 
-module.exports = { diagnostiquerDomaine, configurationEnvoi };
+/**
+ * Traduction des refus du serveur d'envoi.
+ *
+ * « Erreur lors de l'envoi » ne dit rien. Or les messages bruts, eux, disent
+ * presque toujours exactement quoi corriger — encore faut-il les avoir lus une
+ * fois. Chaque motif ci-dessous correspond a un refus reellement rencontre
+ * chez Exchange Online ou Brevo, avec la manoeuvre correspondante.
+ */
+const CAUSES = [
+  {
+    motif: /535 5\.7\.139|basic authentication is disabled|SmtpClientAuthentication is disabled/i,
+    cause: "Microsoft 365 refuse l'authentification simple sur ce compte.",
+    remede:
+      "La DSI doit activer « SMTP AUTH (Authenticated SMTP) » sur cette boite. C'est un reglage par boite, desactive par defaut depuis 2020.",
+  },
+  {
+    motif: /535 5\.7\.3|authentication unsuccessful|invalid login|EAUTH/i,
+    cause: "Le compte ou le mot de passe est refuse.",
+    remede:
+      "Verifiez SMTP_USER et SMTP_PASS. Si l'authentification multifacteur est active sur le compte, un mot de passe ordinaire ne passe pas : il faut un mot de passe d'application.",
+  },
+  {
+    motif: /5\.7\.60|does not have permissions to send as|SendAsDenied/i,
+    cause: "Le compte n'a pas le droit d'envoyer au nom de l'adresse annoncee.",
+    remede:
+      "MAIL_FROM doit etre l'adresse du compte lui-meme (SMTP_USER), ou une adresse sur laquelle ce compte a recu un droit « Envoyer en tant que ».",
+  },
+  {
+    motif: /ENOTFOUND|EAI_AGAIN/i,
+    cause: "Le serveur d'envoi est introuvable.",
+    remede: "Verifiez SMTP_HOST — pour Microsoft 365 c'est « smtp.office365.com ».",
+  },
+  {
+    motif: /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET/i,
+    cause: "La connexion au serveur d'envoi n'aboutit pas.",
+    remede:
+      "Verifiez SMTP_PORT (587) et SMTP_SECURE (false sur le port 587, true sur le 465). L'hebergeur peut aussi bloquer le port.",
+  },
+  {
+    motif: /Brevo error 401|unauthorized|invalid api key/i,
+    cause: "Brevo refuse la cle d'API.",
+    remede: "Regenerez une cle dans Brevo, SMTP & API → Cles d'API, et reportez-la dans BREVO_API_KEY.",
+  },
+  {
+    motif: /sender.*not.*valid|Sender not found|unrecognised sender/i,
+    cause: "Brevo ne reconnait pas l'adresse d'expedition.",
+    remede:
+      "L'adresse de MAIL_FROM doit etre declaree et validee dans Brevo, Expediteurs & IP.",
+  },
+  {
+    motif: /quota|rate limit|too many|throttl/i,
+    cause: "Le service d'envoi limite le debit.",
+    remede: "Baissez MAIL_DEBIT_PAR_MINUTE, ou attendez la fin de la periode de limitation.",
+  },
+];
+
+function interpreterErreurEnvoi(message) {
+  const texte = String(message || "");
+  const trouve = CAUSES.find((c) => c.motif.test(texte));
+  if (trouve) return { cause: trouve.cause, remede: trouve.remede };
+  return {
+    cause: "Le service d'envoi a refuse le message.",
+    remede: "Le message brut ci-dessous vient du serveur d'envoi : il indique en general la manoeuvre exacte.",
+  };
+}
+
+module.exports = { diagnostiquerDomaine, configurationEnvoi, interpreterErreurEnvoi };

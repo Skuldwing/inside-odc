@@ -26,6 +26,7 @@ import {
   Superscript as SuperscriptIcon, Subscript as SubscriptIcon,
   Table as TableIcon, Columns2, Rows3, Trash2, LayoutGrid,
   Send, Eye, X, Loader2, Pencil, Users,
+  Square, Play, ListChecks, AlertTriangle, BellOff,
 } from "lucide-react";
 import api from "../api";
 import DeliverabilitePanel from "../components/DeliverabilitePanel";
@@ -178,10 +179,19 @@ const RECIPIENT_OPTIONS = [
   { value: "custom",          label: "Emails personnalisés",   desc: "Saisir les adresses manuellement" },
 ];
 
+/* Le mode « Cc » a été retiré : il exposait l'adresse de chaque destinataire à
+   tous les autres — y compris celles d'enfants sur les activités Kids Tech. */
 const SEND_MODE_OPTIONS = [
-  { value: "publipostage", label: "Publipostage",      desc: "Un email individuel par destinataire (personnalisé)" },
-  { value: "bcc",          label: "Cci — copie cachée", desc: "Un seul envoi, destinataires invisibles entre eux" },
-  { value: "cc",           label: "Cc — copie visible", desc: "Un seul envoi, destinataires visibles entre eux" },
+  {
+    value: "publipostage",
+    label: "Publipostage",
+    desc: "Un email par personne. Permet {{nom}} et {{prenom}} dans l'objet et le message.",
+  },
+  {
+    value: "bcc",
+    label: "Cci — copie cachée",
+    desc: "Un seul envoi, destinataires invisibles entre eux. Aucune personnalisation, et une seule adresse invalide fait échouer tout le lot.",
+  },
 ];
 
 function CampaignModal({ campaign, activities, onClose, onSaved }) {
@@ -855,16 +865,214 @@ function TemplatesTab() {
   );
 }
 
+/* ── Suivi d'un envoi ─────────────────────────────────────────
+   L'envoi ne tient plus dans la requête : il continue côté serveur, cadencé.
+   Cette fenêtre est la seule façon de savoir où il en est — et, quand un
+   message n'arrive pas, de savoir lequel et pourquoi. */
+function SuiviEnvoi({ campagneId, onFerme, onChange }) {
+  const [data, setData]   = useState(null);
+  const [erreur, setErreur] = useState("");
+  const [action, setAction] = useState(false);
+  const [toutVoir, setToutVoir] = useState(false);
+
+  const charger = useCallback(async () => {
+    try {
+      const res = await api.get(`/campagnes/${campagneId}/envois`);
+      setData(res.data);
+      return res.data;
+    } catch (err) {
+      setErreur(err?.response?.data?.error || "Suivi indisponible.");
+      return null;
+    }
+  }, [campagneId]);
+
+  useEffect(() => {
+    let vivant = true;
+    let minuteur;
+    const boucle = async () => {
+      const d = await charger();
+      if (!vivant) return;
+      /* On ne sonde que tant qu'il reste quelque chose à envoyer : une
+         campagne terminée n'a plus rien à dire. */
+      if (d && (d.en_cours || d.compte.en_attente > 0)) minuteur = setTimeout(boucle, 3000);
+      else onChange?.();
+    };
+    boucle();
+    return () => { vivant = false; clearTimeout(minuteur); };
+  }, [charger, onChange]);
+
+  const agir = async (chemin) => {
+    setAction(true);
+    try {
+      await api.post(`/campagnes/${campagneId}/${chemin}`);
+      await charger();
+      onChange?.();
+    } catch (err) {
+      setErreur(err?.response?.data?.error || "Action impossible.");
+    } finally {
+      setAction(false);
+    }
+  };
+
+  const c = data?.compte;
+  const traites = c ? c.envoye + c.echec + c.desabonne : 0;
+  const pourcent = c && c.total ? Math.round((traites / c.total) * 100) : 0;
+  const enCours = Boolean(data?.en_cours || (c && c.en_attente > 0));
+  const echecs = (data?.envois || []).filter((e) => e.statut === "echec");
+  const lignes = toutVoir ? data?.envois || [] : echecs;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col">
+        <div className="flex items-start gap-3 p-6 pb-4">
+          <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+            {enCours ? <Loader2 className="w-5 h-5 text-orange-600 animate-spin" /> : <ListChecks className="w-5 h-5 text-orange-600" />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-slate-900">
+              {enCours ? "Envoi en cours" : "Journal d'envoi"}
+            </h3>
+            <p className="text-sm text-slate-500 truncate">{data?.campagne?.name || "…"}</p>
+          </div>
+          <button onClick={onFerme} className="text-slate-400 hover:text-slate-600" title="Fermer">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {erreur && <p className="mx-6 mb-3 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">{erreur}</p>}
+
+        {c && (
+          <div className="px-6 pb-4 space-y-4">
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                <span>{traites} traités sur {c.total}</span>
+                <span>{pourcent} %</span>
+              </div>
+              {/* Une barre d'une seule couleur dirait « 100 % » d'un envoi
+                  entièrement raté. Chaque issue a la sienne. */}
+              <div className="flex h-2 rounded-full bg-slate-100 overflow-hidden">
+                {[
+                  ["bg-green-500", c.envoye],
+                  ["bg-red-500", c.echec],
+                  ["bg-amber-400", c.desabonne],
+                ].map(([couleur, n]) =>
+                  n ? (
+                    <div
+                      key={couleur}
+                      className={`h-full ${couleur} transition-all duration-500`}
+                      style={{ width: `${c.total ? (n / c.total) * 100 : 0}%` }}
+                    />
+                  ) : null
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div className="rounded-xl border border-green-200 bg-green-50 p-2.5">
+                <p className="text-lg font-semibold text-green-700">{c.envoye}</p>
+                <p className="text-[11px] text-green-600">Envoyés</p>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50 p-2.5">
+                <p className="text-lg font-semibold text-red-700">{c.echec}</p>
+                <p className="text-[11px] text-red-600">Échecs</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 p-2.5">
+                <p className="text-lg font-semibold text-slate-700">{c.en_attente}</p>
+                <p className="text-[11px] text-slate-500">En attente</p>
+              </div>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5">
+                <p className="text-lg font-semibold text-amber-800">{c.desabonne}</p>
+                <p className="text-[11px] text-amber-700">Désabonnés</p>
+              </div>
+            </div>
+
+            {c.desabonne > 0 && (
+              <p className="flex items-start gap-2 text-xs text-slate-600">
+                <BellOff className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-amber-600" />
+                <span>
+                  {c.desabonne} personne{c.desabonne > 1 ? "s se sont désabonnées" : " s'est désabonnée"} et
+                  n&apos;{c.desabonne > 1 ? "ont" : "a"} donc pas été sollicitée{c.desabonne > 1 ? "s" : ""}.
+                </span>
+              </p>
+            )}
+
+            {data?.campagne?.last_error && (
+              <p className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                <span>L&apos;envoi s&apos;est interrompu : {data.campagne.last_error}</span>
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto border-t border-slate-200 px-6 py-4">
+          {!data ? (
+            <p className="text-sm text-slate-400">Chargement…</p>
+          ) : lignes.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              {toutVoir ? "Aucun destinataire." : "Aucun échec à signaler."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {lignes.map((e) => (
+                <li key={e.email} className="py-2 flex items-start gap-3 text-sm">
+                  <span
+                    className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${
+                      e.statut === "envoye" ? "bg-green-500"
+                      : e.statut === "echec" ? "bg-red-500"
+                      : e.statut === "desabonne" ? "bg-amber-500" : "bg-slate-300"
+                    }`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-slate-800">{e.nom || e.email}</p>
+                    <p className="truncate text-xs text-slate-500">{e.email}</p>
+                    {e.erreur && <p className="text-xs text-red-600 mt-0.5 break-words">{e.erreur}</p>}
+                  </div>
+                  <span className="text-[11px] text-slate-400 flex-shrink-0">
+                    {e.traite_le ? new Date(e.traite_le).toLocaleTimeString("fr-FR") : "—"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 p-4">
+          <button onClick={() => setToutVoir((v) => !v)} className="btn-ghost border text-xs">
+            {toutVoir ? "N'afficher que les échecs" : "Voir tous les destinataires"}
+          </button>
+          <div className="flex items-center gap-2">
+            {enCours ? (
+              <button onClick={() => agir("stop")} disabled={action} className="btn-ghost border text-xs">
+                <Square className="w-3.5 h-3.5" /> Arrêter
+              </button>
+            ) : (c && (c.en_attente > 0 || c.echec > 0)) ? (
+              <button onClick={() => agir("reprendre")} disabled={action} className="btn-ghost border text-xs">
+                <Play className="w-3.5 h-3.5" /> Reprendre les {c.en_attente + c.echec} restants
+              </button>
+            ) : null}
+            <button onClick={onFerme} className="btn-primary text-sm">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 /* ── Page principale ─────────────────────────────────────────── */
 const STATUS_STYLE = {
   brouillon:  "bg-slate-100 text-slate-600 border-slate-200",
   en_cours:   "bg-blue-100 text-blue-700 border-blue-200",
   envoyee:    "bg-green-100 text-green-700 border-green-200",
   programmee: "bg-orange-100 text-orange-700 border-orange-200",
+  echouee:    "bg-red-100 text-red-700 border-red-200",
+  arretee:    "bg-amber-100 text-amber-800 border-amber-200",
 };
 const STATUS_LABEL = {
-  brouillon: "Brouillon", en_cours: "En cours...",
+  brouillon: "Brouillon", en_cours: "Envoi en cours",
   envoyee: "Envoyée", programmee: "Programmée",
+  echouee: "Échouée", arretee: "Arrêtée",
 };
 const RECIPIENT_LABEL = {
   all_participants: "Tous participants",
@@ -875,12 +1083,10 @@ const RECIPIENT_LABEL = {
 const SEND_MODE_LABEL = {
   publipostage: "Publipostage",
   bcc:          "Cci",
-  cc:           "Cc",
 };
 const SEND_MODE_STYLE = {
   publipostage: "bg-blue-50 text-blue-700 border-blue-200",
   bcc:          "bg-purple-50 text-purple-700 border-purple-200",
-  cc:           "bg-teal-50 text-teal-700 border-teal-200",
 };
 
 export default function Campagnes() {
@@ -893,7 +1099,7 @@ export default function Campagnes() {
   const [editingCampaign, setEditingCampaign] = useState(null); // null=fermé | {}=nouveau | {id,...}=édition
   const [sendingId,       setSendingId]       = useState(null);
   const [confirmSend,     setConfirmSend]     = useState(null); // { id, name }
-  const [sendResult,      setSendResult]      = useState(null); // { sent, failed, total, name }
+  const [suiviId,         setSuiviId]         = useState(null); // campagne dont on regarde l'envoi
 
   if (!isAdmin) {
     return (
@@ -907,10 +1113,10 @@ export default function Campagnes() {
     );
   }
 
-  const fetchCampagnes = async () => {
+  const fetchCampagnes = useCallback(async () => {
     try { const res = await api.get("/campagnes"); setCampagnes(res.data); }
     catch (err) { console.error("Erreur chargement campagnes", err); }
-  };
+  }, []);
 
   useEffect(() => {
     fetchCampagnes();
@@ -923,13 +1129,19 @@ export default function Campagnes() {
     if (andSend) setConfirmSend({ id: savedId, name: savedName || "la campagne" });
   };
 
+  /* La requête ne fait plus que lancer l'envoi : elle répond tout de suite,
+     et le suivi prend le relais. */
   const handleSend = async (id) => {
     setSendingId(id);
     setConfirmSend(null);
     try {
       const res = await api.post(`/campagnes/${id}/send`);
-      const camp = campagnes.find(c => c.id === id);
-      setSendResult({ ...res.data, name: camp?.name || "la campagne" });
+      const minutes = Math.ceil((res.data?.duree_estimee_s || 0) / 60);
+      toast.success(
+        `Envoi lancé : ${res.data.a_envoyer} destinataire${res.data.a_envoyer > 1 ? "s" : ""}` +
+          (minutes > 1 ? `, environ ${minutes} minutes.` : ".")
+      );
+      setSuiviId(id);
       fetchCampagnes();
     } catch (err) {
       toast.error(err?.response?.data?.error || "L'envoi a échoué.");
@@ -1007,8 +1219,10 @@ export default function Campagnes() {
                   </div>
                 </div>
                 <p className="text-sm text-slate-600 mb-5">
-                  Les emails vont être envoyés via <strong>Brevo</strong> à tous les destinataires sélectionnés.
-                  Cette action est <strong>irréversible</strong>.
+                  L&apos;envoi part en arrière-plan et se poursuit même si vous quittez la page. Il est
+                  cadencé pour rester sous les limites de la messagerie, donc une grande liste prend
+                  plusieurs minutes. Les personnes désabonnées sont exclues, et chaque message porte un
+                  lien de désabonnement. Vous pourrez suivre l&apos;avancement et arrêter à tout moment.
                 </p>
                 <div className="flex justify-end gap-3">
                   <button onClick={() => setConfirmSend(null)} className="btn-ghost border">Annuler</button>
@@ -1027,39 +1241,13 @@ export default function Campagnes() {
             document.body
           )}
 
-          {/* Modal résultat envoi */}
-          {sendResult && createPortal(
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center">
-                    <Check className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-slate-900">Campagne envoyée</h3>
-                    <p className="text-sm text-slate-500">{sendResult.name}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-3 mb-5">
-                  <div className="rounded-xl border border-slate-200 p-3 text-center">
-                    <p className="text-xl font-semibold text-slate-900">{sendResult.total}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Total</p>
-                  </div>
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-center">
-                    <p className="text-xl font-semibold text-green-700">{sendResult.sent}</p>
-                    <p className="text-xs text-green-600 mt-0.5">Envoyés ✓</p>
-                  </div>
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
-                    <p className="text-xl font-semibold text-red-700">{sendResult.failed}</p>
-                    <p className="text-xs text-red-600 mt-0.5">Échecs ✗</p>
-                  </div>
-                </div>
-                <div className="flex justify-end">
-                  <button onClick={() => setSendResult(null)} className="btn-primary">Fermer</button>
-                </div>
-              </div>
-            </div>,
-            document.body
+          {/* Suivi de l'envoi, en direct */}
+          {suiviId && (
+            <SuiviEnvoi
+              campagneId={suiviId}
+              onFerme={() => { setSuiviId(null); fetchCampagnes(); }}
+              onChange={fetchCampagnes}
+            />
           )}
 
           {/* Liste des campagnes */}
@@ -1119,16 +1307,30 @@ export default function Campagnes() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {(c.sent_count > 0 || c.failed_count > 0) ? (
-                          <div className="text-xs flex items-center gap-2">
-                            <span className="text-green-600 font-medium">{c.sent_count} ✓</span>
+                        {(c.sent_count > 0 || c.failed_count > 0 || c.status === "en_cours") ? (
+                          <button
+                            onClick={() => setSuiviId(c.id)}
+                            className="text-xs flex items-center gap-2 hover:underline"
+                            title="Voir le journal d'envoi"
+                          >
+                            <span className="text-green-600 font-medium">
+                              {c.sent_count}{c.total_count ? ` / ${c.total_count}` : ""} ✓
+                            </span>
                             {c.failed_count > 0 && <span className="text-red-500">{c.failed_count} ✗</span>}
-                          </div>
+                          </button>
                         ) : <span className="text-slate-300 text-xs">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {c.status !== "envoyee" && (
+                          {c.status === "en_cours" ? (
+                            <button
+                              onClick={() => setSuiviId(c.id)}
+                              className="inline-flex h-8 items-center gap-1.5 px-3 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 text-xs font-medium transition-colors"
+                            >
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              Suivre
+                            </button>
+                          ) : (c.status !== "envoyee" || c.failed_count > 0) && (
                             <button
                               onClick={() => setConfirmSend({ id: c.id, name: c.name })}
                               disabled={!!sendingId}
