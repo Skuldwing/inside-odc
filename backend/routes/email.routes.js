@@ -133,6 +133,16 @@ router.post("/test", authMiddleware, requireAdmin, async (req, res) => {
       } catch (e) {
         console.error("[SONDE SMTP]", e.message);
       }
+
+      /* Le remede generique parle de verifier le port. Quand une cle Brevo
+         dort dans la configuration, il y a bien mieux a dire : la sortie
+         existe deja, il suffit de la choisir. */
+      if (process.env.BREVO_API_KEY) {
+        lecture.remede =
+          "Une cle Brevo est deja presente dans la configuration : passez MAIL_PROVIDER a « brevo ». " +
+          "Brevo envoie en HTTPS, le port SMTP bloque n'a alors plus d'importance. " +
+          "Pensez aussi a redemarrer le service apres avoir change la variable.";
+      }
     }
 
     res.status(502).json({ success: false, ...lecture, brut: brut.slice(0, 600), sonde });
