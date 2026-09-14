@@ -66,6 +66,15 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
         user: SMTP_USER,
         pass: SMTP_PASS,
       },
+      /* Sans ces bornes, nodemailer attend deux minutes avant d'abandonner une
+         connexion qui n'aboutira jamais — le cas exact d'un port SMTP bloque
+         par l'hebergeur. Une campagne de cent personnes y passerait plus de
+         trois heures a ne rien envoyer, et le bouton d'essai resterait muet si
+         longtemps qu'on le croirait casse. Quinze secondes suffisent
+         largement a un serveur qui repond. */
+      connectionTimeout: Number(process.env.SMTP_TIMEOUT_MS || 15000),
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
     });
 
     const formatAddr = (r) => r.name ? `"${r.name}" <${r.email}>` : r.email;
