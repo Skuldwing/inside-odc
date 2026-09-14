@@ -5,10 +5,42 @@ const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { generateAttestationPDF } = require("../services/attestation");
+const { genererAttestationTechKi, ressourcesPresentes } = require("../services/attestationTechKi");
+
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
+
+/* Le modele Tech-Ki fourni par l'equipe remplace le rendu generique des que
+   ses ressources sont en place — fond, logo, signature, police manuscrite.
+   Si l'une manque, on retombe sur l'ancien rendu plutot que d'echouer. */
+const MODELE_TECH_KI_DISPONIBLE = ressourcesPresentes().length === 0;
+if (!MODELE_TECH_KI_DISPONIBLE) {
+  console.warn(
+    "[ATTESTATION] modele Tech-Ki indisponible, ressources manquantes :",
+    ressourcesPresentes().join(", ")
+  );
+}
+
+function attestationPour({ participant, activity }) {
+  if (MODELE_TECH_KI_DISPONIBLE) {
+    return genererAttestationTechKi({
+      participant,
+      /* Le module imprime sur la ligne est l'intitule de la seance : c'est ce
+         que la personne a suivi, plus parlant que le nom du dispositif. */
+      module: activity.title,
+      date: activity.activity_date,
+      lieu: activity.location && activity.location !== "-" ? activity.location : "Dakar",
+    });
+  }
+  return generateAttestationPDF({
+    participant,
+    activity,
+    partner: activity.partner_name || activity.coach_name,
+    device: activity.device_name,
+  });
+}
 
 const router = express.Router();
 
@@ -436,6 +468,49 @@ router.delete("/:id/participants", authMiddleware, requireWriteAccess, async (re
   }
 });
 
+/* ===== APERCU D'UNE ATTESTATION =====
+   Envoyer cent attestations sans en avoir vu une seule est un pari. Cette
+   route rend le document tel qu'il partira, avec le premier participant de
+   l'activite — ou un nom d'exemple si la liste est vide. */
+router.get("/:id/attestation-apercu", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const actRes = await pool.query(
+      `SELECT ${ACTIVITY_COLUMNS}, p.name AS partner_name, d.name AS device_name, u.full_name AS coach_name
+       FROM activities a
+       LEFT JOIN partners p ON p.id = a.partner_id
+       LEFT JOIN devices  d ON d.id  = a.device_id
+       LEFT JOIN users    u ON u.id  = a.coach_id
+       WHERE a.id = $1`,
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    const activity = actRes.rows[0];
+    if (!isOwner(req, activity)) return res.status(403).json({ error: "Accès refusé" });
+
+    const partRes = await pool.query(
+      `SELECT p.nom, p.prenom
+       FROM participants p
+       JOIN activity_participants ap ON ap.participant_id = p.id
+       WHERE ap.activity_id = $1
+       ORDER BY p.nom, p.prenom
+       LIMIT 1`,
+      [id]
+    );
+
+    const participant = partRes.rows[0] || { prenom: "Prénom", nom: "Nom du participant" };
+    const pdf = await attestationPour({ participant, activity });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="attestation-apercu.pdf"');
+    res.send(pdf);
+  } catch (err) {
+    console.error("[ATTESTATION APERCU]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== SEND ATTESTATIONS ===== */
 router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
@@ -485,12 +560,7 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
 
     for (const participant of withEmail) {
       try {
-        const pdfBuffer = await generateAttestationPDF({
-          participant,
-          activity,
-          partner: activity.partner_name || activity.coach_name,
-          device: activity.device_name,
-        });
+        const pdfBuffer = await attestationPour({ participant, activity });
 
         const fullName =
           [participant.prenom, participant.nom].filter(Boolean).join(" ") ||
