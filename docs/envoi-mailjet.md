@@ -6,7 +6,20 @@
 
 ## Pourquoi Mailjet
 
-L'hébergement ferme le port SMTP sortant. La sonde du panneau *Envoi d'emails* l'a établi sur deux serveurs différents — Microsoft 365 puis OVH — avec la même signature : le port 443 répond en quelques millisecondes, le port 587 reste muet. Aucun réglage ne rouvrira ce port.
+L'hébergement ferme le trafic SMTP sortant. Ce n'est pas une hypothèse : la sonde du panneau *Envoi d'emails* l'a mesuré.
+
+| Destination | Port | Résultat |
+|---|---|---|
+| `smtp.office365.com` | 587 | délai dépassé |
+| `smtp.office365.com` | 443 *(contrôle)* | connecté en 64 ms |
+| `ssl0.ovh.net` | 587 | délai dépassé |
+| `ssl0.ovh.net` | 443 *(contrôle)* | connecté en 143 ms |
+| `ssl0.ovh.net` | 465 | délai dépassé |
+| `ssl0.ovh.net` | 2525 | délai dépassé |
+
+Le même hôte répond sur 443 et reste muet sur les ports de courrier, à la même seconde : le filtrage porte sur le port, pas sur la destination. Essayer un autre serveur est donc inutile, et aucun réglage de la plateforme ne rouvrira ces ports.
+
+**Conséquence durable : `MAIL_PROVIDER=smtp` est inutilisable sur cet hébergement**, quels que soient le serveur, le port et les identifiants. Les variables `SMTP_*` ne resserviront qu'en cas de changement d'hébergeur.
 
 Il faut donc un service qui reçoit les messages **en HTTPS**, sur le port 443. Mailjet en est un : son API de soumission écoute sur `api.mailjet.com`, en HTTPS.
 
