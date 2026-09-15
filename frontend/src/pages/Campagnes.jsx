@@ -26,7 +26,7 @@ import {
   Superscript as SuperscriptIcon, Subscript as SubscriptIcon,
   Table as TableIcon, Columns2, Rows3, Trash2, LayoutGrid,
   Send, Eye, X, Loader2, Pencil, Users,
-  Square, Play, ListChecks, AlertTriangle, BellOff,
+  Square, Play, ListChecks, AlertTriangle, BellOff, Award,
 } from "lucide-react";
 import api from "../api";
 import DeliverabilitePanel from "../components/DeliverabilitePanel";
@@ -1070,6 +1070,182 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
   );
 }
 
+/* ── Attestations ─────────────────────────────────────────────
+   Le document porte trois mentions manuscrites : le nom, le module et la
+   date. Les deux premières viennent de la base, mais l'intitulé d'une
+   activité est écrit pour l'équipe — « Atelier IA - session 3 (reporté) » —
+   et n'a rien à faire sur un document remis à un bénéficiaire. Il se
+   réécrit donc ici, avant l'envoi, et l'aperçu tient compte de la
+   correction. */
+function AttestationsTab({ activities }) {
+  const toast = useToast();
+  const [ouverte, setOuverte] = useState(null);   // id de l'activité dépliée
+  const [intitule, setIntitule] = useState("");
+  const [confirme, setConfirme] = useState(false);
+  const [envoi, setEnvoi] = useState(false);
+  const [resultat, setResultat] = useState(null);
+
+  const avecParticipants = (activities || [])
+    .filter((a) => (a.participants_count ?? 0) > 0)
+    .sort((a, b) => String(b.activity_date || "").localeCompare(String(a.activity_date || "")));
+
+  const ouvrir = (a) => {
+    setOuverte(a.id === ouverte ? null : a.id);
+    setIntitule(a.title || "");
+    setConfirme(false);
+    setResultat(null);
+  };
+
+  const apercu = (a) => {
+    const base = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+    const m = intitule.trim() && intitule.trim() !== a.title ? `?module=${encodeURIComponent(intitule.trim())}` : "";
+    window.open(`${base}/activities/${a.id}/attestation-apercu${m}`, "_blank");
+  };
+
+  const envoyer = async (a) => {
+    setEnvoi(true);
+    setResultat(null);
+    try {
+      const res = await api.post(`/activities/${a.id}/send-attestations`, { module: intitule.trim() });
+      setResultat(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "L'envoi a échoué.");
+    } finally {
+      setEnvoi(false);
+      setConfirme(false);
+    }
+  };
+
+  if (!avecParticipants.length) {
+    return (
+      <EmptyState
+        icon={Award}
+        title="Aucune activité avec des participants"
+        description="Les attestations sont générées à partir des listes de présences. Importez d'abord une liste dans une activité."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        Un document nominatif par participant, envoyé en pièce jointe. Les personnes sans adresse
+        email sont ignorées.
+      </p>
+
+      {avecParticipants.map((a) => {
+        const depliee = ouverte === a.id;
+        return (
+          <div key={a.id} className="card-solid overflow-hidden border border-slate-200">
+            <button
+              type="button"
+              onClick={() => ouvrir(a)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left"
+            >
+              <Award className="h-4 w-4 flex-shrink-0 text-orange-500" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-slate-800">{a.title}</span>
+                <span className="block text-xs text-slate-500">
+                  {a.activity_date ? new Date(a.activity_date).toLocaleDateString("fr-FR") : "date inconnue"}
+                  {" · "}
+                  {a.participants_count} participant{a.participants_count > 1 ? "s" : ""}
+                </span>
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${depliee ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {depliee && (
+              <div className="space-y-3 border-t border-slate-200 px-4 py-4">
+                <label className="block text-xs text-slate-600">
+                  Intitulé du module, tel qu&apos;il sera écrit sur l&apos;attestation
+                  <input
+                    type="text"
+                    value={intitule}
+                    maxLength={120}
+                    onChange={(e) => { setIntitule(e.target.value); setConfirme(false); }}
+                    className="input mt-1 text-sm"
+                  />
+                </label>
+                {intitule.trim() !== (a.title || "") && (
+                  <p className="text-xs text-slate-500">
+                    Le titre de l&apos;activité reste « {a.title} » : seule l&apos;attestation change.
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => apercu(a)} className="btn-ghost border text-xs">
+                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    Voir un aperçu
+                  </button>
+                  {!confirme && (
+                    <button
+                      type="button"
+                      onClick={() => { setConfirme(true); setResultat(null); }}
+                      disabled={envoi || !intitule.trim()}
+                      className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50"
+                    >
+                      <Send className="h-3.5 w-3.5" aria-hidden="true" />
+                      Envoyer aux {a.participants_count} participant{a.participants_count > 1 ? "s" : ""}
+                    </button>
+                  )}
+                </div>
+
+                {confirme && (
+                  <div className="space-y-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                    <p className="text-xs font-semibold text-orange-800">
+                      Envoyer l&apos;attestation « {intitule.trim()} » à {a.participants_count} participant
+                      {a.participants_count > 1 ? "s" : ""} ?
+                    </p>
+                    <p className="text-xs text-orange-700">
+                      Regardez l&apos;aperçu d&apos;abord : un message envoyé ne se reprend pas.
+                      {a.participants_count > 30 && " L'envoi durera plusieurs minutes, ne fermez pas la page."}
+                    </p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => setConfirme(false)} disabled={envoi} className="btn-ghost border text-xs">
+                        Annuler
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => envoyer(a)}
+                        disabled={envoi}
+                        className="flex items-center gap-1.5 rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-700 disabled:opacity-60"
+                      >
+                        {envoi ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                        {envoi ? "Envoi en cours…" : "Confirmer l'envoi"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {resultat && (
+                  <div className="space-y-1 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+                    <p className="flex items-center gap-1.5 font-semibold">
+                      <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                      {resultat.sent} attestation{resultat.sent > 1 ? "s" : ""} envoyée{resultat.sent > 1 ? "s" : ""}
+                    </p>
+                    {resultat.skipped > 0 && (
+                      <p className="text-emerald-700">
+                        {resultat.skipped} participant{resultat.skipped > 1 ? "s" : ""} sans adresse email,
+                        donc ignoré{resultat.skipped > 1 ? "s" : ""}.
+                      </p>
+                    )}
+                    {resultat.errors?.length > 0 && (
+                      <p className="text-red-600">Échec pour : {resultat.errors.join(", ")}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ── Page principale ─────────────────────────────────────────── */
 const STATUS_STYLE = {
   brouillon:  "bg-slate-100 text-slate-600 border-slate-200",
@@ -1192,6 +1368,7 @@ export default function Campagnes() {
       <div className="flex gap-1 border-b border-slate-200">
         {[
           { key: "campagnes", icon: <Mail className="w-4 h-4" />, label: "Campagnes" },
+          { key: "attestations", icon: <Award className="w-4 h-4" />, label: "Attestations" },
           { key: "templates", icon: <Zap className="w-4 h-4" />,  label: "Templates automatiques" },
         ].map(({ key, icon, label }) => (
           <button key={key} onClick={() => setTab(key)}
@@ -1203,7 +1380,9 @@ export default function Campagnes() {
         ))}
       </div>
 
-      {tab === "templates" ? <TemplatesTab /> : (
+      {tab === "templates" ? <TemplatesTab /> : tab === "attestations" ? (
+        <AttestationsTab activities={activities} />
+      ) : (
         <>
           {/* Modal éditeur campagne */}
           {editingCampaign !== null && (
