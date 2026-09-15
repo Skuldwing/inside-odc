@@ -120,8 +120,13 @@ function echecLisible(err) {
    par deux CNAME et ne demande plus d'include SPF ; Mailjet demande l'inverse,
    une cle DKIM en TXT et son include dans le SPF. */
 const AUTHENTIFICATION = {
-  mailjet: { spfInclude: "include:spf.mailjet.com", selecteurDkim: "mailjet" },
-  smtp: { spfInclude: "include:spf.brevo.com", selecteurDkim: "brevo" },
+  brevo: { ou: "Brevo, dans Expéditeurs & IP → Domaines" },
+  mailjet: {
+    spfInclude: "include:spf.mailjet.com",
+    selecteurDkim: "mailjet",
+    ou: "Mailjet, dans Expéditeurs et domaines",
+  },
+  smtp: { spfInclude: "include:spf.brevo.com", selecteurDkim: "brevo", ou: "votre service d'envoi" },
 };
 
 function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur) {
@@ -162,6 +167,7 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
           role: `DKIM ${n} — signature des messages`,
           nom: `brevo${n}._domainkey.${domaine}`,
           valeur: null,
+          source: mode.ou,
           note: n === 1 ? "Deux enregistrements, et de type CNAME — pas TXT." : null,
         });
       }
@@ -171,6 +177,7 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
         role: "DKIM — signature des messages",
         nom: `${mode.selecteurDkim}._domainkey.${domaine}`,
         valeur: null,
+        source: mode.ou,
       });
     }
   }
@@ -181,6 +188,7 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
       role: "Vérification du domaine chez Brevo",
       nom: domaine,
       valeur: null,
+      source: AUTHENTIFICATION.brevo.ou,
     });
   }
 
@@ -448,7 +456,7 @@ export default function DeliverabilitePanel() {
                           </>
                         ) : (
                           <dd className="min-w-0 flex-1 italic text-slate-500">
-                            fournie par Brevo, dans Expéditeurs &amp; IP → Domaines
+                            fournie par {e.source}
                           </dd>
                         )}
                       </div>

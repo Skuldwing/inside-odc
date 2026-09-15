@@ -166,9 +166,39 @@ function verdictDmarc(enregistrements) {
  * « brevo » en TXT : il annoncait « aucune cle publiee » sur un domaine
  * correctement authentifie, et envoyait corriger une panne inexistante.
  */
-function verdictDkim(txtParSelecteur, cnameParSelecteur) {
-  const enTxt = Object.entries(txtParSelecteur).find(([, v]) => Array.isArray(v) && v.length);
-  const enCname = Object.entries(cnameParSelecteur).find(([, v]) => Array.isArray(v) && v.length);
+/* Chaque service signe sous ses propres selecteurs. Se contenter de constater
+   qu'une cle existe quelque part reviendrait a declarer conforme un domaine
+   qui porte la cle d'un ancien prestataire et pas celle du service en
+   service : les messages partiraient non signes, et l'ecran dirait le
+   contraire. */
+const SELECTEURS_PAR_FOURNISSEUR = {
+  brevo: ["brevo1", "brevo2", "brevo", "mail"],
+  mailjet: ["mailjet"],
+  smtp: ["selector1", "selector2", "mail"],
+};
+
+function verdictDkim(txtParSelecteur, cnameParSelecteur, fournisseur) {
+  const attendus = SELECTEURS_PAR_FOURNISSEUR[fournisseur] || null;
+  const presents = (par) =>
+    Object.entries(par).filter(([, v]) => Array.isArray(v) && v.length);
+  const retenus = (par) =>
+    attendus ? presents(par).filter(([s]) => attendus.includes(s)) : presents(par);
+
+  const enTxt = retenus(txtParSelecteur)[0];
+  const enCname = retenus(cnameParSelecteur)[0];
+
+  /* Une cle existe, mais pas sous un selecteur du service retenu : le dire
+     plutot que de compter un reste de configuration comme une reussite. */
+  if (!enTxt && !enCname && attendus) {
+    const autres = [...presents(txtParSelecteur), ...presents(cnameParSelecteur)].map(([s]) => s);
+    if (autres.length) {
+      return {
+        statut: "manquant",
+        valeur: `selecteur${autres.length > 1 ? "s" : ""} « ${autres.join(", ")} » — d'un autre service`,
+        detail: `Une cle DKIM est publiee, mais pas sous un selecteur de ${fournisseur}. Les messages partiraient sans signature valable.`,
+      };
+    }
+  }
 
   if (!enTxt && !enCname) {
     return {
@@ -241,7 +271,7 @@ async function diagnostiquerDomaine(domaine, fournisseur = "brevo") {
     ? txtDomaine.find((v) => v.toLowerCase().startsWith("brevo-code:"))
     : null;
 
-  const dkim = verdictDkim(parSelecteur, parSelecteurCname);
+  const dkim = verdictDkim(parSelecteur, parSelecteurCname, fournisseur);
   const controles = {
     spf: verdictSpf(txtDomaine, fournisseur, dkim.statut === "ok"),
     dkim,
