@@ -267,6 +267,31 @@ export default function DeliverabilitePanel() {
     charger();
   }, [charger]);
 
+  /* Essayer un serveur d'envoi demandait jusqu'ici de changer les variables de
+     l'hébergement et d'attendre un redémarrage à chaque tentative — plusieurs
+     minutes pour une question à laquelle une connexion TCP répond en six
+     secondes. */
+  const [sondeHote, setSondeHote] = useState("");
+  const [sondePort, setSondePort] = useState(587);
+  const [sondeEnCours, setSondeEnCours] = useState(false);
+  const [sondeResultat, setSondeResultat] = useState(null);
+
+  const sonder = async () => {
+    setSondeEnCours(true);
+    setSondeResultat(null);
+    try {
+      const res = await api.post("/email/sonde-smtp", {
+        hote: sondeHote.trim(),
+        port: Number(sondePort),
+      });
+      setSondeResultat(res.data.sonde);
+    } catch (err) {
+      setSondeResultat({ erreur: err?.response?.data?.error || "La sonde n'a pas abouti." });
+    } finally {
+      setSondeEnCours(false);
+    }
+  };
+
   const envoyerEssai = async () => {
     setEssaiEnCours(true);
     setEssai(null);
@@ -502,6 +527,73 @@ export default function DeliverabilitePanel() {
                       <p className="mt-2 break-all font-mono text-[11px] opacity-70">{essai.brut}</p>
                     )}
                   </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Tester un serveur d'envoi sans rien déployer. Rien n'est envoyé,
+              rien n'est authentifié : on ouvre une connexion et on écoute. */}
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-[11rem] flex-1 text-xs text-slate-600">
+                Tester un serveur d&apos;envoi
+                <input
+                  type="text"
+                  value={sondeHote}
+                  onChange={(e) => setSondeHote(e.target.value)}
+                  placeholder="ssl0.ovh.net"
+                  className="input mt-1 text-sm"
+                />
+              </label>
+              <label className="text-xs text-slate-600">
+                Port
+                <select
+                  value={sondePort}
+                  onChange={(e) => setSondePort(Number(e.target.value))}
+                  className="input mt-1 w-24 text-sm"
+                >
+                  {[587, 465, 2525, 25].map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={sonder}
+                disabled={sondeEnCours || !sondeHote.trim()}
+                className="btn-ghost border text-xs"
+              >
+                {sondeEnCours ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                Sonder
+              </button>
+            </div>
+
+            {sondeResultat && (
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                {sondeResultat.erreur ? (
+                  <p className="text-red-700">{sondeResultat.erreur}</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {sondeResultat.etapes.map((e) => (
+                      <li key={e.nom} className="flex items-start gap-2">
+                        {e.ok ? (
+                          <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-600" aria-hidden="true" />
+                        ) : (
+                          <XCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-red-600" aria-hidden="true" />
+                        )}
+                        <span className="min-w-0">
+                          <span className="font-medium text-slate-800">{e.nom}</span>
+                          {e.detail ? <span className="text-slate-600"> — {e.detail}</span> : null}
+                          {e.remede ? <span className="mt-0.5 block text-slate-600">{e.remede}</span> : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             )}
