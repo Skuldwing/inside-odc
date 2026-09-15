@@ -189,4 +189,51 @@ router.get("/export.csv", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== CORRIGER UNE IDENTITE =====
+   Les noms viennent de feuilles de presence remplies a la main puis importees :
+   les coquilles sont la regle, pas l'exception. Tant qu'elles restaient dans
+   une liste, elles etaient sans gravite ; imprimees sur une attestation
+   nominative remise a la personne, elles ne le sont plus.
+   Volontairement limite au nom et au prenom : cette route sert a corriger une
+   orthographe, pas a reattribuer une fiche a quelqu'un d'autre. L'email, lui,
+   identifie le destinataire et ne se modifie pas d'un champ texte glisse dans
+   un ecran d'envoi. */
+router.patch("/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const nom = String(req.body?.nom ?? "").trim();
+    const prenom = String(req.body?.prenom ?? "").trim();
+
+    /* Les deux colonnes sont NOT NULL : une chaine vide ferait echouer la
+       requete avec un message que personne ne saurait lire. */
+    if (!nom || !prenom) {
+      return res.status(400).json({ error: "Le nom et le prénom sont tous deux requis." });
+    }
+    if (nom.length > 120 || prenom.length > 120) {
+      return res.status(400).json({ error: "Nom ou prénom trop long." });
+    }
+
+    const avant = await pool.query("SELECT nom, prenom FROM participants WHERE id = $1", [req.params.id]);
+    if (!avant.rows.length) return res.status(404).json({ error: "Participant introuvable" });
+
+    const r = await pool.query(
+      "UPDATE participants SET nom = $1, prenom = $2 WHERE id = $3 RETURNING id, nom, prenom, email",
+      [nom, prenom, req.params.id]
+    );
+
+    /* Une identite corrigee se retrouve dans toutes les activites de la
+       personne : la trace dit qui a change quoi, et depuis quelle valeur. */
+    logAudit(req, "UPDATE", "participants", r.rows[0].id, `${prenom} ${nom}`, {
+      avant: `${avant.rows[0].prenom} ${avant.rows[0].nom}`,
+      apres: `${prenom} ${nom}`,
+    });
+
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error("[PARTICIPANT PATCH]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;
