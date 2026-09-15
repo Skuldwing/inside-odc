@@ -4,6 +4,10 @@
 const propre = (v) => (typeof v === "string" ? v.trim() : v);
 
 const BREVO_API_KEY = propre(process.env.BREVO_API_KEY);
+/* Mailjet authentifie par un couple : cle publique et cle privee, en Basic
+   HTTP. Les deux sont indispensables — une seule ne sert a rien. */
+const MAILJET_API_KEY = propre(process.env.MAILJET_API_KEY);
+const MAILJET_API_SECRET = propre(process.env.MAILJET_API_SECRET);
 const MAIL_FROM = propre(process.env.MAIL_FROM);
 const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || "Inside ODC";
 /* L'adresse d'expedition doit appartenir au domaine qui authentifie l'envoi :
@@ -27,12 +31,17 @@ const SMTP_SECURE = String(process.env.SMTP_SECURE || "false") === "true";
    service prevu pour l'envoi en nombre. */
 const PROVIDER = String(process.env.MAIL_PROVIDER || "").toLowerCase();
 const brevoPret = Boolean(BREVO_API_KEY && MAIL_FROM);
+const mailjetPret = Boolean(MAILJET_API_KEY && MAILJET_API_SECRET && MAIL_FROM);
 const smtpPret = Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS && MAIL_FROM);
 
 function fournisseurRetenu() {
   if (PROVIDER === "brevo") return brevoPret ? "brevo" : "aucun";
+  if (PROVIDER === "mailjet") return mailjetPret ? "mailjet" : "aucun";
   if (PROVIDER === "smtp") return smtpPret ? "smtp" : "aucun";
+  /* A defaut de choix explicite, les services en HTTPS priment : l'hebergement
+     ferme le port SMTP sortant, un repli sur SMTP n'enverrait rien. */
   if (brevoPret) return "brevo";
+  if (mailjetPret) return "mailjet";
   if (smtpPret) return "smtp";
   return "aucun";
 }
@@ -100,8 +109,61 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
 
   if (fournisseur === "aucun") {
     console.warn(
-      "[MAIL] Aucun service d'envoi configure (MAIL_PROVIDER / BREVO_API_KEY / SMTP_*). Message ignore."
+      "[MAIL] Aucun service d'envoi configure (MAIL_PROVIDER / BREVO_API_KEY / MAILJET_* / SMTP_*). Message ignore."
     );
+    return;
+  }
+
+  if (fournisseur === "mailjet") {
+    const destinataires = (liste) => liste.map((r) => ({ Email: r.email, Name: r.name || r.email }));
+    const message = {
+      From: { Email: MAIL_FROM, Name: MAIL_FROM_NAME },
+      To: [{ Email: toEmail, Name: toName || toEmail }],
+      Subject: subject,
+      TextPart: text,
+      HTMLPart: html,
+    };
+    if (repondreA) message.ReplyTo = { Email: repondreA };
+    if (headers && Object.keys(headers).length) message.Headers = headers;
+    if (cc.length) message.Cc = destinataires(cc);
+    if (bcc.length) message.Bcc = destinataires(bcc);
+    if (attachments && attachments.length) {
+      message.Attachments = attachments.map((a) => ({
+        ContentType: a.contentType || "application/octet-stream",
+        Filename: a.filename,
+        Base64Content: Buffer.isBuffer(a.content) ? a.content.toString("base64") : a.content,
+      }));
+    }
+
+    const res = await fetch("https://api.mailjet.com/v3.1/send", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization:
+          "Basic " + Buffer.from(`${MAILJET_API_KEY}:${MAILJET_API_SECRET}`).toString("base64"),
+      },
+      body: JSON.stringify({ Messages: [message] }),
+    });
+
+    const corps = await res.text();
+    if (!res.ok) throw new Error(`Mailjet error ${res.status}: ${corps}`);
+
+    /* Mailjet repond 200 meme quand le message est refuse : le verdict est
+       dans Messages[].Status. Sans ce controle, un refus passerait pour un
+       envoi reussi et le journal de campagne mentirait. */
+    let verdict = null;
+    try {
+      verdict = JSON.parse(corps)?.Messages?.[0];
+    } catch {
+      /* corps illisible : on ne peut rien affirmer, on laisse passer */
+    }
+    if (verdict && verdict.Status && verdict.Status !== "success") {
+      const motifs = (verdict.Errors || [])
+        .map((e) => e.ErrorMessage || e.ErrorCode)
+        .filter(Boolean)
+        .join(" ; ");
+      throw new Error(`Mailjet error ${verdict.Status}: ${motifs || corps}`);
+    }
     return;
   }
 

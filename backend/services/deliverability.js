@@ -65,6 +65,11 @@ const EXPEDITEURS = {
     motif: /include:spf\.brevo\.com|include:sendinblue\.com/i,
     remede: "Ajoutez « include:spf.brevo.com » avant le « ~all ».",
   },
+  mailjet: {
+    nom: "Mailjet",
+    motif: /include:spf\.mailjet\.com/i,
+    remede: "Ajoutez « include:spf.mailjet.com » avant le « ~all ».",
+  },
   smtp: {
     nom: "Microsoft 365",
     motif: /include:spf\.protection\.outlook\.com/i,
@@ -211,7 +216,7 @@ function verdictMx(enregistrements) {
 /* Selecteurs DKIM courants. Brevo delegue aujourd'hui par brevo1/brevo2 en
    CNAME ; « brevo » et « mail » restent en TXT sur les comptes plus anciens ;
    Microsoft 365 signe avec selector1/2. */
-const SELECTEURS_DKIM = ["brevo", "brevo1", "brevo2", "mail", "selector1", "selector2"];
+const SELECTEURS_DKIM = ["brevo", "brevo1", "brevo2", "mailjet", "mail", "selector1", "selector2"];
 
 async function diagnostiquerDomaine(domaine, fournisseur = "brevo") {
   const nbSel = SELECTEURS_DKIM.length;
@@ -266,13 +271,16 @@ function configurationEnvoi() {
   const smtpUser = process.env.SMTP_USER || null;
   const smtpHost = process.env.SMTP_HOST || null;
   const brevoConfigure = Boolean(process.env.BREVO_API_KEY);
+  const mailjetConfigure = Boolean(process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
   const smtpConfigure = Boolean(smtpHost && smtpUser && process.env.SMTP_PASS);
 
   const choix = (process.env.MAIL_PROVIDER || "").toLowerCase();
   let fournisseur;
   if (choix === "brevo") fournisseur = brevoConfigure ? "brevo" : "aucun";
+  else if (choix === "mailjet") fournisseur = mailjetConfigure ? "mailjet" : "aucun";
   else if (choix === "smtp") fournisseur = smtpConfigure ? "smtp" : "aucun";
   else if (brevoConfigure) fournisseur = "brevo";
+  else if (mailjetConfigure) fournisseur = "mailjet";
   else if (smtpConfigure) fournisseur = "smtp";
   else fournisseur = "aucun";
 
@@ -315,9 +323,17 @@ function configurationEnvoi() {
     }
   }
 
-  if (fournisseur === "smtp" && brevoConfigure) {
+  /* Une seule cle a moitie renseignee suffit a faire croire que Mailjet est
+     pret : le couple est indissociable. */
+  if (choix === "mailjet" && !mailjetConfigure) {
     alertes.push(
-      "Une cle Brevo est presente mais inutilisee : l'envoi passe par SMTP. Si le port SMTP est bloque par l'hebergeur, basculez MAIL_PROVIDER sur « brevo » — Brevo envoie en HTTPS."
+      "MAIL_PROVIDER vaut « mailjet » mais le couple de cles est incomplet : MAILJET_API_KEY et MAILJET_API_SECRET sont tous deux requis."
+    );
+  }
+
+  if (fournisseur === "smtp" && (brevoConfigure || mailjetConfigure)) {
+    alertes.push(
+      `Un service d'envoi en HTTPS est configure (${brevoConfigure ? "Brevo" : "Mailjet"}) mais inutilise : l'envoi passe par SMTP. Si le port SMTP est bloque par l'hebergeur, basculez MAIL_PROVIDER sur « ${brevoConfigure ? "brevo" : "mailjet"} ».`
     );
   }
 
@@ -328,6 +344,7 @@ function configurationEnvoi() {
     fournisseur,
     fournisseur_force: choix || null,
     brevo_configure: brevoConfigure,
+    mailjet_configure: mailjetConfigure,
     smtp_configure: smtpConfigure,
     smtp_hote: smtpHost,
     smtp_compte: smtpUser,
@@ -403,6 +420,18 @@ const CAUSES = [
     cause: "La connexion au serveur d'envoi n'aboutit jamais.",
     remede:
       "Le port sortant est presque toujours en cause : beaucoup d'hebergeurs bloquent le trafic SMTP. Verifiez SMTP_PORT (587 pour Microsoft 365) et SMTP_SECURE (false sur le 587). Si le port est bloque par l'hebergeur, aucun reglage ne le debloquera : il faut passer par un service qui envoie en HTTPS.",
+  },
+  {
+    motif: /Mailjet error 401|Mailjet error 403/i,
+    cause: "Mailjet refuse le couple de cles.",
+    remede:
+      "MAILJET_API_KEY est la cle publique et MAILJET_API_SECRET la cle privee : les deux se trouvent dans Mailjet, Compte → Cles API. Les intervertir ou n'en renseigner qu'une donne exactement ce refus.",
+  },
+  {
+    motif: /Mailjet error error|ErrorCode|mj-\d+|sender.*not.*authori|"Status":"error"/i,
+    cause: "Mailjet a refuse le message.",
+    remede:
+      "Le motif figure dans le message brut ci-dessous. Le plus frequent : l'adresse d'expedition n'est pas encore validee dans Mailjet, Expediteurs et domaines.",
   },
   {
     motif: /Brevo error 401|Key not found|unauthorized|invalid api key/i,

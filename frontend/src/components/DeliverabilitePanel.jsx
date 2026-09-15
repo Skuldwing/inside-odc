@@ -116,10 +116,19 @@ function echecLisible(err) {
  * Seules deux valeurs ne peuvent pas etre calculees ici : la cle DKIM et le
  * code de verification, propres au compte Brevo.
  */
+/* Chaque service publie son authentification a sa facon : Brevo delegue DKIM
+   par deux CNAME et ne demande plus d'include SPF ; Mailjet demande l'inverse,
+   une cle DKIM en TXT et son include dans le SPF. */
+const AUTHENTIFICATION = {
+  mailjet: { spfInclude: "include:spf.mailjet.com", selecteurDkim: "mailjet" },
+  smtp: { spfInclude: "include:spf.brevo.com", selecteurDkim: "brevo" },
+};
+
 function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur) {
   if (!domaine) return [];
   const manque = (cle) => controles[cle] && controles[cle].statut !== "ok";
   const brevo = fournisseur === "brevo";
+  const mode = AUTHENTIFICATION[fournisseur] || AUTHENTIFICATION.smtp;
   const liste = [];
 
   /* Avec Brevo, on ne propose jamais de toucher au SPF : ses messages partent
@@ -135,8 +144,8 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
          propose la version fusionnee plutot qu'un second enregistrement, qui
          invaliderait les deux. */
       valeur: existant
-        ? existant.replace(/\s*([~\-?+]all)\s*$/, " include:spf.brevo.com $1")
-        : "v=spf1 include:spf.brevo.com ~all",
+        ? existant.replace(/\s*([~\-?+]all)\s*$/, ` ${mode.spfInclude} $1`)
+        : `v=spf1 ${mode.spfInclude} ~all`,
       note: existant
         ? "Un SPF existe déjà sur ce domaine : modifiez-le, n'en créez pas un second."
         : null,
@@ -160,7 +169,7 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
       liste.push({
         type: "TXT",
         role: "DKIM — signature des messages",
-        nom: `brevo._domainkey.${domaine}`,
+        nom: `${mode.selecteurDkim}._domainkey.${domaine}`,
         valeur: null,
       });
     }
