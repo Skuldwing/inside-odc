@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -36,6 +36,41 @@ export default function Participants() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState("");
 
+  /* Noms de famille écrits deux fois, hérités des imports passés : « Rockaya
+     Samb » en prénom et « Samb » en nom, que l'attestation imprimerait tel
+     quel. Le panneau ne s'affiche que s'il y a effectivement quelque chose à
+     corriger. */
+  const [doublons, setDoublons] = useState(null);
+  const [doublonsOuverts, setDoublonsOuverts] = useState(false);
+  const [correction, setCorrection] = useState(false);
+
+  const chercherDoublons = useCallback(async () => {
+    try {
+      const res = await api.get("/participants/doublons-nom");
+      setDoublons(res.data);
+    } catch {
+      setDoublons(null);   /* silencieux : c'est un bonus, pas la page */
+    }
+  }, []);
+
+  const corrigerDoublons = async () => {
+    if (!doublons?.participants?.length) return;
+    setCorrection(true);
+    try {
+      const res = await api.post("/participants/doublons-nom/corriger", {
+        ids: doublons.participants.map((p) => p.id),
+      });
+      toast.success(`${res.data.corriges} nom${res.data.corriges > 1 ? "s" : ""} corrigé${res.data.corriges > 1 ? "s" : ""}.`);
+      setDoublonsOuverts(false);
+      await chercherDoublons();
+      fetchPage(debouncedSearch.current, genderFilter, page);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La correction a échoué.");
+    } finally {
+      setCorrection(false);
+    }
+  };
+
   /* Debounce search → réinitialise la page */
   const debounceRef = useRef(null);
   const debouncedSearch = useRef(search);
@@ -64,6 +99,7 @@ export default function Participants() {
   /* Chargement initial */
   useEffect(() => {
     fetchPage(search, genderFilter, page);
+    chercherDoublons();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Filtre genre → reset page 1 */
@@ -136,6 +172,65 @@ export default function Participants() {
 
   return (
     <div className="space-y-6">
+      {/* Répétitions héritées des imports passés. Le bandeau ne paraît que
+          s'il y a quelque chose à corriger, et la liste est consultable avant
+          d'agir : une correction en masse sur des identités ne se fait pas à
+          l'aveugle. */}
+      {doublons?.total > 0 && (
+        <section className="card-solid overflow-hidden border border-amber-300">
+          <button
+            type="button"
+            onClick={() => setDoublonsOuverts((o) => !o)}
+            className="flex w-full items-center gap-3 px-4 py-3 text-left"
+          >
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-amber-600" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-slate-800">
+                {doublons.total} nom{doublons.total > 1 ? "s" : ""} de famille écrit
+                {doublons.total > 1 ? "s" : ""} deux fois
+              </span>
+              <span className="block text-xs text-slate-500">
+                Le nom a été recopié dans la colonne « Prénom » lors d&apos;un import. Les
+                attestations l&apos;imprimeraient ainsi.
+              </span>
+            </span>
+            <span className="text-xs text-slate-500">{doublonsOuverts ? "Masquer" : "Voir la liste"}</span>
+          </button>
+
+          {doublonsOuverts && (
+            <div className="border-t border-amber-200">
+              <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                {doublons.participants.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate text-slate-500 line-through">
+                      {p.prenom} {p.nom}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-medium text-slate-800">
+                      {p.prenom_corrige} {p.nom}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
+                <p className="text-xs text-slate-500">
+                  Seul le prénom change ; le nom et l&apos;adresse sont laissés tels quels. Chaque
+                  correction est enregistrée dans le journal d&apos;audit.
+                </p>
+                <button
+                  type="button"
+                  onClick={corrigerDoublons}
+                  disabled={correction}
+                  className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-2 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                >
+                  {correction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {correction ? "Correction…" : `Corriger les ${doublons.total}`}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="surface-glass p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
