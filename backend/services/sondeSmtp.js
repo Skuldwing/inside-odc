@@ -58,9 +58,24 @@ function lireBanniere(hote, port) {
   });
 }
 
-async function sonderSmtp() {
-  const hote = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
+/* Ports de soumission de courrier. On borne volontairement : cette sonde
+   ouvre des connexions sortantes vers un hote choisi par l'appelant, et sans
+   cette liste elle deviendrait un scanner de ports a usage general. */
+const PORTS_AUTORISES = [25, 465, 587, 2525];
+
+/**
+ * @param hoteDemande  serveur a tester ; a defaut celui du serveur
+ * @param portDemande  port a tester ; a defaut celui du serveur
+ *
+ * Essayer une configuration demande sinon de changer les variables de
+ * l'hebergement et d'attendre un redemarrage a chaque tentative. Quand on
+ * cherche lequel de quatre serveurs repond, cela fait quatre redeploiements
+ * pour une question a laquelle une connexion TCP repond en six secondes.
+ */
+async function sonderSmtp(hoteDemande, portDemande) {
+  const hote = String(hoteDemande || process.env.SMTP_HOST || "").trim();
+  const portBrut = Number(portDemande || process.env.SMTP_PORT || 587);
+  const port = PORTS_AUTORISES.includes(portBrut) ? portBrut : 587;
   if (!hote) return null;
 
   const etapes = [];
@@ -121,4 +136,4 @@ async function sonderSmtp() {
   return { hote, port, etapes };
 }
 
-module.exports = { sonderSmtp };
+module.exports = { sonderSmtp, PORTS_AUTORISES };

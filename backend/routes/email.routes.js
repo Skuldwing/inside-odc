@@ -4,7 +4,7 @@ const requireAdmin = require("../middleware/role.middleware");
 const pool = require("../db");
 const { infoVersion } = require("../version");
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
-const { sonderSmtp } = require("../services/sondeSmtp");
+const { sonderSmtp, PORTS_AUTORISES } = require("../services/sondeSmtp");
 const {
   diagnostiquerDomaine,
   configurationEnvoi,
@@ -146,6 +146,35 @@ router.post("/test", authMiddleware, requireAdmin, async (req, res) => {
     }
 
     res.status(502).json({ success: false, ...lecture, brut: brut.slice(0, 600), sonde });
+  }
+});
+
+/* ===== SONDER UN SERVEUR SMTP =====
+   Repond a une seule question, mais celle qui coute le plus cher a poser
+   autrement : ce serveur-la, sur ce port-la, repond-il depuis l'hebergement ?
+   Sans cette route il faut changer les variables et attendre un redemarrage
+   a chaque essai, soit plusieurs minutes pour une reponse qui en prend six
+   secondes. Rien n'est envoye, rien n'est authentifie : on ouvre une
+   connexion et on ecoute. */
+router.post("/sonde-smtp", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const hote = String(req.body?.hote || "").trim();
+    const port = Number(req.body?.port) || 587;
+
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(hote)) {
+      return res.status(400).json({ error: "Nom de serveur invalide." });
+    }
+    if (!PORTS_AUTORISES.includes(port)) {
+      return res.status(400).json({
+        error: `Port non autorise. Ports de soumission acceptes : ${PORTS_AUTORISES.join(", ")}.`,
+      });
+    }
+
+    const sonde = await sonderSmtp(hote, port);
+    res.json({ sonde });
+  } catch (err) {
+    console.error("[SONDE SMTP]", err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
