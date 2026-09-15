@@ -23,13 +23,25 @@ if (!MODELE_TECH_KI_DISPONIBLE) {
   );
 }
 
-function attestationPour({ participant, activity }) {
+/* L'intitule du module tel qu'il sera trace sur le document. Par defaut celui
+   de l'activite, mais un titre interne — « Atelier IA - session 3 (reporte) »
+   — n'a rien a faire sur une attestation remise a un beneficiaire. L'appelant
+   peut donc le reecrire. On borne la longueur : au-dela, le rendu reduit la
+   police jusqu'a l'illisible pour faire tenir le texte sur sa ligne. */
+const LONGUEUR_MODULE_MAX = 120;
+
+function moduleRetenu(activity, remplacement) {
+  const propose = String(remplacement ?? "").trim();
+  return (propose || activity.title || "").slice(0, LONGUEUR_MODULE_MAX);
+}
+
+function attestationPour({ participant, activity, module: intituleModule }) {
   if (MODELE_TECH_KI_DISPONIBLE) {
     return genererAttestationTechKi({
       participant,
       /* Le module imprime sur la ligne est l'intitule de la seance : c'est ce
          que la personne a suivi, plus parlant que le nom du dispositif. */
-      module: activity.title,
+      module: moduleRetenu(activity, intituleModule),
       date: activity.activity_date,
       lieu: activity.location && activity.location !== "-" ? activity.location : "Dakar",
     });
@@ -500,7 +512,7 @@ router.get("/:id/attestation-apercu", authMiddleware, requireWriteAccess, async 
     );
 
     const participant = partRes.rows[0] || { prenom: "Prénom", nom: "Nom du participant" };
-    const pdf = await attestationPour({ participant, activity });
+    const pdf = await attestationPour({ participant, activity, module: req.query.module });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="attestation-apercu.pdf"');
@@ -543,6 +555,10 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
       [id]
     );
 
+    /* Le meme intitule sert au document et au message qui le porte : les voir
+       diverger serait deroutant pour le destinataire. */
+    const intitule = moduleRetenu(activity, req.body?.module);
+
     const participants = partRes.rows;
     const withEmail = participants.filter((p) => p.email);
     const withoutEmail = participants.filter((p) => !p.email);
@@ -560,7 +576,7 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
 
     for (const participant of withEmail) {
       try {
-        const pdfBuffer = await attestationPour({ participant, activity });
+        const pdfBuffer = await attestationPour({ participant, activity, module: intitule });
 
         const fullName =
           [participant.prenom, participant.nom].filter(Boolean).join(" ") ||
@@ -573,7 +589,7 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
         const tpl = await getTemplate("attestation");
         const tplVars = {
           nom: fullName,
-          activite: activity.title,
+          activite: intitule,
           date: activity.activity_date ? new Date(activity.activity_date).toLocaleDateString("fr-FR") : "",
           partenaire: activity.partner_name || activity.coach_name || "",
           dispositif: activity.device_name || "",
@@ -585,7 +601,7 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           toName: fullName,
           subject: renderTemplate(tpl.subject, tplVars),
           html: renderTemplate(tpl.body_html, tplVars),
-          text: `Bonjour ${fullName},\n\nVeuillez trouver ci-joint votre attestation de participation à "${activity.title}".\n\n— ODC Sénégal`,
+          text: `Bonjour ${fullName},\n\nVeuillez trouver ci-joint votre attestation de participation à "${intitule}".\n\n— ODC Sénégal`,
           attachments: [
             {
               filename: `attestation_${safeName}.pdf`,
