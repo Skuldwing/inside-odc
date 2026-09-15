@@ -4,7 +4,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
-const { createPasswordToken } = require("../services/passwordReset");
+const { createPasswordToken, DUREE_LIEN_HEURES } = require("../services/passwordReset");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const requireAdminPin = require("../middleware/pin.middleware");
 const crypto = require("crypto");
@@ -212,7 +212,7 @@ router.post("/", async (req, res) => {
         toName: full_name || email,
         subject: renderTemplate(tpl.subject, vars),
         html: renderTemplate(tpl.body_html, vars),
-        text: `Bonjour ${full_name || email}\nDéfinir le mot de passe: ${link}\nCe lien est valable 24h.`,
+        text: `Bonjour ${full_name || email}\nDéfinir le mot de passe: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
       });
     } catch (err) {
       console.error("Erreur envoi email création utilisateur", err);
@@ -412,7 +412,7 @@ router.post("/:id/reset-password", async (req, res) => {
       toName: user.full_name || user.email,
       subject: renderTemplate(tpl.subject, vars),
       html: renderTemplate(tpl.body_html, vars),
-      text: `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable 24h.`,
+      text: `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
     });
 
     res.json({ success: true });

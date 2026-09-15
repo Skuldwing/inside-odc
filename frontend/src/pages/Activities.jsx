@@ -24,6 +24,11 @@ import {
   ZoomIn,
   AlertTriangle,
   ScanSearch,
+  Award,
+  Eye,
+  Send,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
@@ -369,6 +374,37 @@ export default function Activities({
       setReportError(err?.response?.data?.error || "Erreur lors de la suppression.");
     } finally {
       setReportDeleting(false);
+    }
+  };
+
+  /* ===== ATTESTATIONS =====
+     Le document est généré et envoyé par le serveur depuis longtemps ; rien
+     dans l'interface ne permettait de le déclencher. L'aperçu vient en
+     premier, volontairement : envoyer cinquante attestations nominatives sans
+     en avoir vu une seule est un pari, et une erreur de date ou de module ne
+     se rattrape pas une fois les messages partis. */
+  const [attestationEnvoi, setAttestationEnvoi] = useState(false);
+  const [attestationConfirm, setAttestationConfirm] = useState(false);
+  const [attestationResultat, setAttestationResultat] = useState(null);
+
+  const ouvrirApercuAttestation = () => {
+    if (!editForm?.id) return;
+    const base = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+    window.open(`${base}/activities/${editForm.id}/attestation-apercu`, "_blank");
+  };
+
+  const envoyerAttestations = async () => {
+    if (!editForm?.id) return;
+    setAttestationEnvoi(true);
+    setAttestationResultat(null);
+    try {
+      const res = await api.post(`/activities/${editForm.id}/send-attestations`);
+      setAttestationResultat(res.data);
+    } catch (err) {
+      setAttestationResultat({ erreur: err?.response?.data?.error || "L'envoi a échoué." });
+    } finally {
+      setAttestationEnvoi(false);
+      setAttestationConfirm(false);
     }
   };
 
@@ -1314,6 +1350,123 @@ export default function Activities({
                 </div>
                 <ColumnMappingInfo result={importDirectResult} />
               </div>
+            )}
+          </div>
+
+          {/* Attestations de participation */}
+          <div className="mt-5 pt-5 border-t border-slate-200">
+            <p className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Award className="w-4 h-4 text-slate-500" />
+              Attestations de participation
+            </p>
+
+            {editForm.participants > 0 ? (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500">
+                  Un document nominatif par participant, envoyé en pièce jointe à son adresse email.
+                  Ceux qui n&apos;en ont pas sont ignorés.
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={ouvrirApercuAttestation}
+                    className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Voir un aperçu
+                  </button>
+
+                  {!attestationConfirm && (
+                    <button
+                      type="button"
+                      onClick={() => { setAttestationConfirm(true); setAttestationResultat(null); }}
+                      disabled={attestationEnvoi}
+                      className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 px-3 py-2 text-xs font-medium text-orange-700 transition-colors disabled:opacity-60"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Envoyer aux {editForm.participants} participant{editForm.participants > 1 ? "s" : ""}
+                    </button>
+                  )}
+                </div>
+
+                {/* La confirmation rappelle ce qui ne se rattrape pas : un
+                    message parti ne se reprend pas. */}
+                {attestationConfirm && (
+                  <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 space-y-2">
+                    <p className="text-xs font-semibold text-orange-800">
+                      Envoyer l&apos;attestation à {editForm.participants} participant
+                      {editForm.participants > 1 ? "s" : ""} ?
+                    </p>
+                    <p className="text-xs text-orange-700">
+                      Chaque document porte le nom du bénéficiaire, le module et la date. Vérifiez
+                      l&apos;aperçu avant : un message envoyé ne se reprend pas.
+                      {editForm.participants > 30 && " L'envoi durera plusieurs minutes, ne fermez pas cette fenêtre."}
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setAttestationConfirm(false)}
+                        disabled={attestationEnvoi}
+                        className="btn-ghost border text-xs"
+                      >
+                        Annuler
+                      </button>
+                      <button
+                        type="button"
+                        onClick={envoyerAttestations}
+                        disabled={attestationEnvoi}
+                        className="flex items-center gap-1.5 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium px-3 py-1.5 disabled:opacity-60 transition-colors"
+                      >
+                        {attestationEnvoi
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Send className="w-3 h-3" />}
+                        {attestationEnvoi ? "Envoi en cours…" : "Confirmer l'envoi"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {attestationResultat && (
+                  <div
+                    className={`rounded-xl border px-4 py-3 text-xs space-y-1 ${
+                      attestationResultat.erreur
+                        ? "border-red-200 bg-red-50 text-red-700"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    }`}
+                  >
+                    {attestationResultat.erreur ? (
+                      <p className="font-semibold">{attestationResultat.erreur}</p>
+                    ) : (
+                      <>
+                        <p className="flex items-center gap-1.5 font-semibold">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {attestationResultat.sent} attestation
+                          {attestationResultat.sent > 1 ? "s" : ""} envoyée
+                          {attestationResultat.sent > 1 ? "s" : ""}
+                        </p>
+                        {attestationResultat.skipped > 0 && (
+                          <p className="text-emerald-700">
+                            {attestationResultat.skipped} participant
+                            {attestationResultat.skipped > 1 ? "s" : ""} sans adresse email,
+                            donc ignoré{attestationResultat.skipped > 1 ? "s" : ""}.
+                          </p>
+                        )}
+                        {attestationResultat.errors?.length > 0 && (
+                          <p className="text-red-600">
+                            Échec pour : {attestationResultat.errors.join(", ")}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                Importez d&apos;abord la liste de présences : les attestations sont générées à partir
+                des participants enregistrés.
+              </p>
             )}
           </div>
 

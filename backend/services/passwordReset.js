@@ -16,7 +16,14 @@ async function checkPasswordToken(token) {
   return res.rowCount > 0;
 }
 
-async function createPasswordToken(userId, ttlHours = 12) {
+/* Duree de validite des liens de definition et de reinitialisation de mot de
+   passe. Elle etait fixee a 12 heures ici pendant que les emails — texte comme
+   modeles HTML — annoncaient 24 heures. Un destinataire qui ouvrait son
+   courrier le lendemain matin tombait donc sur un lien expire, en ayant lu
+   qu'il lui restait du temps. Les deux valeurs viennent desormais d'ici. */
+const DUREE_LIEN_HEURES = 24;
+
+async function createPasswordToken(userId, ttlHours = DUREE_LIEN_HEURES) {
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
 
@@ -70,4 +77,4 @@ async function consumePasswordToken(token) {
   return row.user_id;
 }
 
-module.exports = { createPasswordToken, consumePasswordToken, checkPasswordToken };
+module.exports = { createPasswordToken, consumePasswordToken, checkPasswordToken, DUREE_LIEN_HEURES };
