@@ -2,6 +2,7 @@ const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
+const { prenomSansNomRepete, repetitionsDans } = require("../services/nomsDoublons");
 
 const router = express.Router();
 
@@ -185,6 +186,86 @@ router.get("/export.csv", authMiddleware, async (req, res) => {
     /* Si l'ecriture a commence, les en-tetes sont deja partis : on ne peut
        plus renvoyer un JSON d'erreur, on coupe le flux. */
     if (res.headersSent) return res.end();
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== NOMS DE FAMILLE ECRITS DEUX FOIS =====
+   Les imports deja effectues portent la meme repetition que les nouveaux. La
+   detection ne peut pas se faire en SQL — elle compare des mots en ignorant
+   casse et accents — alors on la fait ici, sur les seules colonnes utiles. */
+router.get("/doublons-nom", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    /* Le cloisonnement des roles s'applique : un partenaire ne voit, et ne
+       corrige, que les participants de ses propres activites. */
+    const { baseFrom, params } = buildFilters(req);
+    const r = await pool.query(
+      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email ${baseFrom} ORDER BY p.nom, p.prenom`,
+      params
+    );
+
+    const trouves = repetitionsDans(r.rows).map(({ ligne, propose }) => ({
+      id: ligne.id,
+      nom: ligne.nom,
+      prenom: ligne.prenom,
+      email: ligne.email,
+      prenom_corrige: propose,
+    }));
+
+    res.json({ total: trouves.length, participants: trouves });
+  } catch (err) {
+    console.error("[DOUBLONS NOM]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* La correction s'applique aux identifiants transmis, jamais « a tout ce qui
+   correspond » : l'appelant a vu la liste, il corrige ce qu'il a vu. Entre
+   l'affichage et le clic, la base a pu changer — on reverifie donc chaque
+   ligne avant de la toucher. */
+router.post("/doublons-nom/corriger", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: "Aucun participant à corriger." });
+    if (ids.length > 1000) return res.status(400).json({ error: "Trop de participants en une fois." });
+
+    /* On relit le perimetre autorise exactement comme la liste l'a construit,
+       puis on ne garde que les identifiants demandes. Greffer un « AND » sur
+       baseFrom serait plus court, mais cette clause n'a pas toujours de WHERE
+       devant elle — un administrateur sans filtre n'en produit aucun — et la
+       requete deviendrait invalide selon l'appelant. */
+    const { baseFrom, params } = buildFilters(req);
+    const portee = await pool.query(
+      `SELECT DISTINCT p.id, p.nom, p.prenom ${baseFrom}`,
+      params
+    );
+    const demandes = new Set(ids);
+    const lignes = portee.rows.filter((x) => demandes.has(x.id));
+
+    let corriges = 0;
+    const ignores = [];
+    for (const ligne of lignes) {
+      const propose = prenomSansNomRepete(ligne.prenom, ligne.nom);
+      if (!propose) {
+        ignores.push(ligne.id);
+        continue;
+      }
+      await pool.query("UPDATE participants SET prenom = $1 WHERE id = $2", [propose, ligne.id]);
+      logAudit(req, "UPDATE", "participants", ligne.id, `${propose} ${ligne.nom}`, {
+        avant: `${ligne.prenom} ${ligne.nom}`,
+        apres: `${propose} ${ligne.nom}`,
+        motif: "nom de famille écrit deux fois",
+      });
+      corriges += 1;
+    }
+
+    res.json({ corriges, ignores: ignores.length });
+  } catch (err) {
+    console.error("[DOUBLONS NOM CORRIGER]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });

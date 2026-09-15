@@ -1311,6 +1311,15 @@ export default function Activities({
                   {importDirectResult.lignes_ignorees_nom_prenom_manquants > 0 && (
                     <p className="text-xs text-amber-700">{importDirectResult.lignes_ignorees_nom_prenom_manquants} ligne(s) ignorée(s) (nom/prénom manquant)</p>
                   )}
+                  {/* Signalé ici parce que c'est le seul moment où l'on a le
+                      fichier en tête. Découvrir la répétition au moment
+                      d'envoyer les attestations, c'est déjà trop tard. */}
+                  {importDirectResult.noms_repetes > 0 && (
+                    <p className="text-xs text-amber-700">
+                      {importDirectResult.noms_repetes} nom(s) de famille écrit(s) deux fois dans le
+                      fichier — corrigez-les dans Campagnes → Attestations avant d&apos;envoyer.
+                    </p>
+                  )}
                 </div>
                 <ColumnMappingInfo result={importDirectResult} />
               </div>
@@ -1503,6 +1512,7 @@ function ImportResultSummary({ result }) {
   const total = result.total_lignes ?? 0;
   const ignored = result.lignes_ignorees_nom_prenom_manquants ?? 0;
   const duplicates = result.doublons_dans_activite ?? 0;
+  const nomsRepetes = result.noms_repetes ?? 0;
 
   if (result.sans_fichier) {
     return (
@@ -1528,6 +1538,15 @@ function ImportResultSummary({ result }) {
         <SummaryCard label="Ignorées" value={ignored} />
         <SummaryCard label="Doublons" value={duplicates} />
       </div>
+      {/* Le nom de famille recopié dans la case « Prénom » : signalé tant que
+          le fichier est encore en tête, pas au moment d'envoyer. */}
+      {nomsRepetes > 0 && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {nomsRepetes} nom{nomsRepetes > 1 ? "s" : ""} de famille écrit{nomsRepetes > 1 ? "s" : ""} deux
+          fois dans le fichier (nom recopié dans la colonne « Prénom »). Corrigez-les dans
+          Campagnes → Attestations : ils apparaîtraient ainsi sur les documents.
+        </p>
+      )}
       <ColumnMappingInfo result={result} />
     </div>
   );
