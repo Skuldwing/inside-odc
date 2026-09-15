@@ -1077,6 +1077,25 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
    et n'a rien à faire sur un document remis à un bénéficiaire. Il se
    réécrit donc ici, avant l'envoi, et l'aperçu tient compte de la
    correction. */
+/* Le nom de famille se retrouve parfois écrit deux fois — « Rockaya Samb » en
+   prénom, « Samb » en nom — et l'attestation l'imprime tel quel. Cela vient des
+   feuilles de présence où chacun écrit son nom entier dans la case « Prénom » :
+   l'import, lui, a fidèlement recopié ce qu'il a lu.
+   La répétition se trouve en fin de prénom comme en tête, selon que la personne
+   a écrit « Rockaya Samb » ou « Niang Khadidiatou ». */
+function normaliserNom(v) {
+  return String(v || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+function prenomSansNomRepete(prenom, nom) {
+  const n = normaliserNom(nom);
+  const mots = String(prenom || "").trim().split(/\s+/).filter(Boolean);
+  if (!n || mots.length < 2) return null;
+  if (normaliserNom(mots[mots.length - 1]) === n) return mots.slice(0, -1).join(" ");
+  if (normaliserNom(mots[0]) === n) return mots.slice(1).join(" ");
+  return null;
+}
+
 function AttestationsTab({ activities }) {
   const toast = useToast();
   const [ouverte, setOuverte] = useState(null);   // id de l'activité dépliée
@@ -1104,6 +1123,31 @@ function AttestationsTab({ activities }) {
       setChargeListe(false);
     }
   }, [toast]);
+
+  /* Corriger cinquante lignes une par une découragerait n'importe qui : la
+     correction en lot applique exactement ce que chaque ligne affiche déjà. */
+  const [corrigeTout, setCorrigeTout] = useState(false);
+
+  const aCorriger = (participants || [])
+    .map((p) => ({ p, propose: prenomSansNomRepete(p.prenom, p.nom) }))
+    .filter((x) => x.propose);
+
+  const corrigerTousLesDoublons = async () => {
+    setCorrigeTout(true);
+    let faits = 0;
+    for (const { p, propose } of aCorriger) {
+      try {
+        const res = await api.patch(`/participants/${p.id}`, { nom: p.nom, prenom: propose });
+        setParticipants((l) => l.map((x) => (x.id === res.data.id ? { ...x, ...res.data } : x)));
+        faits += 1;
+      } catch {
+        /* On continue : une ligne récalcitrante ne doit pas bloquer les autres. */
+      }
+    }
+    setCorrigeTout(false);
+    if (faits) toast.success(`${faits} nom${faits > 1 ? "s" : ""} corrigé${faits > 1 ? "s" : ""}.`);
+    if (faits < aCorriger.length) toast.error(`${aCorriger.length - faits} correction(s) ont échoué.`);
+  };
 
   const enregistrerIdentite = async () => {
     if (!edite) return;
@@ -1230,6 +1274,25 @@ function AttestationsTab({ activities }) {
                     )}
                   </p>
 
+                  {aCorriger.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2">
+                      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" aria-hidden="true" />
+                      <span className="min-w-0 flex-1 text-xs text-amber-900">
+                        {aCorriger.length} noms de famille sont écrits deux fois. Ils apparaîtraient
+                        ainsi sur les attestations.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={corrigerTousLesDoublons}
+                        disabled={corrigeTout}
+                        className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                      >
+                        {corrigeTout && <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                        {corrigeTout ? "Correction…" : `Tout corriger (${aCorriger.length})`}
+                      </button>
+                    </div>
+                  )}
+
                   {chargeListe ? (
                     <p className="flex items-center gap-2 px-3 py-3 text-xs text-slate-500">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Chargement…
@@ -1267,22 +1330,41 @@ function AttestationsTab({ activities }) {
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <span className="min-w-0 flex-1 truncate text-slate-800">
-                                {p.prenom} {p.nom}
-                                {!p.email && (
-                                  <span className="ml-2 text-amber-600">sans adresse email</span>
-                                )}
-                              </span>
-                              <span className="hidden min-w-0 flex-1 truncate text-slate-400 sm:block">{p.email || ""}</span>
-                              <button
-                                type="button"
-                                onClick={() => setEdite({ id: p.id, nom: p.nom, prenom: p.prenom })}
-                                className="flex-shrink-0 text-slate-400 hover:text-orange-600"
-                                title="Corriger le nom"
-                              >
-                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                              </button>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="min-w-0 flex-1 truncate text-slate-800">
+                                  {p.prenom} {p.nom}
+                                  {!p.email && (
+                                    <span className="ml-2 text-amber-600">sans adresse email</span>
+                                  )}
+                                </span>
+                                <span className="hidden min-w-0 flex-1 truncate text-slate-400 sm:block">{p.email || ""}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEdite({ id: p.id, nom: p.nom, prenom: p.prenom })}
+                                  className="flex-shrink-0 text-slate-400 hover:text-orange-600"
+                                  title="Corriger le nom"
+                                >
+                                  <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                              </div>
+
+                              {/* Le nom de famille apparaît deux fois : on le
+                                  signale et on propose le texte corrigé plutôt
+                                  que de laisser deviner quoi retirer. */}
+                              {prenomSansNomRepete(p.prenom, p.nom) && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEdite({ id: p.id, nom: p.nom, prenom: prenomSansNomRepete(p.prenom, p.nom) })
+                                  }
+                                  className="flex items-center gap-1.5 text-[11px] text-amber-700 hover:text-amber-900"
+                                >
+                                  <AlertTriangle className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                                  « {p.nom} » est écrit deux fois — corriger en «&nbsp;
+                                  {prenomSansNomRepete(p.prenom, p.nom)} {p.nom}&nbsp;»
+                                </button>
+                              )}
                             </div>
                           )}
                         </li>
