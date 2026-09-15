@@ -381,6 +381,35 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
 });
 
 /* ===== EXPORT LISTE PRESENCES PAR ACTIVITE ===== */
+/* ===== PARTICIPANTS D'UNE ACTIVITE =====
+   Le nom est trace sur l'attestation : avant d'en envoyer cinquante, il faut
+   pouvoir relire la liste. Elle n'existait qu'en export tableur, ce qui oblige
+   a quitter la plateforme pour verifier une orthographe. */
+router.get("/:id/participants", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const actRes = await pool.query(
+      "SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    const r = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.email
+         FROM participants p
+         JOIN activity_participants ap ON ap.participant_id = p.id
+        WHERE ap.activity_id = $1
+        ORDER BY p.nom, p.prenom`,
+      [id]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error("[ACTIVITE PARTICIPANTS]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 router.get("/:id/participants/export", authMiddleware, async (req, res) => {
   try {
     const XLSX = require("xlsx");

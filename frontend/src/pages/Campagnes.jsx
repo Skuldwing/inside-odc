@@ -1084,16 +1084,60 @@ function AttestationsTab({ activities }) {
   const [confirme, setConfirme] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   const [resultat, setResultat] = useState(null);
+  /* La liste nominative : c'est elle qui alimente les attestations, et c'est
+     donc là que se relisent les orthographes avant l'envoi. */
+  const [participants, setParticipants] = useState(null);
+  const [chargeListe, setChargeListe] = useState(false);
+  const [edite, setEdite] = useState(null);        // { id, nom, prenom }
+  const [enregistre, setEnregistre] = useState(false);
+
+  const chargerParticipants = useCallback(async (activityId) => {
+    setChargeListe(true);
+    setParticipants(null);
+    try {
+      const res = await api.get(`/activities/${activityId}/participants`);
+      setParticipants(res.data || []);
+    } catch {
+      setParticipants([]);
+      toast.error("Impossible de charger la liste des participants.");
+    } finally {
+      setChargeListe(false);
+    }
+  }, [toast]);
+
+  const enregistrerIdentite = async () => {
+    if (!edite) return;
+    const nom = edite.nom.trim();
+    const prenom = edite.prenom.trim();
+    if (!nom || !prenom) {
+      toast.error("Le nom et le prénom sont tous deux requis.");
+      return;
+    }
+    setEnregistre(true);
+    try {
+      const res = await api.patch(`/participants/${edite.id}`, { nom, prenom });
+      setParticipants((l) => l.map((p) => (p.id === res.data.id ? { ...p, ...res.data } : p)));
+      setEdite(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La correction n'a pas été enregistrée.");
+    } finally {
+      setEnregistre(false);
+    }
+  };
 
   const avecParticipants = (activities || [])
     .filter((a) => (a.participants_count ?? 0) > 0)
     .sort((a, b) => String(b.activity_date || "").localeCompare(String(a.activity_date || "")));
 
   const ouvrir = (a) => {
-    setOuverte(a.id === ouverte ? null : a.id);
+    const ferme = a.id === ouverte;
+    setOuverte(ferme ? null : a.id);
     setIntitule(a.title || "");
     setConfirme(false);
     setResultat(null);
+    setEdite(null);
+    setParticipants(null);
+    if (!ferme) chargerParticipants(a.id);
   };
 
   const apercu = (a) => {
@@ -1174,6 +1218,83 @@ function AttestationsTab({ activities }) {
                     Le titre de l&apos;activité reste « {a.title} » : seule l&apos;attestation change.
                   </p>
                 )}
+
+                {/* La liste nominative, relue avant l'envoi. Une coquille dans
+                    un tableau se corrige plus tard ; imprimée sur une
+                    attestation remise à la personne, elle ne se rattrape pas. */}
+                <div className="rounded-xl border border-slate-200 bg-white">
+                  <p className="border-b border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
+                    Participants
+                    {participants && (
+                      <span className="font-normal text-slate-500"> — {participants.length} inscrit{participants.length > 1 ? "s" : ""}</span>
+                    )}
+                  </p>
+
+                  {chargeListe ? (
+                    <p className="flex items-center gap-2 px-3 py-3 text-xs text-slate-500">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> Chargement…
+                    </p>
+                  ) : !participants?.length ? (
+                    <p className="px-3 py-3 text-xs text-slate-500">Aucun participant enregistré.</p>
+                  ) : (
+                    <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
+                      {participants.map((p) => (
+                        <li key={p.id} className="px-3 py-2 text-xs">
+                          {edite?.id === p.id ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              <input
+                                value={edite.prenom}
+                                onChange={(e) => setEdite({ ...edite, prenom: e.target.value })}
+                                placeholder="Prénom"
+                                className="input min-w-0 flex-1 text-xs"
+                              />
+                              <input
+                                value={edite.nom}
+                                onChange={(e) => setEdite({ ...edite, nom: e.target.value })}
+                                placeholder="Nom"
+                                className="input min-w-0 flex-1 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={enregistrerIdentite}
+                                disabled={enregistre}
+                                className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-60"
+                              >
+                                {enregistre ? "…" : "Enregistrer"}
+                              </button>
+                              <button type="button" onClick={() => setEdite(null)} className="text-xs text-slate-500 hover:text-slate-700">
+                                Annuler
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span className="min-w-0 flex-1 truncate text-slate-800">
+                                {p.prenom} {p.nom}
+                                {!p.email && (
+                                  <span className="ml-2 text-amber-600">sans adresse email</span>
+                                )}
+                              </span>
+                              <span className="hidden min-w-0 flex-1 truncate text-slate-400 sm:block">{p.email || ""}</span>
+                              <button
+                                type="button"
+                                onClick={() => setEdite({ id: p.id, nom: p.nom, prenom: p.prenom })}
+                                className="flex-shrink-0 text-slate-400 hover:text-orange-600"
+                                title="Corriger le nom"
+                              >
+                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
+                    Corriger une orthographe la rectifie partout : la fiche du bénéficiaire est
+                    la même dans toutes ses activités.
+                  </p>
+                </div>
 
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => apercu(a)} className="btn-ghost border text-xs">
