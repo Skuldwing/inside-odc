@@ -1596,12 +1596,16 @@ function ImportResultSummary({ result }) {
    l'explique. On les nomme ici, avec le motif et la personne qui détient déjà
    l'adresse, tant que le fichier est encore sous la main. */
 const MOTIFS_CONTACT = {
-  deja_attribuee: (c) =>
+  adresse_differente: (c) =>
     c.detenteur
-      ? `déjà enregistrée pour ${c.detenteur}`
-      : "déjà enregistrée pour quelqu'un d'autre",
+      ? `déjà enregistrée sous une autre adresse pour ${c.detenteur} — c'est celle-là qui est conservée`
+      : "cette personne est déjà enregistrée sous une autre adresse",
+  /* Motifs des versions précédentes, quand une adresse ne pouvait désigner
+     qu'une personne. Conservés pour ne pas afficher un code brut si un ancien
+     rapport est relu. */
+  deja_attribuee: (c) =>
+    c.detenteur ? `déjà enregistrée pour ${c.detenteur}` : "déjà enregistrée pour quelqu'un d'autre",
   doublon_fichier: () => "la même adresse figure sur plusieurs lignes du fichier",
-  adresse_differente: () => "cette personne est déjà enregistrée sous une autre adresse",
 };
 
 function ContactsIgnoresInfo({ result }) {
@@ -1628,7 +1632,8 @@ function ContactsIgnoresInfo({ result }) {
       {ignores.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <p className="font-semibold">
-            {ignores.length} coordonnée{ignores.length > 1 ? "s" : ""} non enregistrée
+            {ignores.length} adresse{ignores.length > 1 ? "s" : ""} du fichier différente
+            {ignores.length > 1 ? "s" : ""} de celle{ignores.length > 1 ? "s" : ""} enregistrée
             {ignores.length > 1 ? "s" : ""}
           </p>
           <ul className="mt-1 space-y-0.5">
@@ -1640,8 +1645,8 @@ function ContactsIgnoresInfo({ result }) {
             ))}
           </ul>
           <p className="mt-1.5 text-amber-700">
-            Une adresse ne peut désigner qu&apos;une personne. Ces participants n&apos;en ont donc
-            pas et ne recevront ni campagne ni attestation : corrigez le fichier puis réimportez-le.
+            L&apos;adresse déjà enregistrée est conservée — le fichier n&apos;est pas forcément
+            plus à jour. Si c&apos;est la nouvelle qui vaut, corrigez la fiche dans Participants.
           </p>
         </div>
       )}

@@ -432,14 +432,7 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
          qu'on conserve lui est reprise — y compris l'email et le telephone,
          qui sont justement ce qu'une liste apporte quand une autre ne l'avait
          pas. COALESCE ne remplit que ce qui manque : rien de renseigne n'est
-         ecrase, et un desaccord a deja ete montre a l'utilisateur.
-         L'email et le telephone sont supprimes de la fiche absorbee avant
-         d'etre poses sur celle qu'on garde : l'index d'unicite refuserait
-         qu'ils existent deux fois, meme le temps d'une transaction. */
-      await client.query(
-        "UPDATE participants SET email = NULL, telephone = NULL WHERE id = $1",
-        [id]
-      );
+         ecrase, et un desaccord a deja ete montre a l'utilisateur. */
       await client.query(
         `UPDATE participants SET
            email     = COALESCE(email, $2),
