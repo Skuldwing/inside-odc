@@ -65,6 +65,7 @@ export default function Utilisateurs() {
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkCopied2, setLinkCopied2] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -155,6 +156,7 @@ export default function Utilisateurs() {
     setLinkModal(null);
     setLinkCopied2(false);
     setEmailSent(false);
+    setEmailError(null);
     try {
       const res = await api.post(`/users/${u.id}/reset-link`);
       setLinkModal({ link: res.data.link, full_name: res.data.full_name || u.full_name, email: res.data.email || u.email, userId: u.id });
@@ -165,13 +167,26 @@ export default function Utilisateurs() {
     }
   };
 
+  /* Envoyer cree un nouveau jeton, qui condamne celui deja affiche. La reponse
+     rapporte donc le lien reellement parti, en reussite comme en echec : sans
+     lui, un envoi rate laissait la personne sans mail ET avec un lien mort a
+     l'ecran — les deux portes fermees d'un coup. */
   const sendResetEmail = async () => {
     if (!linkModal?.userId) return;
+    setEmailError(null);
     try {
-      await api.post(`/users/${linkModal.userId}/reset-password`);
+      const res = await api.post(`/users/${linkModal.userId}/reset-password`);
+      if (res.data?.link) setLinkModal((m) => ({ ...m, link: res.data.link }));
+      setLinkCopied2(false);
       setEmailSent(true);
-    } catch {
-      toast.error("L'envoi de l'email a échoué.");
+    } catch (err) {
+      const d = err.response?.data || {};
+      if (d.link) setLinkModal((m) => ({ ...m, link: d.link }));
+      setLinkCopied2(false);
+      setEmailError({
+        cause: d.cause || d.error || "L'envoi de l'email a échoué.",
+        remede: d.remede || null,
+      });
     }
   };
 
@@ -542,7 +557,29 @@ export default function Utilisateurs() {
                       {linkCopied2 ? <><Check className="w-4 h-4" /> Copié</> : <><Copy className="w-4 h-4" /> Copier</>}
                     </button>
                   </div>
-                  <p className="text-xs text-slate-500">Ce lien est valable 24h. Un nouveau lien invalide le précédent.</p>
+                  <p className="text-xs text-slate-500">
+                    Ce lien est valable 24h. Un nouveau lien invalide le précédent — le lien
+                    affiché ici est toujours le dernier, même après un envoi par email.
+                  </p>
+
+                  {/* Quand l'envoi échoue, dire pourquoi. « L'envoi a échoué »
+                      laissait croire à une panne de la plateforme et ne disait
+                      pas que le lien ci-dessus, lui, fonctionne. */}
+                  {emailError && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
+                      <p className="text-sm font-medium text-amber-900 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        {emailError.cause}
+                      </p>
+                      {emailError.remede && (
+                        <p className="text-xs text-amber-800 pl-6">{emailError.remede}</p>
+                      )}
+                      <p className="text-xs text-amber-800 pl-6">
+                        Le lien ci-dessus reste valable : copiez-le et transmettez-le
+                        directement à la personne.
+                      </p>
+                    </div>
+                  )}
 
                   {linkModal.email && (
                     <div className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-3 ${emailSent ? "bg-green-50 border-green-200" : "bg-slate-50 border-slate-200"}`}>
@@ -563,7 +600,7 @@ export default function Utilisateurs() {
                   )}
 
                   <div className="flex justify-end">
-                    <button onClick={() => { setLinkModal(null); setLinkCopied2(false); setEmailSent(false); }} className="btn-ghost border">Fermer</button>
+                    <button onClick={() => { setLinkModal(null); setLinkCopied2(false); setEmailSent(false); setEmailError(null); }} className="btn-ghost border">Fermer</button>
                   </div>
                 </div>
               )}
