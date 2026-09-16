@@ -406,6 +406,11 @@ export default function Landing() {
           </div>
           <div className="lp-pied-liens">
             <Link to={lienApp}>{libelleApp}</Link>
+            {/* Qui édite ce site, et comment le joindre. Un visiteur — ou un
+                service de conformité qui vérifie un expéditeur — doit pouvoir
+                le trouver sans compte. */}
+            <Link to="/mentions-legales">Mentions légales</Link>
+            <a href="mailto:contact@inside-odc.com">contact@inside-odc.com</a>
             <p className="lp-pied-mentions">
               © {new Date().getFullYear()} Orange Digital Center Sénégal · Sonatel
             </p>
