@@ -168,6 +168,48 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         .rect(0.16 * POUCE, 0.16 * POUCE, LARGEUR - 0.32 * POUCE, HAUTEUR - 0.32 * POUCE)
         .stroke();
 
+      /* ── Decors ──────────────────────────────────────────────────────────
+         Quatre rectangles arrondis pivotes de 47,8 degres : un a gauche, qui
+         deborde de la page, et trois au coin inferieur droit — un aplat
+         orange, un cartouche noir, et le contour orange qui l'entoure. Ils
+         manquaient entierement au rendu, et c'est sur le cartouche noir que se
+         lit la devise du programme : sans lui, elle etait ecrite en blanc sur
+         du blanc.
+         Les mesures viennent des groupes du .pptx, qui portent la rotation ;
+         le rayon des coins vient du trace de chaque forme. */
+      const rectanglePivote = (cx, cy, l, h, rayon, angle, { fond, contour, epaisseur } = {}) => {
+        doc.save();
+        doc.rotate(angle, { origin: [cx, cy] });
+        doc.roundedRect(cx - l / 2, cy - h / 2, l, h, rayon);
+        if (fond) doc.fillColor(fond);
+        if (contour) doc.lineWidth(epaisseur || 1).strokeColor(contour);
+        if (fond && contour) doc.fillAndStroke();
+        else if (fond) doc.fill();
+        else doc.stroke();
+        doc.restore();
+      };
+
+      const ANGLE_DECOR = 47.82;
+      /* A gauche, a cheval sur le bord. */
+      rectanglePivote(-0.149 * POUCE, 2.810 * POUCE, 2.020 * POUCE, 2.007 * POUCE,
+        0.230 * POUCE, ANGLE_DECOR, { fond: ORANGE });
+      /* Au coin inferieur droit, dans l'ordre du modele. */
+      rectanglePivote(10.944 * POUCE, 6.805 * POUCE, 1.706 * POUCE, 1.822 * POUCE,
+        0.230 * POUCE, ANGLE_DECOR, { fond: ORANGE });
+      rectanglePivote(10.978 * POUCE, 7.474 * POUCE, 2.388 * POUCE, 2.083 * POUCE,
+        0.164 * POUCE, ANGLE_DECOR, { fond: NOIR });
+      rectanglePivote(10.985 * POUCE, 7.194 * POUCE, 2.644 * POUCE, 2.085 * POUCE,
+        0.148 * POUCE, ANGLE_DECOR, { contour: ORANGE, epaisseur: 2.25 });
+
+      /* Le trait oblique pose sur le decor de gauche. */
+      doc.save()
+        .lineWidth(1)
+        .strokeColor(NOIR)
+        .moveTo(-0.14 * POUCE, (3.15 + 1.21) * POUCE)
+        .lineTo((-0.14 + 1.36) * POUCE, 3.15 * POUCE)
+        .stroke()
+        .restore();
+
       /* ── Logo Orange Digital Center ───────────────────────────────────── */
       doc.image(FICHIERS.logo, 0.68 * POUCE, 0.65 * POUCE, {
         width: 2.91 * POUCE,
@@ -217,8 +259,19 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
           .stroke();
       };
 
+      /* Le modele empile quatre traits sous « Decernee a » : le nom s'ecrit
+         dessus, comme sur du papier regle. Un seul etait trace. */
       const LIGNE_NOM_Y = 4.29 * POUCE;
-      ligne(2.35 * POUCE, LIGNE_NOM_Y, 6.41 * POUCE);
+      for (const y of [3.87, 4.01, 4.15, 4.29]) {
+        ligne(2.35 * POUCE, y * POUCE, 6.41 * POUCE);
+      }
+
+      /* Sous la zone du nom, un trait bleu nuit termine par deux pastilles
+         rondes — l'equivalent des extremites « oval » du modele. */
+      const PUCE = 2.2;
+      ligne(2.08 * POUCE, 4.43 * POUCE, 6.94 * POUCE, "#041321");
+      doc.circle(2.08 * POUCE, 4.43 * POUCE, PUCE).fillColor("#041321").fill();
+      doc.circle((2.08 + 6.94) * POUCE, 4.43 * POUCE, PUCE).fillColor("#041321").fill();
 
       const LIGNE_MODULE_Y = 5.31 * POUCE;
       ligne(2.36 * POUCE, LIGNE_MODULE_Y, 6.41 * POUCE);
@@ -271,15 +324,12 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         .text("Fait à :", 6.08 * POUCE, 6.98 * POUCE, { lineBreak: false });
 
       /* ── Signature Tech-Ki, sur le bandeau orange de droite ───────────── */
-      /* Le modele la porte en gras italique dans une boite etroite collee au
-         bord droit, soulignee d'un trait orange. Elle y est ecrite en blanc,
-         donc invisible sur ce fond clair — vestige d'un aplat de couleur
-         retire depuis. On la rend dans le meme gris que « Fait a : » : une
-         devise qu'on ne lit pas ne sert a rien. */
+      /* En blanc, comme le modele : elle se lit sur le cartouche noir du coin
+         inferieur droit, qui est desormais trace. */
       doc
         .font("Helvetica-BoldOblique")
         .fontSize(10)
-        .fillColor(GRIS)
+        .fillColor("#FFFFFF")
         .text("Le coup de pouce numérique pour tous", 10.05 * POUCE, 6.92 * POUCE, {
           width: 1.39 * POUCE,
           align: "left",
