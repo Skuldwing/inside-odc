@@ -8,7 +8,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 
-const { repetitionsDans, prenomSansNomRepete, normaliser } = require("../services/nomsDoublons");
+const { repetitionsDans, normaliser, clePersonne, memePersonne } = require("../services/nomsDoublons");
 
 const router = express.Router();
 
@@ -80,33 +80,6 @@ function normalizePhone(value) {
   if (value === null || value === undefined) return null;
   const v = String(value).trim();
   return v || null;
-}
-
-/* Reconnaitre qu'une ligne de fichier designe quelqu'un de deja connu.
- *
- * La comparaison stricte qui servait ici echouait des que l'ecriture variait
- * d'un fichier a l'autre — un accent, une majuscule, une espace double. Elle
- * echouait surtout sur le cas le plus frequent des feuilles de presence : le
- * nom de famille recopie dans la case « Prenom ». « Samb / Rockaya Samb » et
- * « Samb / Rockaya » sont la meme personne ; l'import les prenait pour deux, et
- * comme l'adresse email appartenait deja a la premiere, la seconde etait creee
- * sans adresse. C'est ainsi que des adresses disparaissaient en silence.
- *
- * On compare donc une forme canonique : sans accent, sans casse, sans espaces
- * superflus, et debarrassee du nom de famille repete. */
-function clePersonne(nom, prenom) {
-  const aplatir = (v) => normaliser(v).replace(/[^a-z0-9]+/g, " ").trim();
-  const p = prenomSansNomRepete(prenom, nom) ?? prenom;
-  const cleNom = aplatir(nom);
-  const clePrenom = aplatir(p);
-  if (!cleNom || !clePrenom) return null;
-  return `${cleNom}|${clePrenom}`;
-}
-
-function memePersonne(existant, nom, prenom) {
-  const a = clePersonne(existant?.nom, existant?.prenom);
-  const b = clePersonne(nom, prenom);
-  return Boolean(a && b && a === b);
 }
 
 /* ===== RÉSOLUTION DE CHAMPS : alias + pattern + Levenshtein ===== */
@@ -461,7 +434,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     if (!ex && it.telephone) ex = byPhone.get(it.telephone);
     if (!ex && it.cle && parNom.get(it.cle)) { ex = parNom.get(it.cle); rattachements++; }
 
-    if (ex && memePersonne(ex, it.nom, it.prenom)) {
+    if (ex && memePersonne(ex, it)) {
       items[i].resolvedId = ex.id;
       /* La fiche existe mais il lui manque ce que le fichier apporte : c'est
          ce qui repare les adresses perdues par les imports precedents. */
@@ -560,7 +533,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     for (const { p, j } of withContact) {
       let found = p.email ? byEmail.get(p.email) : null;
       if (!found && p.telephone) found = byPhone.get(p.telephone);
-      if (found && memePersonne(found, p.nom, p.prenom)) {
+      if (found && memePersonne(found, p)) {
         items[toInsertIdx[j]].resolvedId = found.id;
       } else {
         const id = await insertParticipant(client, { ...p, email: null, telephone: null });

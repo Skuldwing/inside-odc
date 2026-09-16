@@ -71,6 +71,40 @@ export default function Participants() {
     }
   };
 
+  /* Fiches en double laissées par l'ancien import : la même personne inscrite
+     deux fois, dont une fois sans coordonnées. La fusion supprime la fiche
+     vide après lui avoir repris ses présences — irréversible, donc jamais
+     automatique et toujours consultable avant. */
+  const [fiches, setFiches] = useState(null);
+  const [fichesOuvertes, setFichesOuvertes] = useState(false);
+  const [fusion, setFusion] = useState(false);
+
+  const chercherFiches = useCallback(async () => {
+    try {
+      const res = await api.get("/participants/fiches-doublons");
+      setFiches(res.data);
+    } catch {
+      setFiches(null);
+    }
+  }, []);
+
+  const fusionnerFiches = async () => {
+    const ids = (fiches?.groupes || []).flatMap((g) => g.absorber.map((f) => f.id));
+    if (!ids.length) return;
+    setFusion(true);
+    try {
+      const res = await api.post("/participants/fiches-doublons/fusionner", { ids });
+      toast.success(`${res.data.fusionnees} fiche${res.data.fusionnees > 1 ? "s" : ""} fusionnée${res.data.fusionnees > 1 ? "s" : ""}.`);
+      setFichesOuvertes(false);
+      await chercherFiches();
+      fetchPage(debouncedSearch.current, genderFilter, page);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La fusion a échoué.");
+    } finally {
+      setFusion(false);
+    }
+  };
+
   /* Debounce search → réinitialise la page */
   const debounceRef = useRef(null);
   const debouncedSearch = useRef(search);
@@ -100,6 +134,7 @@ export default function Participants() {
   useEffect(() => {
     fetchPage(search, genderFilter, page);
     chercherDoublons();
+    chercherFiches();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Filtre genre → reset page 1 */
@@ -224,6 +259,70 @@ export default function Participants() {
                 >
                   {correction ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   {correction ? "Correction…" : `Corriger les ${doublons.total}`}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Fiches en double. L'ancien import rapprochait les noms par égalité
+          stricte : une variation d'écriture lui faisait créer une seconde
+          fiche, forcément sans adresse puisque l'adresse était déjà prise. Il
+          ne les fabrique plus ; celles qui existent restent à fusionner. */}
+      {fiches?.total > 0 && (
+        <section className="card-solid overflow-hidden border border-sky-300">
+          <button
+            type="button"
+            onClick={() => setFichesOuvertes((o) => !o)}
+            className="flex w-full items-center gap-3 px-4 py-3 text-left"
+          >
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 text-sky-600" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-slate-800">
+                {fiches.total} fiche{fiches.total > 1 ? "s" : ""} en double, sans coordonnées
+              </span>
+              <span className="block text-xs text-slate-500">
+                La même personne inscrite deux fois par un ancien import. La fiche vide
+                n&apos;a ni adresse ni téléphone : elle ne reçoit rien.
+              </span>
+            </span>
+            <span className="text-xs text-slate-500">{fichesOuvertes ? "Masquer" : "Voir la liste"}</span>
+          </button>
+
+          {fichesOuvertes && (
+            <div className="border-t border-sky-200">
+              <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                {fiches.groupes.map((g) => (
+                  <li key={g.garder.id} className="px-4 py-2 text-xs">
+                    <p className="font-medium text-slate-800">
+                      {g.garder.prenom} {g.garder.nom}
+                      <span className="ml-1.5 font-normal text-slate-500">
+                        {g.garder.email || g.garder.telephone} — fiche conservée
+                      </span>
+                    </p>
+                    {g.absorber.map((f) => (
+                      <p key={f.id} className="text-slate-500 line-through">
+                        {f.prenom} {f.nom} — fiche supprimée
+                      </p>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
+                <p className="text-xs text-slate-500">
+                  Les présences de la fiche supprimée passent sur celle qui est conservée : aucune
+                  activité n&apos;est perdue. L&apos;opération est définitive et consignée dans le
+                  journal d&apos;audit.
+                </p>
+                <button
+                  type="button"
+                  onClick={fusionnerFiches}
+                  disabled={fusion}
+                  className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+                >
+                  {fusion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {fusion ? "Fusion…" : `Fusionner les ${fiches.total}`}
                 </button>
               </div>
             </div>

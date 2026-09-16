@@ -2,7 +2,7 @@ const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
-const { prenomSansNomRepete, repetitionsDans } = require("../services/nomsDoublons");
+const { prenomSansNomRepete, repetitionsDans, clePersonne } = require("../services/nomsDoublons");
 
 const router = express.Router();
 
@@ -267,6 +267,123 @@ router.post("/doublons-nom/corriger", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("[DOUBLONS NOM CORRIGER]", err);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== FICHES EN DOUBLE =====
+   Une meme personne inscrite deux fois, dont une fois sans coordonnees.
+   C'est la trace laissee par l'ancien import : il rapprochait les noms par
+   egalite stricte, si bien qu'une variation d'ecriture — un accent, le nom de
+   famille recopie dans la case « Prenom » — lui faisait creer une seconde
+   fiche, forcement sans adresse puisque l'adresse appartenait deja a la
+   premiere. L'import ne les fabrique plus ; celles qui existent sont encore la.
+
+   On ne propose que les groupes ou une seule fiche porte des coordonnees. Deux
+   fiches renseignees differemment peuvent etre deux personnes, et deux fiches
+   vides sont indiscernables : dans les deux cas on ne devine pas. */
+function grouperFichesDoubles(fiches) {
+  const groupes = new Map();
+  for (const f of fiches) {
+    const cle = clePersonne(f.nom, f.prenom);
+    if (!cle) continue;
+    if (!groupes.has(cle)) groupes.set(cle, []);
+    groupes.get(cle).push(f);
+  }
+
+  const resultat = [];
+  for (const membres of groupes.values()) {
+    if (membres.length < 2) continue;
+    const renseignees = membres.filter((f) => f.email || f.telephone);
+    if (renseignees.length !== 1) continue;
+    const garder = renseignees[0];
+    resultat.push({
+      garder,
+      absorber: membres.filter((f) => f.id !== garder.id),
+    });
+  }
+  return resultat;
+}
+
+router.get("/fiches-doublons", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const { baseFrom, params } = buildFilters(req);
+    const r = await pool.query(
+      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone ${baseFrom}
+       ORDER BY p.id`,
+      params
+    );
+
+    const groupes = grouperFichesDoubles(r.rows);
+    res.json({
+      total: groupes.reduce((n, g) => n + g.absorber.length, 0),
+      groupes,
+    });
+  } catch (err) {
+    console.error("[FICHES DOUBLONS]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* La fusion deplace les presences puis supprime la fiche vide. Elle est
+   irreversible : on reverifie donc chaque cas au moment de l'appliquer, la
+   base ayant pu changer depuis l'affichage de la liste. */
+router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
+    if (!ids.length) return res.status(400).json({ error: "Aucune fiche à fusionner." });
+    if (ids.length > 1000) return res.status(400).json({ error: "Trop de fiches en une fois." });
+
+    const { baseFrom, params } = buildFilters(req);
+    const portee = await client.query(
+      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone ${baseFrom} ORDER BY p.id`,
+      params
+    );
+
+    /* Le groupe se recalcule ici, sur l'etat courant : l'appelant designe les
+       fiches a absorber, jamais celle a conserver. Une fiche qui a recu une
+       adresse entre-temps n'est plus un doublon et sort d'elle-meme. */
+    const aAbsorber = new Map(); // id a supprimer → id a conserver
+    for (const groupe of grouperFichesDoubles(portee.rows)) {
+      for (const fiche of groupe.absorber) {
+        if (ids.includes(fiche.id)) aAbsorber.set(fiche.id, { garder: groupe.garder, fiche });
+      }
+    }
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let fusionnees = 0;
+    for (const [id, { garder, fiche }] of aAbsorber) {
+      await client.query(
+        `INSERT INTO activity_participants (activity_id, participant_id)
+         SELECT activity_id, $2 FROM activity_participants WHERE participant_id = $1
+         ON CONFLICT DO NOTHING`,
+        [id, garder.id]
+      );
+      await client.query("DELETE FROM participants WHERE id = $1", [id]);
+      logAudit(req, "DELETE", "participants", id, `${fiche.prenom} ${fiche.nom}`, {
+        motif: "fiche en double sans coordonnées",
+        fusionnee_avec: garder.id,
+      });
+      fusionnees += 1;
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    res.json({ fusionnees, ignorees: ids.length - fusionnees });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK");
+    console.error("[FICHES DOUBLONS FUSION]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
   }
 });
 
