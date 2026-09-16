@@ -259,12 +259,13 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
           .stroke();
       };
 
-      /* Le modele empile quatre traits sous « Decernee a » : le nom s'ecrit
-         dessus, comme sur du papier regle. Un seul etait trace. */
+      /* Le modele empile quatre traits sous « Decernee a », le nom devant
+         s'ecrire dessus comme sur du papier regle. A l'usage, un nom compose
+         traverse les trois traits du haut et parait barre : on n'en garde que
+         celui sur lequel il repose. Les trois autres sont volontairement
+         omis — ne pas les retablir « par fidelite au modele ». */
       const LIGNE_NOM_Y = 4.29 * POUCE;
-      for (const y of [3.87, 4.01, 4.15, 4.29]) {
-        ligne(2.35 * POUCE, y * POUCE, 6.41 * POUCE);
-      }
+      ligne(2.35 * POUCE, LIGNE_NOM_Y, 6.41 * POUCE);
 
       /* Sous la zone du nom, un trait bleu nuit termine par deux pastilles
          rondes — l'equivalent des extremites « oval » du modele. */
