@@ -1309,7 +1309,15 @@ export default function Activities({
                     <p className="text-xs text-emerald-700">{importDirectResult.doublons_dans_activite} doublon(s) ignoré(s)</p>
                   )}
                   {importDirectResult.lignes_ignorees_nom_prenom_manquants > 0 && (
-                    <p className="text-xs text-amber-700">{importDirectResult.lignes_ignorees_nom_prenom_manquants} ligne(s) ignorée(s) (nom/prénom manquant)</p>
+                    <p className="text-xs text-amber-700">
+                      {importDirectResult.lignes_ignorees_nom_prenom_manquants} ligne(s) vide(s) ignorée(s)
+                    </p>
+                  )}
+                  {importDirectResult.lignes_incompletes?.length > 0 && (
+                    <p className="text-xs text-amber-700">
+                      {importDirectResult.lignes_incompletes.length} personne(s) importée(s) sans nom ou sans
+                      prénom — à compléter dans Participants.
+                    </p>
                   )}
                   {/* Signalé ici parce que c'est le seul moment où l'on a le
                       fichier en tête. Découvrir la répétition au moment
@@ -1512,6 +1520,7 @@ function ImportResultSummary({ result }) {
   const imported = result.participants_importes ?? 0;
   const total = result.total_lignes ?? 0;
   const ignored = result.lignes_ignorees_nom_prenom_manquants ?? 0;
+  const incompletes = result.lignes_incompletes ?? [];
   const duplicates = result.doublons_dans_activite ?? 0;
   const nomsRepetes = result.noms_repetes ?? 0;
 
@@ -1536,7 +1545,7 @@ function ImportResultSummary({ result }) {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <SummaryCard label="Lignes Excel" value={total} />
         <SummaryCard label="Importées" value={imported} />
-        <SummaryCard label="Ignorées" value={ignored} />
+        <SummaryCard label="Lignes vides" value={ignored} />
         <SummaryCard label="Doublons" value={duplicates} />
       </div>
       {/* Le nom de famille recopié dans la case « Prénom » : signalé tant que
@@ -1547,6 +1556,33 @@ function ImportResultSummary({ result }) {
           fois dans le fichier (nom recopié dans la colonne « Prénom »). Corrigez-les dans
           Campagnes → Attestations : ils apparaîtraient ainsi sur les documents.
         </p>
+      )}
+      {/* Importées quand même. L'import exigeait un nom ET un prénom et
+          rejetait le reste : des bénéficiaires réels disparaissaient des
+          compteurs du centre. Ils y figurent désormais, et ce qui leur manque
+          est dit ici. */}
+      {incompletes.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-semibold">
+            {incompletes.length} personne{incompletes.length > 1 ? "s" : ""} importée
+            {incompletes.length > 1 ? "s" : ""} avec une identité incomplète
+          </p>
+          <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto">
+            {incompletes.slice(0, 50).map((l, i) => (
+              <li key={i}>
+                {[l.prenom, l.nom].filter(Boolean).join(" ") || l.email || l.telephone} — il manque
+                le {l.manque.join(" et le ")}
+              </li>
+            ))}
+          </ul>
+          {incompletes.length > 50 && (
+            <p className="mt-1">…et {incompletes.length - 50} autre(s).</p>
+          )}
+          <p className="mt-1.5 text-amber-700">
+            Elles comptent dans les statistiques — les rejeter les aurait fausses. Complétez-les
+            dans Participants, ou corrigez le fichier et réimportez-le.
+          </p>
+        </div>
       )}
       <ContactsIgnoresInfo result={result} />
       <ColumnMappingInfo result={result} />
