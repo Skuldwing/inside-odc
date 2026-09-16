@@ -355,7 +355,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
      personne ne sait pourquoi. Tout ce qui est ecarte est donc rapporte. */
   const contactsIgnores = [];
   if (items.length === 0) {
-    return { imported: 0, skippedMissingName, duplicatesInActivity: 0, contactsIgnores, rattachements: 0 };
+    return { imported: 0, skippedMissingName, duplicatesInActivity: 0, contactsIgnores, rattachements: 0, champsCompletes: 0 };
   }
 
   // 2. Qui est deja connu ? Une seule requete pour les adresses et les numeros.
@@ -369,7 +369,8 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     if (emailSet.size > 0) { params.push([...emailSet]); parts.push(`LOWER(email) = ANY($${params.length})`); }
     if (phoneSet.size > 0) { params.push([...phoneSet]); parts.push(`telephone = ANY($${params.length})`); }
     const { rows: existing } = await client.query(
-      `SELECT id, nom, prenom, email, telephone FROM participants WHERE ${parts.join(' OR ')}`,
+      `SELECT id, nom, prenom, email, telephone, genre, age_range, statut, structure
+         FROM participants WHERE ${parts.join(' OR ')}`,
       params
     );
     for (const r of existing) {
@@ -378,32 +379,55 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     }
   }
 
-  /* 2b. Les fiches sans aucun contact, rapprochees par le nom.
-     Une liste de presence sans colonne email cree des fiches nues. Au fichier
-     suivant, qui porte cette fois les adresses, ces fiches n'etaient
-     rattachables par rien : l'import creait un second exemplaire de la meme
-     personne, et la liste affichait deux fois le meme nom dont un sans
-     adresse. On ne rapproche que des fiches sans email NI telephone : deux
-     personnes qui portent le meme nom et qu'aucun contact ne distingue sont
-     indiscernables de toute facon, et une fiche renseignee n'est jamais
-     absorbee. */
+  /* 2b. Rapprochement par le nom.
+     Les listes de presence ne portent pas toutes les memes colonnes : l'une a
+     les adresses, l'autre les telephones, une troisieme ni l'un ni l'autre.
+     Une personne connue par son numero qui revient sur une liste ne portant
+     que son adresse n'etait rattachable par rien — l'import creait un second
+     exemplaire d'elle-meme, et son information restait eparpillee entre deux
+     fiches dont aucune n'etait complete.
+     On rapproche donc sur le nom, sous deux reserves tenues plus bas : le nom
+     ne doit designer qu'une seule fiche connue, et le fichier ne doit rien
+     apporter qui contredise ce qui est deja enregistre. */
   const nomsCherches = [...new Set(items.map(it => normaliser(it.nom)).filter(Boolean))];
-  const parNom = new Map(); // cle personne → fiche
+  const parNom = new Map(); // cle personne → fiche, ou null si le nom est ambigu
   if (nomsCherches.length > 0) {
-    const { rows: nus } = await client.query(
-      `SELECT id, nom, prenom, email, telephone FROM participants
-       WHERE email IS NULL AND telephone IS NULL AND lower(trim(nom)) = ANY($1)`,
+    const { rows: connus } = await client.query(
+      `SELECT id, nom, prenom, email, telephone, genre, age_range, statut, structure
+         FROM participants WHERE lower(trim(nom)) = ANY($1)`,
       [nomsCherches]
     );
-    for (const r of nus) {
+    for (const r of connus) {
       const cle = clePersonne(r.nom, r.prenom);
-      /* Homonymes stricts : on ne devine pas, on laisse l'import creer une
-         fiche plutot que de fusionner deux personnes par erreur. */
+      /* Deux fiches sous le meme nom : on ne devine pas laquelle est la bonne,
+         l'import creera une fiche plutot que de confondre deux homonymes. */
       if (!cle) continue;
       if (parNom.has(cle)) parNom.set(cle, null);
       else parNom.set(cle, r);
     }
   }
+
+  /* Rapprocher par le seul nom deux fiches portant des identifiants
+     differents reviendrait a confondre deux homonymes. On ne le fait que si
+     rien ne les oppose : le fichier n'apporte pas une adresse ou un numero
+     different de ceux deja enregistres. Une information absente d'un cote ne
+     s'oppose a rien — c'est precisement le cas qu'on veut rattraper. */
+  const riensOppose = (fiche, ligne) => {
+    if (ligne.email && fiche.email && normalizeEmail(fiche.email) !== ligne.email) return false;
+    if (ligne.telephone && fiche.telephone && normalizePhone(fiche.telephone) !== ligne.telephone) return false;
+    return true;
+  };
+
+  /* Ce que le fichier peut completer sur une fiche deja connue, au-dela des
+     coordonnees. L'import les jetait : une liste apportant le genre et la
+     structure d'une personne deja enregistree n'en gardait rien, et sa fiche
+     restait incomplete pour toujours. */
+  const CHAMPS_COMPLETABLES = [
+    ["genre", "normalizedGender"],
+    ["age_range", "ageRange"],
+    ["statut", "statut"],
+    ["structure", "structure"],
+  ];
 
   // 3. Rapprochement ligne par ligne
   const toInsert = [];    // lignes qui donnent lieu a une nouvelle fiche
@@ -432,7 +456,10 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     const it = items[i];
     let ex = it.email ? byEmail.get(it.email) : null;
     if (!ex && it.telephone) ex = byPhone.get(it.telephone);
-    if (!ex && it.cle && parNom.get(it.cle)) { ex = parNom.get(it.cle); rattachements++; }
+    if (!ex && it.cle) {
+      const candidat = parNom.get(it.cle);
+      if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
+    }
 
     if (ex && memePersonne(ex, it)) {
       items[i].resolvedId = ex.id;
@@ -440,7 +467,24 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
          ce qui repare les adresses perdues par les imports precedents. */
       const emailAAjouter = it.email && !ex.email && !detenteurEmail.has(it.email) ? it.email : null;
       const telAAjouter = it.telephone && !ex.telephone && !detenteurTel.has(it.telephone) ? it.telephone : null;
-      if (emailAAjouter || telAAjouter) aCompleter.push({ id: ex.id, email: emailAAjouter, telephone: telAAjouter });
+
+      /* Tout ce que cette liste apporte et qui manque a la fiche. Une personne
+         inscrite a trois formations voit ainsi sa fiche se completer au fil
+         des listes, chacune apportant les colonnes que les autres n'avaient
+         pas. Rien de deja renseigne n'est ecrase. */
+      const maj = {};
+      if (emailAAjouter) maj.email = emailAAjouter;
+      if (telAAjouter) maj.telephone = telAAjouter;
+      for (const [colonne, champ] of CHAMPS_COMPLETABLES) {
+        if (!ex[colonne] && it[champ]) maj[colonne] = it[champ];
+      }
+      if (Object.keys(maj).length) {
+        aCompleter.push({ id: ex.id, maj });
+        /* La fiche en memoire suit la base : deux lignes du meme fichier
+           portant la meme personne ne doivent pas compter deux fois le meme
+           champ complete. */
+        Object.assign(ex, maj);
+      }
       if (it.email && !emailAAjouter && !ex.email) {
         signaler(it, "email", it.email, "deja_attribuee", detenteurEmail.get(it.email)?.fiche);
       } else if (it.email && ex.email && normalizeEmail(ex.email) !== it.email) {
@@ -480,14 +524,25 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     toInsertIdx.push(i);
   }
 
-  // 3b. Completer les fiches auxquelles il manquait une adresse ou un numero
-  for (const maj of aCompleter) {
+  /* 3b. Completer les fiches deja connues avec ce que la liste apporte.
+     Les noms de colonnes viennent de CHAMPS_COMPLETABLES et des deux champs de
+     contact — une liste fermee, ecrite ici : aucune donnee du fichier n'entre
+     dans le texte de la requete. Les valeurs, elles, restent parametrees. */
+  const COLONNES_AUTORISEES = new Set([
+    "email", "telephone", ...CHAMPS_COMPLETABLES.map(([c]) => c),
+  ]);
+  let champsCompletes = 0;
+  for (const { id, maj } of aCompleter) {
+    const colonnes = Object.keys(maj).filter((c) => COLONNES_AUTORISEES.has(c));
+    if (!colonnes.length) continue;
+    const affectations = colonnes
+      .map((c, i) => `${c} = COALESCE(${c}, $${i + 2})`)
+      .join(", ");
     await client.query(
-      `UPDATE participants
-          SET email = COALESCE(email, $2), telephone = COALESCE(telephone, $3)
-        WHERE id = $1`,
-      [maj.id, maj.email, maj.telephone]
+      `UPDATE participants SET ${affectations} WHERE id = $1`,
+      [id, ...colonnes.map((c) => maj[c])]
     );
+    champsCompletes += colonnes.length;
   }
 
   // 4a. Insertion groupee des fiches qui portent un contact
@@ -564,7 +619,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     duplicatesInActivity = items.filter(it => it.resolvedId).length - imported;
   }
 
-  return { imported, skippedMissingName, duplicatesInActivity, contactsIgnores, rattachements };
+  return { imported, skippedMissingName, duplicatesInActivity, contactsIgnores, rattachements, champsCompletes };
 }
 
 /* ===== CHAMPS DISPONIBLES POUR LE MAPPING MANUEL ===== */
@@ -705,6 +760,7 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
          presence sans que rien ne l'explique. */
       contacts_ignores: stats.contactsIgnores,
       fiches_completees: stats.rattachements,
+      champs_completes: stats.champsCompletes,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
@@ -775,6 +831,7 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
          presence sans que rien ne l'explique. */
       contacts_ignores: stats.contactsIgnores,
       fiches_completees: stats.rattachements,
+      champs_completes: stats.champsCompletes,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
@@ -849,6 +906,7 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
          presence sans que rien ne l'explique. */
       contacts_ignores: stats.contactsIgnores,
       fiches_completees: stats.rattachements,
+      champs_completes: stats.champsCompletes,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,

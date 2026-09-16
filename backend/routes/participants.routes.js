@@ -270,37 +270,98 @@ router.post("/doublons-nom/corriger", authMiddleware, async (req, res) => {
   }
 });
 
-/* ===== FICHES EN DOUBLE =====
-   Une meme personne inscrite deux fois, dont une fois sans coordonnees.
-   C'est la trace laissee par l'ancien import : il rapprochait les noms par
-   egalite stricte, si bien qu'une variation d'ecriture — un accent, le nom de
-   famille recopie dans la case « Prenom » — lui faisait creer une seconde
-   fiche, forcement sans adresse puisque l'adresse appartenait deja a la
-   premiere. L'import ne les fabrique plus ; celles qui existent sont encore la.
+/* ===== FICHES DE LA MEME PERSONNE =====
+   Une personne suit plusieurs formations et figure sur autant de listes de
+   presence. Ces listes ne portent pas les memes colonnes : l'une a les
+   adresses, l'autre les telephones, une troisieme le genre et la structure.
+   L'ancien import rapprochait les noms par egalite stricte et ne completait
+   jamais une fiche existante : chaque liste creait donc une fiche de plus, et
+   l'information d'une meme personne finissait eparpillee entre plusieurs
+   fiches dont aucune n'etait complete.
 
-   On ne propose que les groupes ou une seule fiche porte des coordonnees. Deux
-   fiches renseignees differemment peuvent etre deux personnes, et deux fiches
-   vides sont indiscernables : dans les deux cas on ne devine pas. */
-function grouperFichesDoubles(fiches) {
-  const groupes = new Map();
+   L'import ne les fabrique plus et complete ce qu'il reconnait. Restent celles
+   d'avant, qu'il faut reunir : une seule fiche par personne, portant tout ce
+   que les listes ont apporte, et inscrite a chacune de ses formations. */
+
+const CHAMPS_FICHE = ["email", "telephone", "genre", "age_range", "statut", "structure"];
+
+const LIBELLES_CHAMPS = {
+  email: "email",
+  telephone: "téléphone",
+  genre: "genre",
+  age_range: "tranche d'âge",
+  statut: "statut",
+  structure: "structure",
+};
+
+/* Deux ecritures d'une meme valeur ne sont pas un desaccord : « UCAD » et
+   « ucad » designent la meme structure, « Foo@X.com » et « foo@x.com » la meme
+   boite. On compare donc des formes normalisees. */
+function valeurNormalisee(champ, valeur) {
+  if (valeur === null || valeur === undefined || String(valeur).trim() === "") return null;
+  const v = String(valeur).trim();
+  return champ === "telephone" ? v.replace(/\s+/g, "") : v.toLowerCase();
+}
+
+function renseignes(fiche) {
+  return CHAMPS_FICHE.filter((c) => valeurNormalisee(c, fiche[c]) !== null).length;
+}
+
+function analyserGroupes(fiches) {
+  const parCle = new Map();
   for (const f of fiches) {
     const cle = clePersonne(f.nom, f.prenom);
     if (!cle) continue;
-    if (!groupes.has(cle)) groupes.set(cle, []);
-    groupes.get(cle).push(f);
+    if (!parCle.has(cle)) parCle.set(cle, []);
+    parCle.get(cle).push(f);
   }
 
   const resultat = [];
-  for (const membres of groupes.values()) {
+  for (const membres of parCle.values()) {
     if (membres.length < 2) continue;
-    const renseignees = membres.filter((f) => f.email || f.telephone);
-    if (renseignees.length !== 1) continue;
-    const garder = renseignees[0];
-    resultat.push({
-      garder,
-      absorber: membres.filter((f) => f.id !== garder.id),
-    });
+
+    /* La fiche conservee est la mieux renseignee — c'est celle qui a le moins
+       a recevoir, donc celle dont le moins de valeurs seront ecartees. A
+       egalite, la plus ancienne : son identifiant circule deja ailleurs. */
+    const garder = [...membres].sort(
+      (a, b) => renseignes(b) - renseignes(a) || a.id - b.id
+    )[0];
+    const absorber = membres.filter((f) => f.id !== garder.id);
+
+    /* Ce que la fusion ajouterait a la fiche conservee, et ce sur quoi les
+       fiches se contredisent. Un desaccord n'est pas forcement une erreur —
+       une personne peut avoir change d'adresse — mais il se tranche a l'oeil,
+       pas par une regle. */
+    const apport = [];
+    const conflits = [];
+    for (const champ of CHAMPS_FICHE) {
+      const valeurs = new Map(); // valeur normalisee → valeur affichable
+      for (const f of membres) {
+        const n = valeurNormalisee(champ, f[champ]);
+        if (n !== null && !valeurs.has(n)) valeurs.set(n, String(f[champ]).trim());
+      }
+      if (valeurs.size === 0) continue;
+
+      const surGarder = valeurNormalisee(champ, garder[champ]);
+      if (valeurs.size > 1) {
+        conflits.push({
+          champ,
+          libelle: LIBELLES_CHAMPS[champ],
+          conserve: surGarder === null ? null : garder[champ],
+          ecartees: [...valeurs.entries()].filter(([n]) => n !== surGarder).map(([, v]) => v),
+        });
+      } else if (surGarder === null) {
+        const [, affichable] = [...valeurs.entries()][0];
+        apport.push({ champ, libelle: LIBELLES_CHAMPS[champ], valeur: affichable });
+      }
+    }
+
+    resultat.push({ garder, absorber, apport, conflits });
   }
+
+  /* Les groupes qui apportent quelque chose d'abord : ce sont ceux qui
+     completent une fiche, donc ceux qui valent la peine d'etre regardes. */
+  resultat.sort((a, b) => b.apport.length - a.apport.length || a.garder.id - b.garder.id);
   return resultat;
 }
 
@@ -316,9 +377,14 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
       params
     );
 
-    const groupes = grouperFichesDoubles(r.rows);
+    const groupes = analyserGroupes(r.rows);
     res.json({
+      /* Le nombre de fiches en trop, pas le nombre de groupes : c'est ce qui
+         disparaitra des listes et des compteurs. */
       total: groupes.reduce((n, g) => n + g.absorber.length, 0),
+      personnes: groupes.length,
+      a_completer: groupes.filter((g) => g.apport.length > 0).length,
+      avec_conflit: groupes.filter((g) => g.conflits.length > 0).length,
       groupes,
     });
   } catch (err) {
@@ -351,7 +417,7 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
        fiches a absorber, jamais celle a conserver. Une fiche qui a recu une
        adresse entre-temps n'est plus un doublon et sort d'elle-meme. */
     const aAbsorber = new Map(); // id a supprimer → id a conserver
-    for (const groupe of grouperFichesDoubles(portee.rows)) {
+    for (const groupe of analyserGroupes(portee.rows)) {
       for (const fiche of groupe.absorber) {
         if (ids.includes(fiche.id)) aAbsorber.set(fiche.id, { garder: groupe.garder, fiche });
       }
@@ -362,20 +428,29 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
 
     let fusionnees = 0;
     for (const [id, { garder, fiche }] of aAbsorber) {
-      /* La fiche absorbee n'a ni email ni telephone, mais elle peut porter un
-         genre, une tranche d'age, un statut ou une structure que la fiche
-         conservee n'a pas. La supprimer sans les reprendre perdrait de
-         l'information — et le genre alimente les statistiques de la page
-         d'accueil. COALESCE ne remplit que ce qui manque : rien de renseigne
-         n'est ecrase. */
+      /* Toute information portee par la fiche absorbee et absente de celle
+         qu'on conserve lui est reprise — y compris l'email et le telephone,
+         qui sont justement ce qu'une liste apporte quand une autre ne l'avait
+         pas. COALESCE ne remplit que ce qui manque : rien de renseigne n'est
+         ecrase, et un desaccord a deja ete montre a l'utilisateur.
+         L'email et le telephone sont supprimes de la fiche absorbee avant
+         d'etre poses sur celle qu'on garde : l'index d'unicite refuserait
+         qu'ils existent deux fois, meme le temps d'une transaction. */
+      await client.query(
+        "UPDATE participants SET email = NULL, telephone = NULL WHERE id = $1",
+        [id]
+      );
       await client.query(
         `UPDATE participants SET
-           genre     = COALESCE(genre, $2),
-           age_range = COALESCE(age_range, $3),
-           statut    = COALESCE(statut, $4),
-           structure = COALESCE(structure, $5)
+           email     = COALESCE(email, $2),
+           telephone = COALESCE(telephone, $3),
+           genre     = COALESCE(genre, $4),
+           age_range = COALESCE(age_range, $5),
+           statut    = COALESCE(statut, $6),
+           structure = COALESCE(structure, $7)
          WHERE id = $1`,
-        [garder.id, fiche.genre || null, fiche.age_range || null, fiche.statut || null, fiche.structure || null]
+        [garder.id, fiche.email || null, fiche.telephone || null,
+         fiche.genre || null, fiche.age_range || null, fiche.statut || null, fiche.structure || null]
       );
 
       await client.query(
@@ -396,11 +471,13 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
 
       await client.query("DELETE FROM participants WHERE id = $1", [id]);
       logAudit(req, "DELETE", "participants", id, `${fiche.prenom} ${fiche.nom}`, {
-        motif: "fiche en double sans coordonnées",
+        motif: "fiche de la même personne, réunie",
         fusionnee_avec: garder.id,
         fiche_absorbee: {
           nom: fiche.nom,
           prenom: fiche.prenom,
+          email: fiche.email || null,
+          telephone: fiche.telephone || null,
           genre: fiche.genre || null,
           age_range: fiche.age_range || null,
           statut: fiche.statut || null,
