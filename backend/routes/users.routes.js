@@ -3,7 +3,8 @@ const bcrypt = require("bcrypt");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
-const { sendEmail } = require("../services/mail");
+const { sendEmail, fournisseurRetenu } = require("../services/mail");
+const { interpreterErreurEnvoi } = require("../services/deliverability");
 const { createPasswordToken, DUREE_LIEN_HEURES } = require("../services/passwordReset");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const requireAdminPin = require("../middleware/pin.middleware");
@@ -397,25 +398,58 @@ router.post("/:id/reset-password", async (req, res) => {
 
     const user = result.rows[0];
 
-    if (!process.env.BREVO_API_KEY && !process.env.SMTP_HOST) {
-      return res.status(503).json({ error: "Email non configuré. Ajoutez BREVO_API_KEY dans les variables Railway." });
+    /* Deviner la configuration d'apres deux variables se trompait deux fois :
+       une cle Mailjet seule declenchait ce refus alors que l'envoi marchait,
+       et une cle Brevo sans MAIL_FROM passait le controle pour finir dans un
+       sendEmail qui n'envoie rien en silence — la route annoncait alors un
+       succes pour un message jamais parti. On interroge le service. */
+    if (fournisseurRetenu() === "aucun") {
+      return res.status(503).json({
+        error: "Aucun service d'envoi configuré.",
+        remede:
+          "Renseignez BREVO_API_KEY et MAIL_FROM dans les variables Railway, puis redémarrez le service. " +
+          "Le lien ci-dessus reste valable : vous pouvez le transmettre par un autre moyen.",
+      });
     }
 
     const appUrl = adresseDuSite();
     const token = await createPasswordToken(user.id);
     const link = `${appUrl}/set-password?token=${token}`;
 
+    /* Le lien est renvoye dans les deux cas, et c'est le point de la
+       manoeuvre. Creer un jeton condamne le precedent : celui que la fenetre
+       affichait depuis « Lien » vient de mourir. Sans ce renvoi, un envoi
+       rate laissait l'administrateur avec un mail jamais arrive et un lien a
+       l'ecran devenu invalide — les deux portes fermees d'un coup. */
     const tpl = await getTemplate("reset_password");
     const vars = { nom: user.full_name || user.email, lien: link };
-    await sendEmail({
-      toEmail: user.email,
-      toName: user.full_name || user.email,
-      subject: renderTemplate(tpl.subject, vars),
-      html: renderTemplate(tpl.body_html, vars),
-      text: `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
-    });
+    try {
+      await sendEmail({
+        toEmail: user.email,
+        toName: user.full_name || user.email,
+        subject: renderTemplate(tpl.subject, vars),
+        html: renderTemplate(tpl.body_html, vars),
+        text: `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
+      });
+    } catch (err) {
+      /* « L'envoi a echoue » n'apprend rien et laisse croire a une panne de la
+         plateforme. Le service d'envoi, lui, dit toujours pourquoi : cle
+         refusee, compte suspendu, expediteur non valide. On le rapporte. */
+      console.error("[REINITIALISATION MOT DE PASSE]", err);
+      const brut = [err?.message, err?.code, err?.responseCode, err?.response]
+        .filter(Boolean)
+        .join(" · ");
+      const lecture = interpreterErreurEnvoi(brut);
+      return res.status(502).json({
+        success: false,
+        link,
+        fournisseur: fournisseurRetenu(),
+        ...lecture,
+        brut: brut.slice(0, 600),
+      });
+    }
 
-    res.json({ success: true });
+    res.json({ success: true, link });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

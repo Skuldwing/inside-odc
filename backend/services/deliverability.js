@@ -464,6 +464,20 @@ const CAUSES = [
       "Le motif figure dans le message brut ci-dessous. Le plus frequent : l'adresse d'expedition n'est pas encore validee dans Mailjet, Expediteurs et domaines.",
   },
   {
+    /* A placer avant la regle sur la cle : un compte suspendu repond souvent
+       401 « unauthorized », qui serait alors lu comme une cle fausse. On
+       enverrait chercher une nouvelle cle pendant des heures alors que la cle
+       est juste et que c'est le compte qui est ferme. */
+    motif:
+      /suspend|account is (not activated|blocked|disabled)|account_under_validation|under validation|permission_denied|Brevo error 403|not yet activated|compte.*suspendu/i,
+    cause: "Le compte du service d'envoi est suspendu ou pas encore validé.",
+    remede:
+      "Ce n'est pas un problème de réglage : tant que le compte est fermé, aucun message ne partira, " +
+      "ni les attestations, ni les campagnes, ni ce lien. Ouvrez le centre de délivrabilité du service " +
+      "d'envoi pour lire le motif, et demandez le rétablissement à son support. " +
+      "En attendant, copiez le lien affiché ici et transmettez-le par un autre moyen.",
+  },
+  {
     motif: /Brevo error 401|Key not found|unauthorized|invalid api key/i,
     cause: "Brevo ne reconnait pas la cle (« Key not found »).",
     /* Brevo delivre deux identifiants d'apparence tres proche, sur la meme
