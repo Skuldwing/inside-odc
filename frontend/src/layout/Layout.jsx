@@ -26,6 +26,7 @@ export default function Layout() {
     ["/profil", "Profil"],
     ["/partenaires", "Partenaires"],
     ["/dispositifs", "Dispositifs"],
+    ["/modeles-attestation", "Modèles d'attestation"],
     ["/campagnes", "Campagnes"],
     ["/utilisateurs", "Utilisateurs"],
     ["/formulaires", "Formulaires"],

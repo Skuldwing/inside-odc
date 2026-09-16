@@ -7,6 +7,7 @@ const { sendEmail } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
 const { generateAttestationPDF } = require("../services/attestation");
 const { genererAttestationTechKi, ressourcesPresentes } = require("../services/attestationTechKi");
+const { modelePourActivite } = require("./modelesAttestation.routes");
 
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
@@ -36,8 +37,12 @@ function moduleRetenu(activity, remplacement) {
   return (propose || activity.title || "").slice(0, LONGUEUR_MODULE_MAX);
 }
 
-function attestationPour({ participant, activity, module: intituleModule }) {
+async function attestationPour({ participant, activity, module: intituleModule }) {
   if (MODELE_TECH_KI_DISPONIBLE) {
+    /* Le dispositif peut avoir son propre modele : la Tech Academy menee avec
+       le COJOJ porte le logo et la mention du partenaire. A defaut, le modele
+       par defaut ; a defaut encore, les valeurs d'origine du rendu. */
+    const modele = await modelePourActivite(activity);
     return genererAttestationTechKi({
       participant,
       /* Le module imprime sur la ligne est l'intitule de la seance : c'est ce
@@ -45,6 +50,7 @@ function attestationPour({ participant, activity, module: intituleModule }) {
       module: moduleRetenu(activity, intituleModule),
       date: activity.activity_date,
       lieu: activity.location && activity.location !== "-" ? activity.location : "Dakar",
+      modele: modele || {},
     });
   }
   return generateAttestationPDF({

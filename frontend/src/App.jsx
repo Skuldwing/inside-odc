@@ -16,6 +16,7 @@ const Activities = lazy(() => import("./pages/Activities"));
 const Participants = lazy(() => import("./pages/Participants"));
 const Campagnes = lazy(() => import("./pages/Campagnes"));
 const Dispositifs = lazy(() => import("./pages/Dispositifs"));
+const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
 const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
@@ -221,6 +222,16 @@ export default function App() {
             <AdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <Dispositifs />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="modeles-attestation"
+          element={
+            <AdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <ModelesAttestation />
               </Suspense>
             </AdminRoute>
           }
