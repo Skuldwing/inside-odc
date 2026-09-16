@@ -370,13 +370,20 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         plancher: 14,
       });
 
+      /* La date etait ecrite nettement plus petit que le nom et le module.
+         A 17 points elle remplissait deja la ligne : monter la taille seule
+         n'aurait rien change, la reduction automatique l'aurait ramenee la.
+         On elargit donc la zone d'ecriture au-dela du trait — jusqu'a 9,20
+         pouces, ce qui laisse le cartouche noir tranquille, il commence a
+         9,32 — et on vise 21 points. Une date longue redescend a 19, une
+         date courte garde 21. */
       const mention = [lieu, dateEnToutesLettres(date)].filter(Boolean).join(", le ");
       ecrireManuscrit(doc, mention, {
         x: 6.64 * POUCE,
-        largeur: 2.36 * POUCE,
+        largeur: 2.56 * POUCE,
         ligneY: LIGNE_DATE_Y,
-        taille: 17,
-        plancher: 10,
+        taille: 21,
+        plancher: 12,
       });
 
       doc.end();
