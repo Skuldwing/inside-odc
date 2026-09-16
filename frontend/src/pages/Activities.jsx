@@ -1570,16 +1570,23 @@ const MOTIFS_CONTACT = {
 
 function ContactsIgnoresInfo({ result }) {
   const ignores = result?.contacts_ignores ?? [];
-  const completees = result?.fiches_completees ?? 0;
+  const rattachees = result?.fiches_completees ?? 0;
+  const champs = result?.champs_completes ?? 0;
 
-  if (ignores.length === 0 && completees === 0) return null;
+  if (ignores.length === 0 && rattachees === 0 && champs === 0) return null;
 
   return (
     <div className="space-y-2">
-      {completees > 0 && (
-        <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          {completees} fiche{completees > 1 ? "s" : ""} déjà connue{completees > 1 ? "s" : ""} complétée
-          {completees > 1 ? "s" : ""} avec les coordonnées du fichier.
+      {/* Chaque liste de présence porte des colonnes différentes. Une personne
+          déjà connue voit sa fiche se compléter de ce que celle-ci apporte —
+          c'est le contraire de ce que faisait l'import, qui les jetait. */}
+      {champs > 0 && (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+          {champs} information{champs > 1 ? "s" : ""} ajoutée{champs > 1 ? "s" : ""} à des fiches déjà
+          enregistrées (email, téléphone, genre, tranche d&apos;âge, statut ou structure qui y
+          manquaient)
+          {rattachees > 0 && `, dont ${rattachees} personne${rattachees > 1 ? "s" : ""} reconnue${rattachees > 1 ? "s" : ""} par son nom`}
+          .
         </p>
       )}
       {ignores.length > 0 && (
