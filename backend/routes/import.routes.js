@@ -8,7 +8,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 
-const { repetitionsDans } = require("../services/nomsDoublons");
+const { repetitionsDans, prenomSansNomRepete, normaliser } = require("../services/nomsDoublons");
 
 const router = express.Router();
 
@@ -66,16 +66,47 @@ function normalizeGender(value) {
   return null;
 }
 
-function normalizeIdentity(value) {
-  if (value === null || value === undefined) return "";
-  return String(value).trim().toLowerCase();
+/* Une adresse email ne vaut que par ce qu'elle designe : « Rockaya@Example.com »
+   et « rockaya@example.com  » sont la meme boite. On la range donc toujours sous
+   la meme forme, sinon l'index d'unicite laisse passer deux fois la meme
+   personne et la campagne lui ecrit deux fois. */
+function normalizeEmail(value) {
+  if (value === null || value === undefined) return null;
+  const v = String(value).trim().toLowerCase();
+  return v || null;
 }
 
-function samePersonByName(existing, nom, prenom) {
-  return (
-    normalizeIdentity(existing?.nom) === normalizeIdentity(nom) &&
-    normalizeIdentity(existing?.prenom) === normalizeIdentity(prenom)
-  );
+function normalizePhone(value) {
+  if (value === null || value === undefined) return null;
+  const v = String(value).trim();
+  return v || null;
+}
+
+/* Reconnaitre qu'une ligne de fichier designe quelqu'un de deja connu.
+ *
+ * La comparaison stricte qui servait ici echouait des que l'ecriture variait
+ * d'un fichier a l'autre — un accent, une majuscule, une espace double. Elle
+ * echouait surtout sur le cas le plus frequent des feuilles de presence : le
+ * nom de famille recopie dans la case « Prenom ». « Samb / Rockaya Samb » et
+ * « Samb / Rockaya » sont la meme personne ; l'import les prenait pour deux, et
+ * comme l'adresse email appartenait deja a la premiere, la seconde etait creee
+ * sans adresse. C'est ainsi que des adresses disparaissaient en silence.
+ *
+ * On compare donc une forme canonique : sans accent, sans casse, sans espaces
+ * superflus, et debarrassee du nom de famille repete. */
+function clePersonne(nom, prenom) {
+  const aplatir = (v) => normaliser(v).replace(/[^a-z0-9]+/g, " ").trim();
+  const p = prenomSansNomRepete(prenom, nom) ?? prenom;
+  const cleNom = aplatir(nom);
+  const clePrenom = aplatir(p);
+  if (!cleNom || !clePrenom) return null;
+  return `${cleNom}|${clePrenom}`;
+}
+
+function memePersonne(existant, nom, prenom) {
+  const a = clePersonne(existant?.nom, existant?.prenom);
+  const b = clePersonne(nom, prenom);
+  return Boolean(a && b && a === b);
 }
 
 /* ===== RÉSOLUTION DE CHAMPS : alias + pattern + Levenshtein ===== */
@@ -315,33 +346,15 @@ function parseParticipantFromMapped(obj) {
     nom: clean(nom),
     prenom: clean(prenom),
     genre: clean(obj.genre),
-    email: clean(obj.email),
-    telephone: clean(obj.telephone),
+    email: normalizeEmail(obj.email),
+    telephone: normalizePhone(obj.telephone),
     statut: clean(obj.statut),
     structure: clean(obj.structure),
     ageRange: clean(obj.tranche_age),
   };
 }
 
-/* ===== FONCTIONS DB (inchangées) ===== */
-
-async function findParticipantByEmail(client, email) {
-  const res = await client.query(
-    "SELECT id, nom, prenom FROM participants WHERE email = $1 LIMIT 1",
-    [email]
-  );
-  return res.rows[0] || null;
-}
-
-async function findParticipantByPhoneAndName(client, telephone, nom, prenom) {
-  const res = await client.query(
-    `SELECT id FROM participants
-     WHERE telephone = $1 AND lower(nom) = lower($2) AND lower(prenom) = lower($3)
-     LIMIT 1`,
-    [telephone, String(nom), String(prenom)]
-  );
-  return res.rows[0]?.id || null;
-}
+/* ===== FONCTIONS DB ===== */
 
 async function insertParticipant(client, payload) {
   const { nom, prenom, normalizedGender, ageRange, email, telephone, statut, structure } = payload;
@@ -354,90 +367,29 @@ async function insertParticipant(client, payload) {
   return res.rows[0]?.id || null;
 }
 
-async function updateParticipantIfMissingData(client, participantId, payload) {
-  const { nom, prenom, normalizedGender, ageRange, email, telephone, statut, structure } = payload;
-  await client.query(
-    `UPDATE participants SET
-       nom       = COALESCE(nom, $1),
-       prenom    = COALESCE(prenom, $2),
-       genre     = COALESCE(genre, $3),
-       age_range = COALESCE(age_range, $4),
-       email = CASE
-         WHEN $5::text IS NULL THEN email
-         WHEN email IS NOT NULL THEN email
-         WHEN EXISTS (SELECT 1 FROM participants p2 WHERE p2.email = $5::text AND p2.id <> $9) THEN email
-         ELSE $5::text END,
-       telephone = CASE
-         WHEN $6::text IS NULL THEN telephone
-         WHEN telephone IS NOT NULL THEN telephone
-         WHEN EXISTS (SELECT 1 FROM participants p2 WHERE p2.telephone = $6::text AND p2.id <> $9) THEN telephone
-         ELSE $6::text END,
-       statut    = COALESCE(statut, $7),
-       structure = COALESCE(structure, $8)
-     WHERE id = $9`,
-    [nom, prenom, normalizedGender, ageRange || null, email || null, telephone || null, statut || null, structure || null, participantId]
-  );
-}
-
-async function resolveParticipantId(client, payload) {
-  const { nom, prenom, email, telephone } = payload;
-  let participantId = null;
-
-  if (email) {
-    const existing = await findParticipantByEmail(client, email);
-    participantId = existing && samePersonByName(existing, nom, prenom) ? existing.id : null;
-  } else if (telephone) {
-    participantId = await findParticipantByPhoneAndName(client, telephone, nom, prenom);
-  }
-
-  if (participantId) {
-    await updateParticipantIfMissingData(client, participantId, payload);
-    return participantId;
-  }
-
-  participantId = await insertParticipant(client, payload);
-  if (participantId) return participantId;
-
-  if (email) {
-    const existing = await findParticipantByEmail(client, email);
-    participantId = existing && samePersonByName(existing, nom, prenom) ? existing.id : null;
-    if (participantId) return participantId;
-  }
-  if (telephone) {
-    participantId = await findParticipantByPhoneAndName(client, telephone, nom, prenom);
-    if (participantId) return participantId;
-  }
-  if (email) {
-    participantId = await insertParticipant(client, { ...payload, email: null });
-    if (participantId) return participantId;
-  }
-  if (telephone) {
-    participantId = await insertParticipant(client, { ...payload, telephone: null });
-    if (participantId) return participantId;
-  }
-  if (email || telephone) {
-    participantId = await insertParticipant(client, { ...payload, email: null, telephone: null });
-  }
-  return participantId;
-}
-
 async function importParticipantsRowsBatch(client, rows, activityId) {
   let skippedMissingName = 0;
 
-  // 1. Parse all rows upfront
+  // 1. Lecture de toutes les lignes
   const items = [];
   for (const row of rows) {
     const p = parseParticipantFromMapped(row);
     if (!p.nom || !p.prenom) { skippedMissingName++; continue; }
-    items.push({ ...p, normalizedGender: normalizeGender(p.genre), resolvedId: null });
+    items.push({ ...p, normalizedGender: normalizeGender(p.genre), cle: clePersonne(p.nom, p.prenom), resolvedId: null });
   }
-  if (items.length === 0) return { imported: 0, skippedMissingName, duplicatesInActivity: 0 };
+  /* Ce que l'import n'a pas pu enregistrer. Une adresse perdue en silence est
+     pire qu'une adresse refusee : la campagne part sans la personne et
+     personne ne sait pourquoi. Tout ce qui est ecarte est donc rapporte. */
+  const contactsIgnores = [];
+  if (items.length === 0) {
+    return { imported: 0, skippedMissingName, duplicatesInActivity: 0, contactsIgnores, rattachements: 0 };
+  }
 
-  // 2. Batch-fetch existing participants by email/phone (1 query)
-  const emailSet = new Set(items.filter(it => it.email).map(it => it.email.trim().toLowerCase()));
-  const phoneSet = new Set(items.filter(it => it.telephone).map(it => it.telephone.trim()));
-  const byEmail = new Map(); // lowercase email → {id,nom,prenom}
-  const byPhone = new Map(); // phone → {id,nom,prenom}
+  // 2. Qui est deja connu ? Une seule requete pour les adresses et les numeros.
+  const emailSet = new Set(items.filter(it => it.email).map(it => it.email));
+  const phoneSet = new Set(items.filter(it => it.telephone).map(it => it.telephone));
+  const byEmail = new Map(); // email normalise → {id,nom,prenom,email,telephone}
+  const byPhone = new Map(); // telephone → idem
 
   if (emailSet.size > 0 || phoneSet.size > 0) {
     const parts = [], params = [];
@@ -448,40 +400,124 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       params
     );
     for (const r of existing) {
-      if (r.email) byEmail.set(r.email.trim().toLowerCase(), r);
-      if (r.telephone) byPhone.set(r.telephone.trim(), r);
+      if (r.email) byEmail.set(normalizeEmail(r.email), r);
+      if (r.telephone) byPhone.set(normalizePhone(r.telephone), r);
     }
   }
 
-  // 3. Classify: already exists vs. needs insert
-  const toInsert = [];   // items needing a new participant row
-  const toInsertIdx = []; // their index in items[]
+  /* 2b. Les fiches sans aucun contact, rapprochees par le nom.
+     Une liste de presence sans colonne email cree des fiches nues. Au fichier
+     suivant, qui porte cette fois les adresses, ces fiches n'etaient
+     rattachables par rien : l'import creait un second exemplaire de la meme
+     personne, et la liste affichait deux fois le meme nom dont un sans
+     adresse. On ne rapproche que des fiches sans email NI telephone : deux
+     personnes qui portent le meme nom et qu'aucun contact ne distingue sont
+     indiscernables de toute facon, et une fiche renseignee n'est jamais
+     absorbee. */
+  const nomsCherches = [...new Set(items.map(it => normaliser(it.nom)).filter(Boolean))];
+  const parNom = new Map(); // cle personne → fiche
+  if (nomsCherches.length > 0) {
+    const { rows: nus } = await client.query(
+      `SELECT id, nom, prenom, email, telephone FROM participants
+       WHERE email IS NULL AND telephone IS NULL AND lower(trim(nom)) = ANY($1)`,
+      [nomsCherches]
+    );
+    for (const r of nus) {
+      const cle = clePersonne(r.nom, r.prenom);
+      /* Homonymes stricts : on ne devine pas, on laisse l'import creer une
+         fiche plutot que de fusionner deux personnes par erreur. */
+      if (!cle) continue;
+      if (parNom.has(cle)) parNom.set(cle, null);
+      else parNom.set(cle, r);
+    }
+  }
 
+  // 3. Rapprochement ligne par ligne
+  const toInsert = [];    // lignes qui donnent lieu a une nouvelle fiche
+  const toInsertIdx = []; // leur indice dans items[]
+  const aCompleter = [];  // fiches existantes auxquelles il manque un contact
+  /* Qui detient chaque contact, en base comme dans le fichier en cours. Sans
+     ce registre, deux lignes differentes portant la meme adresse etaient
+     inserees l'une apres l'autre : la seconde tombait sur l'index d'unicite,
+     ne s'inserait pas, et se voyait attribuer l'identifiant de la premiere.
+     La seconde personne disparaissait purement et simplement, comptee comme
+     un doublon. */
+  const detenteurEmail = new Map();
+  const detenteurTel = new Map();
+  for (const [mail, fiche] of byEmail) detenteurEmail.set(mail, { cle: clePersonne(fiche.nom, fiche.prenom), fiche });
+  for (const [tel, fiche] of byPhone) detenteurTel.set(tel, { cle: clePersonne(fiche.nom, fiche.prenom), fiche });
+
+  const signaler = (it, champ, valeur, motif, detenteur) => {
+    contactsIgnores.push({
+      nom: it.nom, prenom: it.prenom, champ, valeur, motif,
+      detenteur: detenteur ? `${detenteur.prenom || ""} ${detenteur.nom || ""}`.trim() : null,
+    });
+  };
+
+  let rattachements = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    let ex = it.email ? byEmail.get(it.email.trim().toLowerCase()) : null;
-    if (!ex && it.telephone) ex = byPhone.get(it.telephone.trim());
+    let ex = it.email ? byEmail.get(it.email) : null;
+    if (!ex && it.telephone) ex = byPhone.get(it.telephone);
+    if (!ex && it.cle && parNom.get(it.cle)) { ex = parNom.get(it.cle); rattachements++; }
 
-    if (ex && samePersonByName(ex, it.nom, it.prenom)) {
+    if (ex && memePersonne(ex, it.nom, it.prenom)) {
       items[i].resolvedId = ex.id;
-    } else {
-      // Drop any contact field that belongs to a different person to avoid conflict
-      let email = it.email;
-      let telephone = it.telephone;
-      if (email) {
-        const clash = byEmail.get(email.trim().toLowerCase());
-        if (clash && !samePersonByName(clash, it.nom, it.prenom)) email = null;
+      /* La fiche existe mais il lui manque ce que le fichier apporte : c'est
+         ce qui repare les adresses perdues par les imports precedents. */
+      const emailAAjouter = it.email && !ex.email && !detenteurEmail.has(it.email) ? it.email : null;
+      const telAAjouter = it.telephone && !ex.telephone && !detenteurTel.has(it.telephone) ? it.telephone : null;
+      if (emailAAjouter || telAAjouter) aCompleter.push({ id: ex.id, email: emailAAjouter, telephone: telAAjouter });
+      if (it.email && !emailAAjouter && !ex.email) {
+        signaler(it, "email", it.email, "deja_attribuee", detenteurEmail.get(it.email)?.fiche);
+      } else if (it.email && ex.email && normalizeEmail(ex.email) !== it.email) {
+        /* La personne est connue sous une autre adresse. On garde celle de la
+           base — le fichier n'est pas forcement plus a jour — mais on le dit,
+           faute de quoi la campagne partirait a l'ancienne adresse sans que
+           rien ne l'indique. */
+        signaler(it, "email", it.email, "adresse_differente", ex);
       }
-      if (telephone) {
-        const clash = byPhone.get(telephone.trim());
-        if (clash && !samePersonByName(clash, it.nom, it.prenom)) telephone = null;
-      }
-      toInsert.push({ ...it, email, telephone });
-      toInsertIdx.push(i);
+      if (emailAAjouter) detenteurEmail.set(emailAAjouter, { cle: it.cle, fiche: ex });
+      if (telAAjouter) detenteurTel.set(telAAjouter, { cle: it.cle, fiche: ex });
+      if (ex.email) detenteurEmail.set(normalizeEmail(ex.email), { cle: clePersonne(ex.nom, ex.prenom), fiche: ex });
+      continue;
     }
+
+    // Nouvelle fiche : on ne lui attribue un contact que s'il est libre.
+    let email = it.email;
+    let telephone = it.telephone;
+    if (email) {
+      const detenteur = detenteurEmail.get(email);
+      if (detenteur && detenteur.cle !== it.cle) {
+        signaler(it, "email", email, detenteur.fiche ? "deja_attribuee" : "doublon_fichier", detenteur.fiche);
+        email = null;
+      }
+    }
+    if (telephone) {
+      const detenteur = detenteurTel.get(telephone);
+      if (detenteur && detenteur.cle !== it.cle) {
+        signaler(it, "telephone", telephone, detenteur.fiche ? "deja_attribuee" : "doublon_fichier", detenteur.fiche);
+        telephone = null;
+      }
+    }
+    if (email && !detenteurEmail.has(email)) detenteurEmail.set(email, { cle: it.cle, fiche: null });
+    if (telephone && !detenteurTel.has(telephone)) detenteurTel.set(telephone, { cle: it.cle, fiche: null });
+
+    toInsert.push({ ...it, email, telephone });
+    toInsertIdx.push(i);
   }
 
-  // 4a. Bulk INSERT participants that have email or phone (1 unnest query)
+  // 3b. Completer les fiches auxquelles il manquait une adresse ou un numero
+  for (const maj of aCompleter) {
+    await client.query(
+      `UPDATE participants
+          SET email = COALESCE(email, $2), telephone = COALESCE(telephone, $3)
+        WHERE id = $1`,
+      [maj.id, maj.email, maj.telephone]
+    );
+  }
+
+  // 4a. Insertion groupee des fiches qui portent un contact
   const withContact = toInsert.map((p, j) => ({ p, j })).filter(({ p }) => p.email || p.telephone);
   if (withContact.length > 0) {
     await client.query(
@@ -501,39 +537,48 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       ]
     );
 
-    // Re-fetch to get IDs (both newly inserted + conflicted rows already existed) (1 query)
-    const newEmails = [...new Set(withContact.filter(({ p }) => p.email).map(({ p }) => p.email.trim().toLowerCase()))];
-    const newPhones = [...new Set(withContact.filter(({ p }) => p.telephone).map(({ p }) => p.telephone.trim()))];
+    // Relire pour recuperer les identifiants
+    const newEmails = [...new Set(withContact.filter(({ p }) => p.email).map(({ p }) => p.email))];
+    const newPhones = [...new Set(withContact.filter(({ p }) => p.telephone).map(({ p }) => p.telephone))];
     if (newEmails.length > 0 || newPhones.length > 0) {
       const parts2 = [], params2 = [];
       if (newEmails.length > 0) { params2.push(newEmails); parts2.push(`LOWER(email) = ANY($${params2.length})`); }
       if (newPhones.length > 0) { params2.push(newPhones); parts2.push(`telephone = ANY($${params2.length})`); }
       const { rows: refetched } = await client.query(
-        `SELECT id, email, telephone FROM participants WHERE ${parts2.join(' OR ')}`,
+        `SELECT id, nom, prenom, email, telephone FROM participants WHERE ${parts2.join(' OR ')}`,
         params2
       );
       for (const r of refetched) {
-        if (r.email) byEmail.set(r.email.trim().toLowerCase(), r);
-        if (r.telephone) byPhone.set(r.telephone.trim(), r);
+        if (r.email) byEmail.set(normalizeEmail(r.email), r);
+        if (r.telephone) byPhone.set(normalizePhone(r.telephone), r);
       }
     }
-    // Map IDs back to items
+    /* On ne reprend un identifiant que si la fiche relue designe bien la meme
+       personne : c'est le garde-fou contre l'echange d'identite decrit plus
+       haut. Une insertion refusee laisse la ligne sans identifiant plutot que
+       de la rattacher a quelqu'un d'autre. */
     for (const { p, j } of withContact) {
-      let found = p.email ? byEmail.get(p.email.trim().toLowerCase()) : null;
-      if (!found && p.telephone) found = byPhone.get(p.telephone.trim());
-      if (found) items[toInsertIdx[j]].resolvedId = found.id;
+      let found = p.email ? byEmail.get(p.email) : null;
+      if (!found && p.telephone) found = byPhone.get(p.telephone);
+      if (found && memePersonne(found, p.nom, p.prenom)) {
+        items[toInsertIdx[j]].resolvedId = found.id;
+      } else {
+        const id = await insertParticipant(client, { ...p, email: null, telephone: null });
+        if (id) items[toInsertIdx[j]].resolvedId = id;
+        if (p.email) signaler(p, "email", p.email, "deja_attribuee", found || null);
+      }
     }
   }
 
-  // 4b. Name-only participants: individual inserts (no unique key, rare)
+  // 4b. Fiches sans contact : insertion une par une
   const noContact = toInsert.map((p, j) => ({ p, j })).filter(({ p }) => !p.email && !p.telephone);
   for (const { p, j } of noContact) {
     const id = await insertParticipant(client, p);
     if (id) items[toInsertIdx[j]].resolvedId = id;
   }
 
-  // 5. Bulk INSERT activity_participants (1 unnest query)
-  const validIds = items.filter(it => it.resolvedId).map(it => it.resolvedId);
+  // 5. Rattachement a l'activite
+  const validIds = [...new Set(items.filter(it => it.resolvedId).map(it => it.resolvedId))];
   let imported = 0, duplicatesInActivity = 0;
   if (validIds.length > 0) {
     const linkRes = await client.query(
@@ -543,10 +588,10 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       [validIds.map(() => activityId), validIds]
     );
     imported = linkRes.rowCount;
-    duplicatesInActivity = validIds.length - imported;
+    duplicatesInActivity = items.filter(it => it.resolvedId).length - imported;
   }
 
-  return { imported, skippedMissingName, duplicatesInActivity };
+  return { imported, skippedMissingName, duplicatesInActivity, contactsIgnores, rattachements };
 }
 
 /* ===== CHAMPS DISPONIBLES POUR LE MAPPING MANUEL ===== */
@@ -831,3 +876,13 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
 });
 
 module.exports = router;
+
+/* Le rapprochement d'une ligne de fichier avec une personne deja connue est la
+   partie delicate de l'import : c'est la que des adresses se perdaient. Elle
+   est exposee ici pour etre eprouvee directement, sans passer par une requete
+   HTTP et un fichier Excel. */
+module.exports.__interne = {
+  importParticipantsRowsBatch,
+  parseRowsFromSheet,
+  parseParticipantFromMapped,
+};
