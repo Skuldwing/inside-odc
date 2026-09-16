@@ -343,19 +343,54 @@ async function insertParticipant(client, payload) {
 async function importParticipantsRowsBatch(client, rows, activityId) {
   let skippedMissingName = 0;
 
-  // 1. Lecture de toutes les lignes
+  /* 1. Lecture de toutes les lignes.
+     Une ligne n'est ecartee que si elle ne designe personne. L'import exigeait
+     auparavant un nom ET un prenom : une feuille de presence ou quelqu'un
+     n'avait ecrit que son nom de famille, ou dont la colonne « Nom complet »
+     ne tenait qu'en un mot, perdait cette personne — sans que rien ne la
+     remplace dans les compteurs. Des beneficiaires reels disparaissaient
+     ainsi des statistiques du centre.
+     On garde donc toute ligne portant de quoi designer quelqu'un : un nom, un
+     prenom, une adresse ou un numero. Ce qui manque reste vide et se voit,
+     plutot que de faire disparaitre la personne. */
   const items = [];
+  const lignesIncompletes = [];
   for (const row of rows) {
     const p = parseParticipantFromMapped(row);
-    if (!p.nom || !p.prenom) { skippedMissingName++; continue; }
-    items.push({ ...p, normalizedGender: normalizeGender(p.genre), cle: clePersonne(p.nom, p.prenom), resolvedId: null });
+    if (!p.nom && !p.prenom && !p.email && !p.telephone) { skippedMissingName++; continue; }
+
+    if (!p.nom || !p.prenom) {
+      lignesIncompletes.push({
+        nom: p.nom || null,
+        prenom: p.prenom || null,
+        email: p.email || null,
+        telephone: p.telephone || null,
+        manque: [!p.nom && "nom", !p.prenom && "prénom"].filter(Boolean),
+      });
+    }
+
+    /* Les colonnes nom et prenom n'acceptent pas l'absence de valeur : une
+       chaine vide dit « non renseigne » sans rien inventer. */
+    const nom = p.nom || "";
+    const prenom = p.prenom || "";
+    items.push({
+      ...p,
+      nom,
+      prenom,
+      normalizedGender: normalizeGender(p.genre),
+      cle: clePersonne(nom, prenom),
+      resolvedId: null,
+    });
   }
   /* Ce que l'import n'a pas pu enregistrer. Une adresse perdue en silence est
      pire qu'une adresse refusee : la campagne part sans la personne et
      personne ne sait pourquoi. Tout ce qui est ecarte est donc rapporte. */
   const contactsIgnores = [];
   if (items.length === 0) {
-    return { imported: 0, skippedMissingName, duplicatesInActivity: 0, contactsIgnores, rattachements: 0, champsCompletes: 0 };
+    return {
+      imported: 0, skippedMissingName, duplicatesInActivity: 0,
+      contactsIgnores, rattachements: 0, champsCompletes: 0, lignesIncompletes,
+    };
   }
 
   // 2. Qui est deja connu ? Une seule requete pour les adresses et les numeros.
@@ -423,6 +458,8 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
      structure d'une personne deja enregistree n'en gardait rien, et sa fiche
      restait incomplete pour toujours. */
   const CHAMPS_COMPLETABLES = [
+    ["nom", "nom"],
+    ["prenom", "prenom"],
     ["genre", "normalizedGender"],
     ["age_range", "ageRange"],
     ["statut", "statut"],
@@ -455,13 +492,19 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     let ex = it.email ? byEmail.get(it.email) : null;
+    /* Retenu avant le repli sur le telephone : une adresse identifie a elle
+       seule, un numero non. */
+    const trouveParEmail = Boolean(ex);
     if (!ex && it.telephone) ex = byPhone.get(it.telephone);
     if (!ex && it.cle) {
       const candidat = parNom.get(it.cle);
       if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
     }
 
-    if (ex && memePersonne(ex, it)) {
+    /* Une ligne dont le nom est incomplet ne peut pas etre comparee par le
+       nom — mais son adresse, elle, la rattache sans ambiguite. C'est meme le
+       seul moyen de ne pas en faire une seconde fiche anonyme. */
+    if (ex && (memePersonne(ex, it) || (trouveParEmail && !it.cle))) {
       items[i].resolvedId = ex.id;
       /* La fiche existe mais il lui manque ce que le fichier apporte : c'est
          ce qui repare les adresses perdues par les imports precedents. */
@@ -520,6 +563,13 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     if (email && !detenteurEmail.has(email)) detenteurEmail.set(email, { cle: it.cle, fiche: null });
     if (telephone && !detenteurTel.has(telephone)) detenteurTel.set(telephone, { cle: it.cle, fiche: null });
 
+    /* Apres retrait des contacts qui appartiennent a quelqu'un d'autre, il
+       peut ne rien rester : une ligne sans nom dont l'adresse etait deja prise
+       ne designe plus personne. L'inserer creerait une fiche vide, qui
+       gonflerait les compteurs sans correspondre a personne — exactement ce
+       qu'on cherche a eviter. Elle est deja rapportee plus haut. */
+    if (!it.nom && !it.prenom && !email && !telephone) continue;
+
     toInsert.push({ ...it, email, telephone });
     toInsertIdx.push(i);
   }
@@ -535,8 +585,11 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   for (const { id, maj } of aCompleter) {
     const colonnes = Object.keys(maj).filter((c) => COLONNES_AUTORISEES.has(c));
     if (!colonnes.length) continue;
+    /* NULLIF avant COALESCE : nom et prenom n'acceptent pas l'absence de
+       valeur et portent une chaine vide quand ils sont inconnus — sans cela
+       une fiche sans nom ne pourrait jamais en recevoir un. */
     const affectations = colonnes
-      .map((c, i) => `${c} = COALESCE(${c}, $${i + 2})`)
+      .map((c, i) => `${c} = COALESCE(NULLIF(${c}, ''), $${i + 2})`)
       .join(", ");
     await client.query(
       `UPDATE participants SET ${affectations} WHERE id = $1`,
@@ -588,7 +641,15 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     for (const { p, j } of withContact) {
       let found = p.email ? byEmail.get(p.email) : null;
       if (!found && p.telephone) found = byPhone.get(p.telephone);
-      if (found && memePersonne(found, p)) {
+      /* Le controle par le nom est le garde-fou contre l'echange d'identite.
+         Il ne s'applique pas aux lignes dont le nom est incomplet : leur cle
+         est nulle, donc ne concorde avec rien, et exiger la concordance les
+         faisait inserer une seconde fois — une fiche avec ses contacts, une
+         autre sans. Pour celles-la, le contact suffit : l'etape precedente a
+         deja retire tout contact appartenant a quelqu'un d'autre, celui qui
+         reste est donc libre ou deja le sien. */
+      const reconnue = found && (memePersonne(found, p) || !p.cle);
+      if (reconnue) {
         items[toInsertIdx[j]].resolvedId = found.id;
       } else {
         const id = await insertParticipant(client, { ...p, email: null, telephone: null });
@@ -619,7 +680,10 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     duplicatesInActivity = items.filter(it => it.resolvedId).length - imported;
   }
 
-  return { imported, skippedMissingName, duplicatesInActivity, contactsIgnores, rattachements, champsCompletes };
+  return {
+    imported, skippedMissingName, duplicatesInActivity,
+    contactsIgnores, rattachements, champsCompletes, lignesIncompletes,
+  };
 }
 
 /* ===== CHAMPS DISPONIBLES POUR LE MAPPING MANUEL ===== */
@@ -761,6 +825,9 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
       contacts_ignores: stats.contactsIgnores,
       fiches_completees: stats.rattachements,
       champs_completes: stats.champsCompletes,
+      /* Importees quand meme, mais a completer : les rejeter biaisait les
+         compteurs du centre. */
+      lignes_incompletes: stats.lignesIncompletes,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
@@ -832,6 +899,9 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
       contacts_ignores: stats.contactsIgnores,
       fiches_completees: stats.rattachements,
       champs_completes: stats.champsCompletes,
+      /* Importees quand meme, mais a completer : les rejeter biaisait les
+         compteurs du centre. */
+      lignes_incompletes: stats.lignesIncompletes,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
@@ -907,6 +977,9 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       contacts_ignores: stats.contactsIgnores,
       fiches_completees: stats.rattachements,
       champs_completes: stats.champsCompletes,
+      /* Importees quand meme, mais a completer : les rejeter biaisait les
+         compteurs du centre. */
+      lignes_incompletes: stats.lignesIncompletes,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
