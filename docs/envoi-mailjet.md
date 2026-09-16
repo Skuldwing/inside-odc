@@ -25,6 +25,23 @@ Il faut donc un service qui reçoit les messages **en HTTPS**, sur le port 443. 
 
 Rien d'autre ne motive ce choix. Brevo faisait le même travail, par le même canal ; c'est la suspension de notre compte qui a rendu nécessaire une seconde voie, pas une faiblesse technique.
 
+## Avant tout : ce qui a fait suspendre le compte précédent
+
+Le compte Brevo a été suspendu deux fois. La seconde immédiatement après des essais faits avec des adresses fictives — `test@example.com`, des participants inventés sur une activité de test.
+
+Le motif invoqué tient aux statistiques d'envoi. Un message envoyé à une adresse qui n'existe pas **rebondit**, et le taux de rebond est ce que tout service d'envoi surveille en premier. Un compte neuf qui rebondit dès ses premiers messages est suspendu automatiquement, sans qu'un humain regarde.
+
+**Mailjet applique exactement la même règle.** Rejouer la même séquence donnerait le même résultat.
+
+La plateforme ne le permet plus : depuis la mise en place du contrôle d'adresses, une adresse dont le domaine n'existe pas n'est jamais présentée au service d'envoi. Elle est écartée avant, et figure au journal avec son motif. Cela couvre les adresses inventées, les fautes de frappe (`gmail.con`) et les domaines de documentation.
+
+Reste ce que la plateforme ne peut pas voir : une adresse syntaxiquement valable, sur un domaine qui existe, mais qui ne correspond à personne — `jean.dupont@gmail.com` pris au hasard. Celle-là rebondira.
+
+Deux règles pour les premiers envois :
+
+1. **Pour tester, n'inventez jamais d'adresse.** Utilisez la vôtre, en variantes : `abdoulmouhamed.fall+essai1@…`, `+essai2`, etc. La plupart des messageries acceptent ce suffixe et livrent tout dans la même boîte. Chaque variante compte comme un destinataire distinct pour la plateforme, et aucune ne rebondit.
+2. **Montez doucement.** Quelques dizaines de messages les premiers jours, vers des adresses dont vous êtes sûr. Un compte neuf qui envoie mille messages d'un coup est suspect quoi qu'il envoie.
+
 ## Étape 1 — Ouvrir le compte
 
 Créez un compte sur mailjet.com et complétez le profil : organisation, adresse, téléphone vérifié.
