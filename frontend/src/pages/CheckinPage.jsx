@@ -3,8 +3,9 @@ import { useParams } from "react-router-dom";
 import { CheckCircle2, MapPin, Calendar, Users, Loader2, AlertCircle } from "lucide-react";
 import api from "../api";
 
-const GENRES = ["", "F", "H", "Autre"];
-const TRANCHES = ["", "Moins de 18 ans", "18-25 ans", "26-35 ans", "36-45 ans", "Plus de 45 ans"];
+/* Les tranches doivent correspondre exactement a celles que le serveur
+   accepte : une valeur qu'il ne reconnait pas fait echouer l'envoi. */
+const TRANCHES = ["Moins de 18 ans", "18-25 ans", "26-35 ans", "36-45 ans", "Plus de 45 ans"];
 
 function formatDate(iso) {
   if (!iso) return "-";
@@ -35,7 +36,15 @@ export default function CheckinPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.nom.trim() || !form.prenom.trim() || !form.telephone.trim()) return;
+    /* Le navigateur bloque deja les champs « required ». Ce controle vaut pour
+       les cas ou il ne le fait pas : navigateur ancien, saisie automatique qui
+       ne declenche pas la validation. */
+    const manquant = ["nom", "prenom", "telephone", "email", "genre", "tranche_age"]
+      .find((c) => !String(form[c] || "").trim());
+    if (manquant) {
+      setSubmitError("Merci de renseigner tous les champs marqués d'une étoile.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
@@ -89,7 +98,7 @@ export default function CheckinPage() {
           <p className="font-semibold text-slate-800 mb-1">{activity.title}</p>
           {activity.location && <p className="text-slate-500 text-xs">{activity.location}</p>}
         </div>
-        <p className="mt-8 text-xs text-slate-500">Inside ODC Senegal</p>
+        <p className="mt-8 text-xs text-slate-500">Inside ODC Sénégal</p>
       </div>
     );
   }
@@ -109,7 +118,7 @@ export default function CheckinPage() {
           <p className="font-semibold text-orange-600 mb-1">{activity.title}</p>
           <p className="text-slate-500 text-xs">{formatDate(activity.activity_date)}{activity.location ? ` · ${activity.location}` : ""}</p>
         </div>
-        <p className="mt-8 text-xs text-slate-500">Inside ODC Senegal</p>
+        <p className="mt-8 text-xs text-slate-500">Inside ODC Sénégal</p>
       </div>
     );
   }
@@ -150,7 +159,7 @@ export default function CheckinPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-slate-600">Prenom *</label>
+                <label className="text-xs font-medium text-slate-600">Prénom *</label>
                 <input
                   required
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
@@ -172,7 +181,7 @@ export default function CheckinPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-600">Telephone *</label>
+              <label className="text-xs font-medium text-slate-600">Téléphone *</label>
               <input
                 type="tel"
                 required
@@ -184,44 +193,51 @@ export default function CheckinPage() {
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-600">Email</label>
+              <label className="text-xs font-medium text-slate-600">Email *</label>
               <input
                 type="email"
+                required
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 placeholder="email@exemple.com"
                 value={form.email}
                 onChange={(e) => set("email", e.target.value)}
               />
+              <p className="mt-1 text-[11px] text-slate-500">
+                C&apos;est à cette adresse que vous recevrez votre attestation de participation.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-slate-600">Genre</label>
+                <label className="text-xs font-medium text-slate-600">Genre *</label>
                 <select
+                  required
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100 bg-white"
                   value={form.genre}
                   onChange={(e) => set("genre", e.target.value)}
                 >
-                  <option value="">—</option>
+                  <option value="" disabled>Choisir…</option>
                   <option value="F">Femme</option>
                   <option value="H">Homme</option>
                   <option value="Autre">Autre</option>
                 </select>
               </div>
               <div>
-                <label className="text-xs font-medium text-slate-600">Tranche d&apos;age</label>
+                <label className="text-xs font-medium text-slate-600">Tranche d&apos;âge *</label>
                 <select
+                  required
                   className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100 bg-white"
                   value={form.tranche_age}
                   onChange={(e) => set("tranche_age", e.target.value)}
                 >
-                  {TRANCHES.map((t) => <option key={t} value={t}>{t || "—"}</option>)}
+                  <option value="" disabled>Choisir…</option>
+                  {TRANCHES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="text-xs font-medium text-slate-600">Structure / Etablissement</label>
+              <label className="text-xs font-medium text-slate-600">Structure / Établissement</label>
               <input
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100"
                 placeholder="Université, entreprise, école…"
@@ -254,7 +270,7 @@ export default function CheckinPage() {
           </button>
 
           <p className="text-center text-xs text-slate-500 pb-4">
-            Inside ODC Senegal
+            Inside ODC Sénégal
           </p>
         </form>
       </div>
