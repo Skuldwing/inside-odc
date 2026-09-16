@@ -71,10 +71,11 @@ export default function Participants() {
     }
   };
 
-  /* Fiches en double laissées par l'ancien import : la même personne inscrite
-     deux fois, dont une fois sans coordonnées. La fusion supprime la fiche
-     vide après lui avoir repris ses présences — irréversible, donc jamais
-     automatique et toujours consultable avant. */
+  /* Fiches de la même personne, éparpillées par les anciens imports. Chaque
+     liste de présence portant des colonnes différentes, son information est
+     répartie entre plusieurs fiches dont aucune n'est complète. Les réunir en
+     une seule, qui reçoit tout et garde toutes les inscriptions — irréversible,
+     donc jamais automatique et toujours consultable avant. */
   const [fiches, setFiches] = useState(null);
   const [fichesOuvertes, setFichesOuvertes] = useState(false);
   const [fusion, setFusion] = useState(false);
@@ -99,7 +100,15 @@ export default function Participants() {
     try {
       const res = await api.get("/participants/fiches-doublons");
       setFiches(res.data);
-      setEcartes(new Set());
+      /* Les groupes dont les fiches se contredisent partent décochés : garder
+         une adresse plutôt qu'une autre ne se décide pas tout seul. */
+      setEcartes(
+        new Set(
+          (res.data?.groupes || [])
+            .filter((g) => g.conflits?.length > 0)
+            .map((g) => g.garder.id)
+        )
+      );
     } catch {
       setFiches(null);
     }
@@ -111,12 +120,12 @@ export default function Participants() {
     setFusion(true);
     try {
       const res = await api.post("/participants/fiches-doublons/fusionner", { ids });
-      toast.success(`${res.data.fusionnees} fiche${res.data.fusionnees > 1 ? "s" : ""} fusionnée${res.data.fusionnees > 1 ? "s" : ""}.`);
+      toast.success(`${res.data.fusionnees} fiche${res.data.fusionnees > 1 ? "s" : ""} réunie${res.data.fusionnees > 1 ? "s" : ""}.`);
       setFichesOuvertes(false);
       await chercherFiches();
       fetchPage(debouncedSearch.current, genderFilter, page);
     } catch (err) {
-      toast.error(err?.response?.data?.error || "La fusion a échoué.");
+      toast.error(err?.response?.data?.error || "La réunion des fiches a échoué.");
     } finally {
       setFusion(false);
     }
@@ -283,11 +292,12 @@ export default function Participants() {
         </section>
       )}
 
-      {/* Fiches en double. L'ancien import rapprochait les noms par égalité
-          stricte : une variation d'écriture lui faisait créer une seconde
-          fiche, forcément sans adresse puisque l'adresse était déjà prise. Il
-          ne les fabrique plus ; celles qui existent restent à fusionner. */}
-      {fiches?.total > 0 && (
+      {/* Une personne suit plusieurs formations et figure sur autant de listes,
+          qui ne portent pas les mêmes colonnes. Les anciens imports créaient
+          une fiche par liste au lieu de compléter la sienne : son information
+          s'est retrouvée éparpillée entre plusieurs fiches dont aucune n'est
+          complète. Ce panneau les réunit. */}
+      {fiches?.personnes > 0 && (
         <section className="card-solid overflow-hidden border border-sky-300">
           <button
             type="button"
@@ -297,11 +307,21 @@ export default function Participants() {
             <AlertTriangle className="h-5 w-5 flex-shrink-0 text-sky-600" aria-hidden="true" />
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold text-slate-800">
-                {fiches.total} fiche{fiches.total > 1 ? "s" : ""} en double, sans coordonnées
+                {fiches.personnes} personne{fiches.personnes > 1 ? "s ont" : " a"} plusieurs fiches
               </span>
               <span className="block text-xs text-slate-500">
-                La même personne inscrite deux fois par un ancien import. La fiche vide
-                n&apos;a ni adresse ni téléphone : elle ne reçoit rien.
+                {fiches.a_completer > 0 && (
+                  <>
+                    {fiches.a_completer} fiche{fiches.a_completer > 1 ? "s" : ""} se
+                    complèterai{fiches.a_completer > 1 ? "ent" : "t"} avec ce que portent les autres
+                  </>
+                )}
+                {fiches.a_completer > 0 && fiches.avec_conflit > 0 && " · "}
+                {fiches.avec_conflit > 0 && (
+                  <span className="text-amber-700">
+                    {fiches.avec_conflit} à regarder : les fiches se contredisent
+                  </span>
+                )}
               </span>
             </span>
             <span className="text-xs text-slate-500">{fichesOuvertes ? "Masquer" : "Voir la liste"}</span>
@@ -313,7 +333,7 @@ export default function Participants() {
                 {fiches.groupes.map((g) => {
                   const ecarte = ecartes.has(g.garder.id);
                   return (
-                    <li key={g.garder.id} className={`px-4 py-2 text-xs ${ecarte ? "opacity-45" : ""}`}>
+                    <li key={g.garder.id} className={`px-4 py-2.5 text-xs ${ecarte ? "opacity-45" : ""}`}>
                       <label className="flex cursor-pointer items-start gap-2.5">
                         <input
                           type="checkbox"
@@ -325,14 +345,31 @@ export default function Participants() {
                           <span className="block font-medium text-slate-800">
                             {g.garder.prenom} {g.garder.nom}
                             <span className="ml-1.5 font-normal text-slate-500">
-                              {g.garder.email || g.garder.telephone} — fiche conservée
+                              {g.absorber.length + 1} fiches → 1
                             </span>
                           </span>
-                          {g.absorber.map((f) => (
-                            <span key={f.id} className="block text-slate-500 line-through">
-                              {f.prenom} {f.nom} — fiche supprimée
+
+                          {/* Ce que la fiche conservée gagnerait. C'est la raison
+                              d'être de l'opération, donc ce qu'on montre. */}
+                          {g.apport.length > 0 && (
+                            <span className="mt-0.5 block text-emerald-700">
+                              gagne {g.apport.map((a) => `${a.libelle} « ${a.valeur} »`).join(", ")}
+                            </span>
+                          )}
+
+                          {/* Un désaccord ne se tranche pas par une règle. */}
+                          {g.conflits.map((k) => (
+                            <span key={k.champ} className="mt-0.5 block text-amber-700">
+                              {k.libelle} : garde « {k.conserve ?? "—"} », écarte
+                              {" "}« {k.ecartees.join(" », « ")} »
                             </span>
                           ))}
+
+                          {g.apport.length === 0 && g.conflits.length === 0 && (
+                            <span className="mt-0.5 block text-slate-500">
+                              rien à ajouter — les fiches en double disparaissent simplement
+                            </span>
+                          )}
                         </span>
                       </label>
                     </li>
@@ -341,14 +378,14 @@ export default function Participants() {
               </ul>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
                 <p className="max-w-xl text-xs text-slate-500">
-                  Les présences et les informations de la fiche supprimée — genre, tranche
-                  d&apos;âge, statut, structure — passent sur celle qui est conservée : rien
-                  n&apos;est perdu. L&apos;opération est définitive ; le journal d&apos;audit
+                  Chaque personne garde une seule fiche, qui reçoit tout ce que les autres
+                  portaient et reste inscrite à chacune de ses formations — aucune participation
+                  n&apos;est perdue. L&apos;opération est définitive ; le journal d&apos;audit
                   conserve le détail de chaque fiche absorbée.
                   {" "}
                   <strong className="text-slate-600">
-                    Décochez les lignes où deux personnes différentes pourraient porter le même
-                    nom
+                    Décochez les lignes qui se contredisent, et celles où deux personnes
+                    différentes pourraient porter le même nom
                   </strong>
                   {" "}— le rapprochement se fait sur le nom, il ne sait pas les distinguer.
                 </p>
@@ -359,7 +396,7 @@ export default function Participants() {
                   className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-60"
                 >
                   {fusion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  {fusion ? "Fusion…" : `Fusionner les ${idsRetenus.length}`}
+                  {fusion ? "Réunion…" : `Réunir ${idsRetenus.length} fiche${idsRetenus.length > 1 ? "s" : ""}`}
                 </button>
               </div>
             </div>
