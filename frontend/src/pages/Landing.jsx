@@ -23,7 +23,7 @@ import "../styles/landing.css";
    Tout ce qui decrit le centre est regroupe ici pour etre relu et corrige en
    un seul endroit, sans toucher a la mise en page.
 
-   Ces formulations decrivent le modele Orange Digital Center tel qu'il est
+   Ces formulations decrivent le modele d'un centre numerique tel qu'il est
    presente publiquement. Elles n'avancent volontairement aucun chiffre —
    nombre de personnes formees, de projets accompagnes, dates — car aucune
    source interne ne les a fournies. Mieux vaut une page sobre qu'une page
@@ -148,10 +148,10 @@ export default function Landing() {
       {/* ===== EN-TETE ===== */}
       <header className={`lp-header ${enHaut ? "" : "lp-header-fixe"}`}>
         <div className="lp-conteneur lp-header-inner">
-          <a href="#top" className="lp-marque" aria-label="Orange Digital Center Sénégal, accueil">
+          <a href="#top" className="lp-marque" aria-label="Inside ODC Sénégal, accueil">
             <ODCLogo variant="mark" className="h-9 w-9 rounded-xl" />
             <span className="lp-marque-texte">
-              <strong>Orange Digital Center</strong>
+              <strong>Inside ODC</strong>
               <span>Sénégal</span>
             </span>
           </a>
@@ -183,7 +183,7 @@ export default function Landing() {
         <div className="lp-conteneur lp-hero-inner">
           <p className="lp-eyebrow lp-monte" style={{ animationDelay: "80ms" }}>
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Orange Digital Center · Sénégal
+            Inside ODC · Sénégal
           </p>
 
           <h1 className="lp-titre lp-titre-large">
@@ -240,16 +240,16 @@ export default function Landing() {
       <section className="lp-section" id="centre">
         <div className="lp-conteneur">
           <div className="lp-manifeste" data-reveal>
-            <p className="lp-surtitre">Le centre</p>
+            <p className="lp-surtitre">Ce que suit la plateforme</p>
             <p className="lp-manifeste-texte">
-              Le <strong>Orange Digital Center Sénégal</strong> réunit sous un même toit la
-              formation, la fabrication et l&apos;accompagnement. On peut y pousser la porte
-              sans rien connaître au code, et en ressortir avec un métier, un prototype ou
-              une entreprise.
+              <strong>Inside ODC</strong> tient le registre d&apos;un centre numérique :
+              les formations qui s&apos;y donnent, les personnes qui les suivent, les
+              partenaires qui les portent et les machines qui servent. Une activité, une
+              liste de présence, et le reste suit — statistiques, attestations, rapports.
             </p>
             <p className="lp-manifeste-note">
-              Le centre s&apos;inscrit dans le réseau des Orange Digital Centers déployés en
-              Afrique et au Moyen-Orient, porté au Sénégal avec Sonatel.
+              Outil indépendant, développé par Abdoul Mouhamed FALL. Il n&apos;émane
+              d&apos;aucune entreprise et n&apos;engage qu&apos;elle-même.
             </p>
           </div>
         </div>
@@ -400,14 +400,19 @@ export default function Landing() {
           <div className="lp-pied-marque">
             <ODCLogo variant="full" className="h-10" />
             <p>
-              Orange Digital Center Sénégal — formation, fabrication numérique et
-              accompagnement des porteurs de projet.
+              Inside ODC Sénégal — suivi des activités de formation, des bénéficiaires
+              et des partenaires d&apos;un centre numérique.
             </p>
           </div>
           <div className="lp-pied-liens">
             <Link to={lienApp}>{libelleApp}</Link>
+            {/* Qui édite ce site, et comment le joindre. Un visiteur — ou un
+                service de conformité qui vérifie un expéditeur — doit pouvoir
+                le trouver sans compte. */}
+            <Link to="/mentions-legales">Mentions légales</Link>
+            <a href="mailto:contact@inside-odc.com">contact@inside-odc.com</a>
             <p className="lp-pied-mentions">
-              © {new Date().getFullYear()} Orange Digital Center Sénégal · Sonatel
+              © {new Date().getFullYear()} Inside ODC Sénégal
             </p>
           </div>
         </div>

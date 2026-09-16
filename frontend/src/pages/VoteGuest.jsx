@@ -324,7 +324,7 @@ export default function VoteGuest() {
             </p>
           </div>
 
-          <p className="text-center text-xs text-slate-500 mt-6">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 mt-6">Inside ODC Sénégal</p>
         </div>
       </div>
     );
@@ -505,7 +505,7 @@ export default function VoteGuest() {
             <div className="mt-4 rounded-2xl bg-orange-50 border border-orange-100 p-4">
               <p className="text-xs text-orange-700 font-semibold mb-1">Comment gagner des cadeaux ?</p>
               <p className="text-xs text-orange-600">
-                Si votre pronostic correspond exactement au top 3 du jury, vous remportez des cadeaux Orange Digital Center.
+                Si votre pronostic correspond exactement au top 3 du jury, vous remportez des cadeaux.
                 Soumettez votre pronostic avant la fin de la session !
               </p>
             </div>
@@ -562,7 +562,7 @@ export default function VoteGuest() {
           </div>
         )}
 
-        <p className="text-center text-xs text-slate-500 mt-8 pb-4">Orange Digital Center Sénégal</p>
+        <p className="text-center text-xs text-slate-500 mt-8 pb-4">Inside ODC Sénégal</p>
       </div>
     </div>
   );

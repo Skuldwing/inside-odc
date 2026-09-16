@@ -24,6 +24,7 @@ const Formulaires = lazy(() => import("./pages/Formulaires"));
 const FormulaireEditor = lazy(() => import("./pages/FormulaireEditor"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
 const CheckinPage = lazy(() => import("./pages/CheckinPage"));
+const MentionsLegales = lazy(() => import("./pages/MentionsLegales"));
 const VoteJoin = lazy(() => import("./pages/VoteJoin"));
 const VoteJury = lazy(() => import("./pages/VoteJury"));
 const VoteGuestJoin = lazy(() => import("./pages/VoteGuestJoin"));
@@ -113,6 +114,18 @@ export default function App() {
 
       {/* La racine est publique : c'est la page d'accueil du domaine. */}
       <Route path="/" element={<Landing />} />
+
+      {/* Publique, et volontairement atteignable sans compte : c'est la page
+          qui permet a un tiers — un destinataire, un service de conformite —
+          de verifier qui edite ce site. */}
+      <Route
+        path="/mentions-legales"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <MentionsLegales />
+          </Suspense>
+        }
+      />
 
       {/* ===== PROTECTED APP =====
           Route sans chemin propre : si on lui laissait « / », elle entrerait en

@@ -14,6 +14,16 @@ const PDFDocument = require("pdfkit");
  * Les positions viennent du .pptx, en pouces, relevees sur la diapositive
  * (11,69 x 8,27 pouces, soit A4 paysage). PDFKit travaille en points
  * typographiques : 1 pouce = 72 points.
+ *
+ * Ce document porte l'identite de l'Orange Digital Center Senegal — logo,
+ * nom et signature de la directrice du centre — alors que le reste de la
+ * plateforme porte la sienne, « Inside ODC Senegal ». C'est voulu : le modele
+ * est celui du centre, fourni par l'equipe, et c'est le centre qui delivre
+ * l'attestation. L'outil ne fait que l'imprimer.
+ *
+ * Ne pas « harmoniser » avec config/identite.js : reproduire ce modele sous
+ * une autre enseigne laisserait la signature de quelqu'un sous un nom qui
+ * n'est pas le sien. Toute modification de ce fichier se demande d'abord.
  */
 
 const POUCE = 72;

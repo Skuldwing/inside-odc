@@ -13,7 +13,7 @@ const DEFAULTS = {
     subject: "Votre accès Inside ODC",
     body_html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#FF6600;padding:20px;text-align:center">
-    <h2 style="color:#fff;margin:0">Orange Digital Center</h2>
+    <h2 style="color:#fff;margin:0">Inside ODC</h2>
   </div>
   <div style="padding:24px">
     <p>Bonjour {{nom}},</p>
@@ -32,7 +32,7 @@ const DEFAULTS = {
     subject: "Réinitialisation de votre mot de passe Inside ODC",
     body_html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#FF6600;padding:20px;text-align:center">
-    <h2 style="color:#fff;margin:0">Orange Digital Center</h2>
+    <h2 style="color:#fff;margin:0">Inside ODC</h2>
   </div>
   <div style="padding:24px">
     <p>Bonjour {{nom}},</p>
@@ -50,14 +50,14 @@ const DEFAULTS = {
     subject: "Attestation de participation — {{activite}}",
     body_html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#FF6600;padding:20px;text-align:center">
-    <h2 style="color:#fff;margin:0">Orange Digital Center Sénégal</h2>
+    <h2 style="color:#fff;margin:0">Inside ODC Sénégal</h2>
   </div>
   <div style="padding:24px">
     <p>Bonjour {{nom}},</p>
     <p>Veuillez trouver ci-joint votre attestation de participation à l'activité :</p>
     <p style="background:#FFF3E0;border-left:4px solid #FF6600;padding:12px;font-weight:bold">{{activite}}</p>
     <p>Nous vous remercions de votre participation et espérons vous revoir prochainement.</p>
-    <p style="color:#64748B;font-size:13px">— L'équipe Orange Digital Center Sénégal</p>
+    <p style="color:#64748B;font-size:13px">— L'équipe Inside ODC Sénégal</p>
   </div>
 </div>`,
     variables: ["{{nom}}", "{{activite}}", "{{date}}", "{{partenaire}}", "{{dispositif}}", "{{duree}}"],

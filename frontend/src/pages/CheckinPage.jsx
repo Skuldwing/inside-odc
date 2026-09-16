@@ -89,7 +89,7 @@ export default function CheckinPage() {
           <p className="font-semibold text-slate-800 mb-1">{activity.title}</p>
           {activity.location && <p className="text-slate-500 text-xs">{activity.location}</p>}
         </div>
-        <p className="mt-8 text-xs text-slate-500">Orange Digital Center Senegal</p>
+        <p className="mt-8 text-xs text-slate-500">Inside ODC Senegal</p>
       </div>
     );
   }
@@ -109,7 +109,7 @@ export default function CheckinPage() {
           <p className="font-semibold text-orange-600 mb-1">{activity.title}</p>
           <p className="text-slate-500 text-xs">{formatDate(activity.activity_date)}{activity.location ? ` · ${activity.location}` : ""}</p>
         </div>
-        <p className="mt-8 text-xs text-slate-500">Orange Digital Center Senegal</p>
+        <p className="mt-8 text-xs text-slate-500">Inside ODC Senegal</p>
       </div>
     );
   }
@@ -254,7 +254,7 @@ export default function CheckinPage() {
           </button>
 
           <p className="text-center text-xs text-slate-500 pb-4">
-            Orange Digital Center Senegal · Inside ODC
+            Inside ODC Senegal
           </p>
         </form>
       </div>

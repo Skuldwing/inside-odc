@@ -1107,3 +1107,130 @@
 }
 
 .lp-pied-liens a:hover { border-bottom-color: var(--orange-clair); }
+
+/* ── Mentions légales ──
+   Page de texte, lue une fois, souvent par un vérificateur pressé : on vise la
+   lisibilité, pas l'effet. Fond clair, comme le reste de la page d'accueil. */
+.ml {
+  min-height: 100vh;
+  padding-bottom: 64px;
+}
+
+.ml-entete {
+  padding: 20px 0;
+  border-bottom: 1px solid rgb(15 23 42 / 0.1);
+}
+
+.ml-entete-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ml-retour {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ardoise);
+}
+
+.ml-retour:hover { color: var(--orange); }
+
+.ml-corps { padding-top: 48px; max-width: 760px; }
+
+.ml-corps h1 {
+  font-size: clamp(1.9rem, 4vw, 2.6rem);
+  font-weight: 700;
+  color: var(--encre);
+  margin-bottom: 12px;
+}
+
+.ml-chapeau {
+  color: var(--ardoise);
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+.ml-bloc { margin-bottom: 36px; }
+
+.ml-bloc h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--encre);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgb(15 23 42 / 0.1);
+}
+
+.ml-bloc p {
+  color: #334155;
+  line-height: 1.75;
+  margin-bottom: 12px;
+}
+
+.ml-bloc dl {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) 1fr;
+  gap: 10px 24px;
+}
+
+@media (max-width: 640px) {
+  .ml-bloc dl { grid-template-columns: 1fr; gap: 4px; }
+  .ml-bloc dd { margin-bottom: 12px; }
+}
+
+.ml-bloc dt {
+  color: var(--ardoise);
+  font-size: 0.9rem;
+}
+
+.ml-bloc dd {
+  color: #1e293b;
+  line-height: 1.6;
+}
+
+.ml-bloc a {
+  color: #c2410c;
+  border-bottom: 1px solid transparent;
+}
+
+.ml-bloc a:hover { border-bottom-color: #c2410c; }
+
+/* Une information manquante se voit, plutôt que de laisser croire que la
+   ligne est renseignée. */
+.ml-manque {
+  color: #b45309;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.ml-pied {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid rgb(15 23 42 / 0.1);
+  font-size: 0.82rem;
+  color: var(--ardoise);
+}
+
+/* L'avis qui dit d'emblée ce qu'est la plateforme : cadre visible, pas une
+   note de bas de page. C'est la première chose que cherche un vérificateur. */
+.ml-avis {
+  border: 1px solid rgb(255 121 0 / 0.3);
+  background: rgb(255 121 0 / 0.06);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 36px;
+}
+
+.ml-avis p {
+  color: #334155;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.ml-precision {
+  color: var(--ardoise);
+  font-size: 0.9rem;
+}

@@ -382,7 +382,7 @@ export default function VoteJury() {
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-500 mt-8">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 mt-8">Inside ODC Sénégal</p>
         </div>
       </div>
     );
@@ -499,7 +499,7 @@ export default function VoteJury() {
             </div>
           )}
 
-          <p className="text-center text-xs text-slate-500 mt-6">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 mt-6">Inside ODC Sénégal</p>
         </div>
       </div>
     );
@@ -740,7 +740,7 @@ export default function VoteJury() {
             </form>
           )}
 
-          <p className="text-center text-xs text-slate-500 py-4">Orange Digital Center Sénégal</p>
+          <p className="text-center text-xs text-slate-500 py-4">Inside ODC Sénégal</p>
         </div>
       </div>
     </>

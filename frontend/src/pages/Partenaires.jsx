@@ -190,7 +190,7 @@ export default function Partenaires() {
       <div className="space-y-6">
         <AdminPageHeader
           title="Partenaires"
-          subtitle="Gestion des partenaires Orange Digital Center"
+          subtitle="Gestion des partenaires du centre"
           buttonLabel="Nouveau partenaire"
           buttonIcon={Plus}
           onAdd={handleAdd}

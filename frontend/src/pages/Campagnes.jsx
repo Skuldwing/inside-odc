@@ -87,7 +87,7 @@ const BLOCS = [
   {
     label: "En-tête email",
     icon: "📧",
-    html: `<div style="background:#0F172A;padding:24px;text-align:center;border-radius:6px 6px 0 0"><img src="" alt="Logo" style="height:40px" /><p style="color:#FF7900;font-family:Arial,sans-serif;font-weight:700;font-size:18px;margin:8px 0 0">Orange Digital Center</p></div>`,
+    html: `<div style="background:#0F172A;padding:24px;text-align:center;border-radius:6px 6px 0 0"><img src="" alt="Logo" style="height:40px" /><p style="color:#FF7900;font-family:Arial,sans-serif;font-weight:700;font-size:18px;margin:8px 0 0">Inside ODC</p></div>`,
   },
   {
     label: "Signature",
@@ -95,7 +95,7 @@ const BLOCS = [
     /* Le lien portait « inside-odc.vercel.app » sur un href vide : l'adresse
        affichée n'était pas cliquable, et elle désigne désormais l'ancien
        domaine. Les deux pointent sur le domaine du centre. */
-    html: `<div style="border-top:2px solid #FF7900;padding-top:14px;margin-top:24px;font-family:Arial,sans-serif;color:#64748B;font-size:13px"><strong style="color:#0F172A">L'équipe Inside ODC</strong><br/>Orange Digital Center Sénégal<br/><a href="https://inside-odc.com" style="color:#FF7900">inside-odc.com</a></div>`,
+    html: `<div style="border-top:2px solid #FF7900;padding-top:14px;margin-top:24px;font-family:Arial,sans-serif;color:#64748B;font-size:13px"><strong style="color:#0F172A">L'équipe Inside ODC</strong><br/>Inside ODC Sénégal<br/><a href="https://inside-odc.com" style="color:#FF7900">inside-odc.com</a></div>`,
   },
 ];
 

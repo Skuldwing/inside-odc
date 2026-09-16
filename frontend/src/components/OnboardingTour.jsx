@@ -40,7 +40,7 @@ const STEPS = [
     id: "done",
     title: "Vous êtes prêt ! 🎉",
     content:
-      "Voilà l'essentiel ! Si vous avez des questions sur la plateforme, n'hésitez pas à contacter votre administrateur Orange Digital Center.",
+      "Voilà l'essentiel ! Si vous avez des questions sur la plateforme, n'hésitez pas à contacter votre administrateur.",
   },
 ];
 
