@@ -4,6 +4,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
+const { trierAdresses } = require("../services/adressesValides");
 const { generateAttestationPDF } = require("../services/attestation");
 const { genererAttestationTechKi, ressourcesPresentes } = require("../services/attestationTechKi");
 
@@ -589,14 +590,27 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
     const intitule = moduleRetenu(activity, req.body?.module);
 
     const participants = partRes.rows;
-    const withEmail = participants.filter((p) => p.email);
     const withoutEmail = participants.filter((p) => !p.email);
+
+    /* Meme garde-fou que pour les campagnes : une adresse dont le domaine
+       n'existe pas n'est jamais presentee au service d'envoi. Le rebond ne
+       ferait pas arriver l'attestation, et il compterait contre la reputation
+       du compte — ce qui, lui, empeche les envois suivants d'arriver. */
+    const { retenus, rejetes } = await trierAdresses(
+      participants.filter((p) => p.email).map((p) => ({ email: p.email, nom: `${p.prenom} ${p.nom}`, participant: p }))
+    );
+    const joignables = new Set(retenus.map((d) => d.email));
+    const withEmail = participants.filter((p) => p.email && joignables.has(String(p.email).trim().toLowerCase()));
+    const injoignables = rejetes.map((d) => ({ email: d.email, explication: d.explication }));
 
     if (withEmail.length === 0) {
       return res.status(200).json({
         sent: 0,
         skipped: withoutEmail.length,
-        message: "Aucun participant avec adresse email.",
+        injoignables,
+        message: injoignables.length
+          ? `Aucune adresse joignable : ${injoignables.length} adresse(s) invalide(s) ou dont le domaine n'existe pas.`
+          : "Aucun participant avec adresse email.",
       });
     }
 
@@ -650,8 +664,13 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
     res.json({
       sent,
       skipped: withoutEmail.length,
+      injoignables,
       errors: errors.length > 0 ? errors : undefined,
-      message: `${sent} attestation(s) envoyée(s)${withoutEmail.length > 0 ? `, ${withoutEmail.length} ignorée(s) (pas d'email)` : ""}.`,
+      message:
+        `${sent} attestation(s) envoyée(s)` +
+        (withoutEmail.length > 0 ? `, ${withoutEmail.length} ignorée(s) (pas d'email)` : "") +
+        (injoignables.length > 0 ? `, ${injoignables.length} adresse(s) injoignable(s)` : "") +
+        ".",
     });
   } catch (err) {
     console.error(err);

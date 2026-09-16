@@ -2,6 +2,7 @@ const pool = require("../db");
 const { sendEmail } = require("./mail");
 const { entetesDesabonnement, lienDesabonnement, separerDesabonnes, normaliser } = require("./desabonnement");
 const { interpreterErreurEnvoi } = require("./deliverability");
+const { trierAdresses } = require("./adressesValides");
 
 /**
  * Envoi d'une campagne.
@@ -160,21 +161,42 @@ function versTexte(html) {
  */
 async function preparerEnvoi(camp) {
   const bruts = dedoublonner(await resoudreDestinataires(camp));
-  const { retenus, desabonnes } = await separerDesabonnes(bruts);
+  const { retenus: abonnes, desabonnes } = await separerDesabonnes(bruts);
 
-  if (!retenus.length) {
-    return { total: 0, desabonnes: desabonnes.length, retenus: [] };
+  /* Les adresses injoignables sont ecartees ici, avant d'etre remises au
+     service d'envoi. Une adresse inventee ou mal recopiee ne coute rien a la
+     plateforme — elle part et rebondit — mais elle coute le compte
+     d'expedition : les rebonds sont surveilles, et un compte neuf qui rebondit
+     des ses premiers envois est suspendu. C'est ce qui nous est arrive deux
+     fois, apres des essais faits avec des adresses fictives. */
+  const { retenus, rejetes } = await trierAdresses(abonnes);
+
+  if (!retenus.length && !rejetes.length) {
+    return { total: 0, desabonnes: desabonnes.length, injoignables: 0, retenus: [] };
   }
 
   /* ON CONFLICT DO NOTHING : une reprise ne recree pas les lignes deja
      traitees, donc ne renvoie rien a ceux qui ont deja recu. */
-  const valeurs = retenus.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
-  const params = [camp.id, ...retenus.flatMap((d) => [d.email, d.nom])];
-  await pool.query(
-    `INSERT INTO campagne_envois (campagne_id, email, nom) VALUES ${valeurs}
-     ON CONFLICT (campagne_id, email) DO NOTHING`,
-    params
-  );
+  if (retenus.length) {
+    const valeurs = retenus.map((_, i) => `($1, $${i * 2 + 2}, $${i * 2 + 3})`).join(",");
+    const params = [camp.id, ...retenus.flatMap((d) => [d.email, d.nom])];
+    await pool.query(
+      `INSERT INTO campagne_envois (campagne_id, email, nom) VALUES ${valeurs}
+       ON CONFLICT (campagne_id, email) DO NOTHING`,
+      params
+    );
+  }
+
+  /* Les adresses injoignables sont inscrites au journal, jamais en attente :
+     « Reprendre les restants » ne doit pas les representer au fournisseur. */
+  for (const d of rejetes) {
+    await pool.query(
+      `INSERT INTO campagne_envois (campagne_id, email, nom, statut, erreur, traite_le)
+       VALUES ($1, $2, $3, 'injoignable', $4, NOW())
+       ON CONFLICT (campagne_id, email) DO NOTHING`,
+      [camp.id, d.email, d.nom, d.explication]
+    );
+  }
 
   /* Les desabonnes sont inscrits eux aussi, mais marques : sans cela on ne
      saurait pas expliquer l'ecart entre le nombre de participants et le
@@ -191,7 +213,12 @@ async function preparerEnvoi(camp) {
   const total = await pool.query(`SELECT COUNT(*)::int AS n FROM campagne_envois WHERE campagne_id = $1`, [camp.id]);
   await pool.query(`UPDATE campagnes SET total_count = $1 WHERE id = $2`, [total.rows[0].n, camp.id]);
 
-  return { total: total.rows[0].n, desabonnes: desabonnes.length, retenus };
+  return {
+    total: total.rows[0].n,
+    desabonnes: desabonnes.length,
+    injoignables: rejetes.length,
+    retenus,
+  };
 }
 
 /* ===== EXECUTION ===== */

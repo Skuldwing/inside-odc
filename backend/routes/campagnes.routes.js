@@ -2,7 +2,12 @@ const express = require("express");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const pool = require("../db");
-const { preparerEnvoi, lancerEnvoi, estEnCours, DEBIT_PAR_MINUTE } = require("../services/campagneEnvoi");
+const {
+  preparerEnvoi, lancerEnvoi, estEnCours, DEBIT_PAR_MINUTE,
+  resoudreDestinataires, dedoublonner,
+} = require("../services/campagneEnvoi");
+const { trierAdresses } = require("../services/adressesValides");
+const { separerDesabonnes } = require("../services/desabonnement");
 const { ensureCampagnesSchema, estSchemaManquant } = require("../migrations/campagnesSchema");
 
 const router = express.Router();
@@ -146,7 +151,7 @@ router.post("/:id/send", authMiddleware, requireAdmin, async (req, res) => {
     if (!camp.html_body) return res.status(400).json({ error: "Le corps de l'email est requis" });
     if (estEnCours(id)) return res.status(409).json({ error: "L'envoi de cette campagne est deja en cours." });
 
-    const { total, desabonnes } = await avecSchema(() => preparerEnvoi(camp));
+    const { total, desabonnes, injoignables } = await avecSchema(() => preparerEnvoi(camp));
 
     if (!total) {
       return res.status(400).json({
@@ -165,9 +170,14 @@ router.post("/:id/send", authMiddleware, requireAdmin, async (req, res) => {
     );
     const aEnvoyer = restants.rows[0].n;
     if (!aEnvoyer) {
+      /* Aucune adresse joignable n'est un cas distinct de « tout le monde a
+         deja recu » : le dire, sinon l'administrateur cherche un envoi qui
+         n'a jamais pu avoir lieu. */
       return res.status(400).json({
         error:
-          "Tous les destinataires de cette campagne ont deja recu ce message. Utilisez « Reprendre » pour reessayer les echecs.",
+          injoignables && injoignables === total
+            ? `Aucune adresse joignable : les ${injoignables} adresses de cette campagne sont invalides ou leur domaine n'existe pas. Consultez le journal, corrigez-les dans Participants, puis relancez.`
+            : "Tous les destinataires de cette campagne ont deja recu ce message. Utilisez « Reprendre » pour reessayer les echecs.",
       });
     }
 
@@ -184,12 +194,40 @@ router.post("/:id/send", authMiddleware, requireAdmin, async (req, res) => {
       total,
       a_envoyer: aEnvoyer,
       desabonnes,
+      injoignables,
       debit_par_minute: DEBIT_PAR_MINUTE,
       duree_estimee_s: Math.ceil((aEnvoyer / DEBIT_PAR_MINUTE) * 60),
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur lors de l'envoi" });
+  }
+});
+
+/* ===== CONTROLE DES ADRESSES, AVANT ENVOI =====
+   Le meme tri que celui applique au lancement, mais sans rien envoyer ni rien
+   inscrire. Il vaut mieux decouvrir une adresse fautive ici, ou elle se
+   corrige, qu'apres coup dans un journal d'echecs. */
+router.get("/:id/controle-adresses", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const campRes = await avecSchema(() => pool.query("SELECT * FROM campagnes WHERE id=$1", [id]));
+    if (!campRes.rows.length) return res.status(404).json({ error: "Campagne introuvable" });
+
+    const bruts = dedoublonner(await avecSchema(() => resoudreDestinataires(campRes.rows[0])));
+    const { retenus: abonnes, desabonnes } = await separerDesabonnes(bruts);
+    const { retenus, rejetes } = await trierAdresses(abonnes);
+
+    res.json({
+      total: bruts.length,
+      joignables: retenus.length,
+      desabonnes: desabonnes.length,
+      injoignables: rejetes.length,
+      adresses: rejetes.map((d) => ({ email: d.email, nom: d.nom, motif: d.motif, explication: d.explication })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
@@ -227,6 +265,7 @@ router.get("/:id/envois", authMiddleware, requireAdmin, async (req, res) => {
         echec: parStatut.echec || 0,
         en_attente: parStatut.en_attente || 0,
         desabonne: parStatut.desabonne || 0,
+        injoignable: parStatut.injoignable || 0,
       },
       envois: lignes.rows,
     });

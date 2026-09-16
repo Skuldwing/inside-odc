@@ -925,10 +925,13 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
   };
 
   const c = data?.compte;
-  const traites = c ? c.envoye + c.echec + c.desabonne : 0;
+  const traites = c ? c.envoye + c.echec + c.desabonne + (c.injoignable || 0) : 0;
   const pourcent = c && c.total ? Math.round((traites / c.total) * 100) : 0;
   const enCours = Boolean(data?.en_cours || (c && c.en_attente > 0));
-  const echecs = (data?.envois || []).filter((e) => e.statut === "echec");
+  /* Les adresses injoignables paraissent avec les échecs : elles demandent la
+     même chose — une correction — et les cacher derrière « tout voir »
+     reviendrait à les taire. */
+  const echecs = (data?.envois || []).filter((e) => e.statut === "echec" || e.statut === "injoignable");
   const lignes = toutVoir ? data?.envois || [] : echecs;
 
   return createPortal(
@@ -965,6 +968,7 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
                   ["bg-green-500", c.envoye],
                   ["bg-red-500", c.echec],
                   ["bg-amber-400", c.desabonne],
+                  ["bg-slate-400", c.injoignable],
                 ].map(([couleur, n]) =>
                   n ? (
                     <div
@@ -977,7 +981,7 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid grid-cols-5 gap-2 text-center">
               <div className="rounded-xl border border-green-200 bg-green-50 p-2.5">
                 <p className="text-lg font-semibold text-green-700">{c.envoye}</p>
                 <p className="text-[11px] text-green-600">Envoyés</p>
@@ -994,7 +998,26 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
                 <p className="text-lg font-semibold text-amber-800">{c.desabonne}</p>
                 <p className="text-[11px] text-amber-700">Désabonnés</p>
               </div>
+              <div className="rounded-xl border border-slate-300 bg-slate-50 p-2.5">
+                <p className="text-lg font-semibold text-slate-700">{c.injoignable || 0}</p>
+                <p className="text-[11px] text-slate-600">Injoignables</p>
+              </div>
             </div>
+
+            {/* Ces adresses n'ont jamais été présentées au service d'envoi.
+                C'est délibéré : un rebond compte contre le compte
+                d'expédition, et c'est ce qui l'a fait suspendre deux fois. */}
+            {c.injoignable > 0 && (
+              <p className="flex items-start gap-2 text-xs text-slate-600">
+                <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-slate-500" />
+                <span>
+                  {c.injoignable} adresse{c.injoignable > 1 ? "s" : ""} écartée{c.injoignable > 1 ? "s" : ""} avant
+                  l&apos;envoi : domaine inexistant ou adresse mal formée. Elles n&apos;ont pas été
+                  soumises au service d&apos;envoi — un rebond nuit à la réputation du compte.
+                  Corrigez-les dans Participants.
+                </span>
+              </p>
+            )}
 
             {c.desabonne > 0 && (
               <p className="flex items-start gap-2 text-xs text-slate-600">
@@ -1030,7 +1053,8 @@ function SuiviEnvoi({ campagneId, onFerme, onChange }) {
                     className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${
                       e.statut === "envoye" ? "bg-green-500"
                       : e.statut === "echec" ? "bg-red-500"
-                      : e.statut === "desabonne" ? "bg-amber-500" : "bg-slate-300"
+                      : e.statut === "desabonne" ? "bg-amber-500"
+                      : e.statut === "injoignable" ? "bg-slate-400" : "bg-slate-300"
                     }`}
                   />
                   <div className="min-w-0 flex-1">
@@ -1435,6 +1459,21 @@ function AttestationsTab({ activities }) {
                         donc ignoré{resultat.skipped > 1 ? "s" : ""}.
                       </p>
                     )}
+                    {/* Écartées avant l'envoi, jamais soumises au service :
+                        un rebond compte contre la réputation du compte. */}
+                    {resultat.injoignables?.length > 0 && (
+                      <div className="text-amber-800">
+                        <p className="font-medium">
+                          {resultat.injoignables.length} adresse{resultat.injoignables.length > 1 ? "s" : ""} injoignable
+                          {resultat.injoignables.length > 1 ? "s" : ""}, écartée{resultat.injoignables.length > 1 ? "s" : ""} avant l&apos;envoi :
+                        </p>
+                        <ul className="mt-0.5">
+                          {resultat.injoignables.map((a) => (
+                            <li key={a.email}>{a.email} — {a.explication}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {resultat.errors?.length > 0 && (
                       <p className="text-red-600">Échec pour : {resultat.errors.join(", ")}</p>
                     )}
@@ -1488,6 +1527,11 @@ export default function Campagnes() {
   const [editingCampaign, setEditingCampaign] = useState(null); // null=fermé | {}=nouveau | {id,...}=édition
   const [sendingId,       setSendingId]       = useState(null);
   const [confirmSend,     setConfirmSend]     = useState(null); // { id, name }
+  /* Contrôle des adresses, joué à l'ouverture de la confirmation. Une adresse
+     fautive se corrige ici ; découverte après l'envoi, elle a déjà compté
+     comme un rebond contre le compte d'expédition. */
+  const [controle,        setControle]        = useState(null);
+  const [controleEnCours, setControleEnCours] = useState(false);
   const [suiviId,         setSuiviId]         = useState(null); // campagne dont on regarde l'envoi
 
   if (!isAdmin) {
@@ -1517,6 +1561,18 @@ export default function Campagnes() {
     setEditingCampaign(null);
     if (andSend) setConfirmSend({ id: savedId, name: savedName || "la campagne" });
   };
+
+  useEffect(() => {
+    if (!confirmSend?.id) { setControle(null); return; }
+    let vivant = true;
+    setControle(null);
+    setControleEnCours(true);
+    api.get(`/campagnes/${confirmSend.id}/controle-adresses`)
+      .then((res) => { if (vivant) setControle(res.data); })
+      .catch(() => { if (vivant) setControle(null); })  /* le contrôle est un garde-fou, pas un préalable */
+      .finally(() => { if (vivant) setControleEnCours(false); });
+    return () => { vivant = false; };
+  }, [confirmSend?.id]);
 
   /* La requête ne fait plus que lancer l'envoi : elle répond tout de suite,
      et le suivi prend le relais. */
@@ -1616,6 +1672,45 @@ export default function Campagnes() {
                   plusieurs minutes. Les personnes désabonnées sont exclues, et chaque message porte un
                   lien de désabonnement. Vous pourrez suivre l&apos;avancement et arrêter à tout moment.
                 </p>
+
+                {/* Contrôle des adresses. Les injoignables ne partiront pas :
+                    un rebond compte contre la réputation du compte
+                    d'expédition, et c'est ce qui l'a fait suspendre. */}
+                {controleEnCours && (
+                  <p className="mb-5 flex items-center gap-2 text-xs text-slate-500">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Vérification des adresses…
+                  </p>
+                )}
+                {controle && (
+                  <div className="mb-5 space-y-2">
+                    <p className="text-xs text-slate-600">
+                      <span className="font-semibold text-slate-800">{controle.joignables}</span> adresse
+                      {controle.joignables > 1 ? "s" : ""} joignable{controle.joignables > 1 ? "s" : ""}
+                      {controle.desabonnes > 0 && ` · ${controle.desabonnes} désabonné${controle.desabonnes > 1 ? "s" : ""}`}
+                      {controle.injoignables > 0 && ` · ${controle.injoignables} injoignable${controle.injoignables > 1 ? "s" : ""}`}
+                    </p>
+                    {controle.injoignables > 0 && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <p className="font-semibold">
+                          {controle.injoignables} adresse{controle.injoignables > 1 ? "s ne partiront pas" : " ne partira pas"}
+                        </p>
+                        <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto">
+                          {controle.adresses.map((a) => (
+                            <li key={a.email}>
+                              <span className="font-medium">{a.email}</span> — {a.explication}
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-1.5 text-amber-700">
+                          Elles ne seront pas soumises au service d&apos;envoi : un message qui rebondit
+                          compte contre la réputation du compte. Corrigez-les dans Participants, ou
+                          poursuivez sans elles.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="flex justify-end gap-3">
                   <button onClick={() => setConfirmSend(null)} className="btn-ghost border">Annuler</button>
                   <button
