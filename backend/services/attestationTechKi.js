@@ -137,8 +137,25 @@ function ecrireManuscrit(doc, texte, { x, largeur, ligneY, taille, plancher = 14
  * @param {string} options.module       intitule de la formation suivie
  * @param {string|Date} options.date    date de l'activite
  * @param {string} options.lieu         ville, « Dakar » par defaut
+ * @param {object} options.modele        textes et logo du dispositif ; a
+ *                                       defaut, le modele Tech-Ki d'origine
  */
-function genererAttestationTechKi({ participant = {}, module: intitule, date, lieu = "Dakar" }) {
+function genererAttestationTechKi({ participant = {}, module: intitule, date, lieu = "Dakar", modele = {} }) {
+  /* Ce qui change d'un dispositif a l'autre vient du modele ; le reste — fond,
+     cadre, decors, mise en page — est commun a toutes les attestations. Les
+     valeurs d'origine servent de repli : un modele incomplet ne doit pas
+     produire un document amput'e. */
+  const M = {
+    bandeauAvant: modele.bandeau_avant ?? "TECH-",
+    bandeauApres: modele.bandeau_apres ?? "KI",
+    programme: modele.programme ?? "Tech-Ki",
+    organisation: modele.organisation ?? "Orange Digital Center",
+    mention: modele.mention || null,
+    signataireNom: modele.signataire_nom ?? "NAFISSATOU CHÉRIF NIANG",
+    signataireFonction: modele.signataire_fonction ?? "Directrice de Orange Digital Center",
+    logoPartenaire: modele.logo_partenaire || null,
+  };
+
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: [LARGEUR, HAUTEUR],
@@ -216,11 +233,40 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         height: 1.08 * POUCE,
       });
 
-      /* ── Bandeau Tech-Ki, en haut a droite ────────────────────────────── */
-      doc.font("Helvetica-Bold").fontSize(35.8);
-      doc.fillColor(NOIR).text("TECH-", 8.90 * POUCE, 0.87 * POUCE, { lineBreak: false });
-      const largeurTech = doc.widthOfString("TECH-");
-      doc.fillColor(ORANGE).text("KI", 8.90 * POUCE + largeurTech, 0.87 * POUCE, { lineBreak: false });
+      /* ── Bandeau, en haut a droite ─────────────────────────────────────
+         Le logo du partenaire prend la place du bandeau texte quand il y en a
+         un : c'est le meme emplacement, et les deux ensemble se marcheraient
+         dessus. Il est mis a l'echelle pour tenir dans la zone sans
+         deformation. */
+      if (M.logoPartenaire) {
+        const ZONE = { x: 8.35 * POUCE, y: 0.55 * POUCE, l: 2.70 * POUCE, h: 1.15 * POUCE };
+        doc.image(M.logoPartenaire, ZONE.x, ZONE.y, {
+          fit: [ZONE.l, ZONE.h],
+          align: "right",
+          valign: "center",
+        });
+      } else if (M.bandeauAvant || M.bandeauApres) {
+        /* « TECH-KI » tenait a 35,8 points ; « TECH ACADEMY » debordait de la
+           page. Le bandeau est donc cale a droite et reduit jusqu'a tenir dans
+           la zone — un nom de programme long n'a pas a etre tronque. */
+        const DROITE = 11.28 * POUCE;
+        const ZONE = 2.95 * POUCE;
+        let taille = 35.8;
+        const mesurer = (t) => {
+          doc.font("Helvetica-Bold").fontSize(t);
+          return doc.widthOfString(M.bandeauAvant) + doc.widthOfString(M.bandeauApres);
+        };
+        while (taille > 14 && mesurer(taille) > ZONE) taille -= 0.5;
+        const total = mesurer(taille);
+        const depart = DROITE - total;
+        /* Le bandeau reste cale sur la meme ligne de base quelle que soit sa
+           taille, pour ne pas remonter vers le bord quand il rapetisse. */
+        const y = (0.87 + (35.8 - taille) / 72 / 2) * POUCE;
+        doc.fillColor(NOIR).text(M.bandeauAvant, depart, y, { lineBreak: false });
+        doc.fillColor(ORANGE).text(
+          M.bandeauApres, depart + doc.widthOfString(M.bandeauAvant), y, { lineBreak: false }
+        );
+      }
 
       /* ── Titre ────────────────────────────────────────────────────────── */
       doc
@@ -296,13 +342,29 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         doc,
         [
           { ...courant, texte: "organisée dans le cadre du programme " },
-          { ...marque, texte: "Tech-Ki" },
+          { ...marque, texte: M.programme },
           { ...courant, texte: " de " },
-          { ...marque, texte: "Orange Digital Center" },
+          { ...marque, texte: M.organisation },
           { ...courant, texte: "." },
         ],
         { x: 2.39 * POUCE, largeur: 6.32 * POUCE, y: 5.49 * POUCE, interligne: 22 }
       );
+
+      /* La mention du partenariat, sous la phrase. Un dispositif mene avec un
+         tiers doit pouvoir le dire sur le document — c'est la raison d'etre
+         des modeles. */
+      if (M.mention) {
+        doc
+          .font("Helvetica-Oblique")
+          .fontSize(12)
+          .fillColor(GRIS)
+          .text(M.mention, 2.39 * POUCE, 6.02 * POUCE, {
+            width: 6.32 * POUCE,
+            align: "center",
+            lineBreak: false,
+            ellipsis: true,
+          });
+      }
 
       /* ── Signature ────────────────────────────────────────────────────── */
       doc.image(FICHIERS.signature, 1.32 * POUCE, 6.22 * POUCE, {
@@ -314,12 +376,12 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         .font("Helvetica-Bold")
         .fontSize(12.5)
         .fillColor(NOIR)
-        .text("NAFISSATOU CHÉRIF NIANG", 1.08 * POUCE, 6.98 * POUCE, { lineBreak: false });
+        .text(M.signataireNom, 1.08 * POUCE, 6.98 * POUCE, { lineBreak: false });
 
       doc
         .font("Helvetica")
         .fontSize(10.5)
-        .text("Directrice de Orange Digital Center", 1.03 * POUCE, 7.25 * POUCE, { lineBreak: false });
+        .text(M.signataireFonction, 1.03 * POUCE, 7.25 * POUCE, { lineBreak: false });
 
       doc
         .fontSize(10)

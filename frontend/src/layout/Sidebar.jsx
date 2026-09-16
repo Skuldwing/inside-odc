@@ -82,6 +82,7 @@ const GROUPES = [
     items: [
       { name: "Partenaires", icon: Building2, path: "/partenaires", roles: ["admin"] },
       { name: "Dispositifs", icon: Layers, path: "/dispositifs", roles: ["admin"] },
+      { name: "Attestations", icon: Award, path: "/modeles-attestation", roles: ["admin"] },
     ],
   },
   {

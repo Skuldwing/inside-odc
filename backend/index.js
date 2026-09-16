@@ -34,6 +34,8 @@ const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
 const { ensureCampagnesSchema } = require("./migrations/campagnesSchema");
 const { ensureContactsPartages } = require("./migrations/contactsPartages");
 const { ensureAttestationsEnvoyees } = require("./migrations/attestationsEnvoyees");
+const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
+const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
 const { infoVersion } = require("./version");
 
@@ -175,6 +177,7 @@ app.use("/mbootay", mbootayRoutes);
 app.use("/profile", profileRoutes);
 app.use("/search", searchRoutes);
 app.use("/email", emailRoutes);
+app.use("/modeles-attestation", modelesAttestationRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
@@ -743,6 +746,18 @@ pool.query(`
     console.log("Migration OK: attestations envoyees");
   } catch (e) {
     console.error("Migration attestations envoyees ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Modeles d'attestation ──
+   Les textes et le logo qui changent d'un dispositif a l'autre. La route sait
+   rejouer ce schema elle-meme si cette migration a echoue. */
+(async () => {
+  try {
+    await ensureModelesAttestation();
+    console.log("Migration OK: modeles d'attestation");
+  } catch (e) {
+    console.error("Migration modeles d'attestation ECHOUEE :", e.message);
   }
 })();
 

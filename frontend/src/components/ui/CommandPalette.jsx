@@ -38,6 +38,12 @@ const PAGES = [
   { label: "Participants", url: "/participants", keywords: "beneficiaires apprenants" },
   { label: "Partenaires", url: "/partenaires", admin: true, keywords: "crm structures" },
   { label: "Dispositifs", url: "/dispositifs", admin: true, keywords: "programmes" },
+  {
+    label: "Modèles d'attestation",
+    url: "/modeles-attestation",
+    admin: true,
+    keywords: "attestation certificat modele template logo partenaire",
+  },
   { label: "Campagnes", url: "/campagnes", admin: true, keywords: "emailing mail" },
   { label: "Utilisateurs", url: "/utilisateurs", admin: true, keywords: "comptes acces roles" },
   { label: "Formulaires", url: "/formulaires", admin: true, keywords: "questionnaires" },
