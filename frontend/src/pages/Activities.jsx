@@ -1321,6 +1321,7 @@ export default function Activities({
                     </p>
                   )}
                 </div>
+                <ContactsIgnoresInfo result={importDirectResult} />
                 <ColumnMappingInfo result={importDirectResult} />
               </div>
             )}
@@ -1547,7 +1548,60 @@ function ImportResultSummary({ result }) {
           Campagnes → Attestations : ils apparaîtraient ainsi sur les documents.
         </p>
       )}
+      <ContactsIgnoresInfo result={result} />
       <ColumnMappingInfo result={result} />
+    </div>
+  );
+}
+
+/* Les adresses que l'import n'a pas enregistrées.
+   Elles disparaissaient sans un mot : la fiche était créée, mais sans adresse,
+   et la campagne partait plus courte que la liste de présence sans que rien ne
+   l'explique. On les nomme ici, avec le motif et la personne qui détient déjà
+   l'adresse, tant que le fichier est encore sous la main. */
+const MOTIFS_CONTACT = {
+  deja_attribuee: (c) =>
+    c.detenteur
+      ? `déjà enregistrée pour ${c.detenteur}`
+      : "déjà enregistrée pour quelqu'un d'autre",
+  doublon_fichier: () => "la même adresse figure sur plusieurs lignes du fichier",
+  adresse_differente: () => "cette personne est déjà enregistrée sous une autre adresse",
+};
+
+function ContactsIgnoresInfo({ result }) {
+  const ignores = result?.contacts_ignores ?? [];
+  const completees = result?.fiches_completees ?? 0;
+
+  if (ignores.length === 0 && completees === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {completees > 0 && (
+        <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          {completees} fiche{completees > 1 ? "s" : ""} déjà connue{completees > 1 ? "s" : ""} complétée
+          {completees > 1 ? "s" : ""} avec les coordonnées du fichier.
+        </p>
+      )}
+      {ignores.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-semibold">
+            {ignores.length} coordonnée{ignores.length > 1 ? "s" : ""} non enregistrée
+            {ignores.length > 1 ? "s" : ""}
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {ignores.map((c, i) => (
+              <li key={i}>
+                <span className="font-medium">{c.prenom} {c.nom}</span> — {c.valeur} :{" "}
+                {(MOTIFS_CONTACT[c.motif] || (() => c.motif))(c)}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-amber-700">
+            Une adresse ne peut désigner qu&apos;une personne. Ces participants n&apos;en ont donc
+            pas et ne recevront ni campagne ni attestation : corrigez le fichier puis réimportez-le.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

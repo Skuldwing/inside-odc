@@ -727,6 +727,11 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
          plutot que de le laisser decouvrir au moment d'envoyer les
          attestations, ou il est deja trop tard pour le corriger en amont. */
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
+      /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
+         Sans cette liste, la campagne partirait plus courte que la liste de
+         presence sans que rien ne l'explique. */
+      contacts_ignores: stats.contactsIgnores,
+      fiches_completees: stats.rattachements,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
@@ -792,6 +797,11 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
+      /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
+         Sans cette liste, la campagne partirait plus courte que la liste de
+         presence sans que rien ne l'explique. */
+      contacts_ignores: stats.contactsIgnores,
+      fiches_completees: stats.rattachements,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
@@ -861,6 +871,11 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
+      /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
+         Sans cette liste, la campagne partirait plus courte que la liste de
+         presence sans que rien ne l'explique. */
+      contacts_ignores: stats.contactsIgnores,
+      fiches_completees: stats.rattachements,
       colonnes_reconnues: recognizedColumns,
       colonnes_non_reconnues: unrecognizedColumns,
       ligne_entete_detectee: headerRowIndex + 1,
