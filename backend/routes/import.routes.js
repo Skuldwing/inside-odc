@@ -9,7 +9,7 @@ const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 
 const {
-  repetitionsDans, normaliser, clePersonne, memePersonne, nomsCompatibles,
+  repetitionsDans, normaliser, clePersonne, memePersonne,
 } = require("../services/nomsDoublons");
 
 const router = express.Router();
@@ -506,15 +506,13 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
     }
 
-    /* Le rapprochement est acquis si les mots du nom coincident. Il l'est
-       aussi quand un contact identique corrobore une ecriture seulement
-       compatible — un second prenom ajoute ou omis : « Assietou Sy » et
-       « Assietou Ndeye Sy » partagent une adresse, c'est la meme personne.
-       Sans cette tolerance, la seconde se voyait refuser son adresse « deja
-       attribuee » a la premiere et repartait avec une fiche sans contact.
-       Et une ligne dont le nom est incomplet ne peut etre comparee par le nom :
-       son adresse la rattache seule. */
-    if (ex && (memePersonne(ex, it) || nomsCompatibles(ex, it) || (trouveParEmail && !it.cle))) {
+    /* Le rapprochement exige que les mots du nom coincident exactement.
+       Un prenom supplementaire fait deux personnes differentes, et non deux
+       ecritures d'une meme : « Assietou Sy » et « Assietou Ndeye Sy » sont
+       deux beneficiaires distinctes. La plateforme n'a pas a en decider.
+       Seule exception : une ligne dont le nom est incomplet ne peut etre
+       comparee par le nom, et son adresse la rattache seule. */
+    if (ex && (memePersonne(ex, it) || (trouveParEmail && !it.cle))) {
       items[i].resolvedId = ex.id;
       /* La fiche existe mais il lui manque ce que le fichier apporte : c'est
          ce qui repare les adresses perdues par les imports precedents. */
@@ -658,7 +656,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
          autre sans. Pour celles-la, le contact suffit : l'etape precedente a
          deja retire tout contact appartenant a quelqu'un d'autre, celui qui
          reste est donc libre ou deja le sien. */
-      const reconnue = found && (memePersonne(found, p) || nomsCompatibles(found, p) || !p.cle);
+      const reconnue = found && (memePersonne(found, p) || !p.cle);
       if (reconnue) {
         items[toInsertIdx[j]].resolvedId = found.id;
       } else {

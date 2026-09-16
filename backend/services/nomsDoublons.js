@@ -88,27 +88,6 @@ function memePersonne(a, b) {
   return Boolean(ca && cb && ca === cb);
 }
 
-/**
- * Deux ecritures qui peuvent designer la meme personne bien que leurs mots ne
- * coincident pas exactement : l'une porte un second prenom que l'autre omet.
- * « Assietou Sy » et « Assietou Ndeye Sy » sont le cas type.
- *
- * On l'exige contenue dans l'autre — pas seulement recoupee — et sur au moins
- * deux mots : un seul mot commun, c'est un homonyme partiel, pas une identite.
- *
- * Volontairement plus permissif que clePersonne, donc reserve aux cas ou un
- * contact identique corrobore le rapprochement. Sur le nom seul, il
- * confondrait « Fatou Sarr » et « Fatou Ndeye Sarr », qui peuvent etre deux
- * personnes.
- */
-function nomsCompatibles(a, b) {
-  const A = motsDuNom(a?.nom, a?.prenom);
-  const B = motsDuNom(b?.nom, b?.prenom);
-  if (!A.size || !B.size) return false;
-  const communs = [...A].filter((m) => B.has(m)).length;
-  return communs === Math.min(A.size, B.size) && communs >= 2;
-}
-
 module.exports = {
   prenomSansNomRepete,
   repetitionsDans,
@@ -116,5 +95,4 @@ module.exports = {
   motsDuNom,
   clePersonne,
   memePersonne,
-  nomsCompatibles,
 };
