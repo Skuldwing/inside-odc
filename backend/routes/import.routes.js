@@ -384,9 +384,11 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       resolvedId: null,
     });
   }
-  /* Ce que l'import n'a pas pu enregistrer. Une adresse perdue en silence est
-     pire qu'une adresse refusee : la campagne part sans la personne et
-     personne ne sait pourquoi. Tout ce qui est ecarte est donc rapporte. */
+
+  /* Ce que l'import n'a pas pu enregistrer. Depuis que les contacts peuvent
+     figurer sur plusieurs fiches, il n'ecarte plus d'adresse ni de numero :
+     seule subsiste la mention d'une personne connue sous une autre adresse,
+     qui n'est pas un rejet mais un avertissement. */
   const contactsIgnores = [];
   if (items.length === 0) {
     return {
@@ -395,11 +397,18 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     };
   }
 
-  // 2. Qui est deja connu ? Une seule requete pour les adresses et les numeros.
+  /* 2. Qui est deja connu ?
+     Une adresse peut desormais figurer sur plusieurs fiches : la recherche
+     rend donc une liste, et c'est le nom qui departage. */
   const emailSet = new Set(items.filter(it => it.email).map(it => it.email));
   const phoneSet = new Set(items.filter(it => it.telephone).map(it => it.telephone));
-  const byEmail = new Map(); // email normalise → {id,nom,prenom,email,telephone}
-  const byPhone = new Map(); // telephone → idem
+  const byEmail = new Map(); // email normalise → [fiches]
+  const byPhone = new Map(); // telephone → [fiches]
+  const ajouter = (carte, cle, fiche) => {
+    if (!cle) return;
+    if (!carte.has(cle)) carte.set(cle, []);
+    if (!carte.get(cle).some((f) => f.id === fiche.id)) carte.get(cle).push(fiche);
+  };
 
   if (emailSet.size > 0 || phoneSet.size > 0) {
     const parts = [], params = [];
@@ -411,8 +420,8 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       params
     );
     for (const r of existing) {
-      if (r.email) byEmail.set(normalizeEmail(r.email), r);
-      if (r.telephone) byPhone.set(normalizePhone(r.telephone), r);
+      ajouter(byEmail, normalizeEmail(r.email), r);
+      ajouter(byPhone, normalizePhone(r.telephone), r);
     }
   }
 
@@ -422,10 +431,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
      Une personne connue par son numero qui revient sur une liste ne portant
      que son adresse n'etait rattachable par rien — l'import creait un second
      exemplaire d'elle-meme, et son information restait eparpillee entre deux
-     fiches dont aucune n'etait complete.
-     On rapproche donc sur le nom, sous deux reserves tenues plus bas : le nom
-     ne doit designer qu'une seule fiche connue, et le fichier ne doit rien
-     apporter qui contredise ce qui est deja enregistre. */
+     fiches dont aucune n'etait complete. */
   const nomsCherches = [...new Set(items.map(it => normaliser(it.nom)).filter(Boolean))];
   const parNom = new Map(); // cle personne → fiche, ou null si le nom est ambigu
   if (nomsCherches.length > 0) {
@@ -455,6 +461,11 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     return true;
   };
 
+  /* Parmi les fiches qui portent ce contact, celle qui designe la meme
+     personne. Le contact seul ne suffit plus a identifier quelqu'un : un
+     numero de famille en designe plusieurs. */
+  const memeNom = (fiches, it) => (fiches || []).find((f) => memePersonne(f, it)) || null;
+
   /* Ce que le fichier peut completer sur une fiche deja connue, au-dela des
      coordonnees. L'import les jetait : une liste apportant le genre et la
      structure d'une personne deja enregistree n'en gardait rien, et sa fiche
@@ -469,19 +480,26 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   ];
 
   // 3. Rapprochement ligne par ligne
-  const toInsert = [];    // lignes qui donnent lieu a une nouvelle fiche
-  const toInsertIdx = []; // leur indice dans items[]
-  const aCompleter = [];  // fiches existantes auxquelles il manque un contact
-  /* Qui detient chaque contact, en base comme dans le fichier en cours. Sans
-     ce registre, deux lignes differentes portant la meme adresse etaient
-     inserees l'une apres l'autre : la seconde tombait sur l'index d'unicite,
-     ne s'inserait pas, et se voyait attribuer l'identifiant de la premiere.
-     La seconde personne disparaissait purement et simplement, comptee comme
-     un doublon. */
-  const detenteurEmail = new Map();
-  const detenteurTel = new Map();
-  for (const [mail, fiche] of byEmail) detenteurEmail.set(mail, { cle: clePersonne(fiche.nom, fiche.prenom), fiche });
-  for (const [tel, fiche] of byPhone) detenteurTel.set(tel, { cle: clePersonne(fiche.nom, fiche.prenom), fiche });
+  const aCompleter = [];  // fiches existantes auxquelles il manque quelque chose
+
+  /* Ce qu'une ligne apporte a une autre qui designe la meme personne :
+     seulement ce qui manque. Deux lignes d'un meme fichier peuvent porter
+     l'une l'adresse, l'autre le numero — la fiche doit recevoir les deux. */
+  const completerDepuis = (cible, source) => {
+    const ajoutes = {};
+    if (source.email && !cible.email) ajoutes.email = source.email;
+    if (source.telephone && !cible.telephone) ajoutes.telephone = source.telephone;
+    for (const [colonne, champ] of CHAMPS_COMPLETABLES) {
+      if (!cible[champ] && source[champ]) ajoutes[colonne] = source[champ];
+    }
+    return ajoutes;
+  };
+
+  /* Deux lignes du meme fichier qui designent la meme personne ne doivent
+     donner qu'une fiche. Le rapprochement se fait sur l'identite, non sur le
+     contact : deux personnes differentes partageant une adresse restent deux
+     personnes, et gardent chacune cette adresse. */
+  const dejaVu = new Map(); // cle personne → indice dans items[]
 
   const signaler = (it, champ, valeur, motif, detenteur) => {
     contactsIgnores.push({
@@ -493,39 +511,33 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   let rattachements = 0;
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
-    let ex = it.email ? byEmail.get(it.email) : null;
-    /* Retenu avant le repli sur le telephone : une adresse identifie a elle
-       seule, un numero non. */
-    const trouveParEmail = Boolean(ex);
-    if (!ex && it.telephone) ex = byPhone.get(it.telephone);
+
+    let ex = it.email ? memeNom(byEmail.get(it.email), it) : null;
+    if (!ex && it.telephone) ex = memeNom(byPhone.get(it.telephone), it);
+
+    /* Une ligne dont le nom est incomplet ne peut etre comparee par le nom.
+       Son adresse la rattache alors seule — c'est le seul moyen de ne pas en
+       faire une seconde fiche anonyme. */
+    if (!ex && !it.cle && it.email) {
+      const candidats = byEmail.get(it.email) || [];
+      if (candidats.length === 1) ex = candidats[0];
+    }
+
     if (!ex && it.cle) {
       const candidat = parNom.get(it.cle);
-      /* Ici le nom est seul — aucun contact ne corrobore. On s'en tient donc
-         a la concordance stricte des mots, sans la tolerance au second
-         prenom, qui confondrait « Fatou Sarr » et « Fatou Ndeye Sarr ». */
       if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
     }
 
-    /* Le rapprochement exige que les mots du nom coincident exactement.
-       Un prenom supplementaire fait deux personnes differentes, et non deux
-       ecritures d'une meme : « Assietou Sy » et « Assietou Ndeye Sy » sont
-       deux beneficiaires distinctes. La plateforme n'a pas a en decider.
-       Seule exception : une ligne dont le nom est incomplet ne peut etre
-       comparee par le nom, et son adresse la rattache seule. */
-    if (ex && (memePersonne(ex, it) || (trouveParEmail && !it.cle))) {
+    if (ex) {
       items[i].resolvedId = ex.id;
-      /* La fiche existe mais il lui manque ce que le fichier apporte : c'est
-         ce qui repare les adresses perdues par les imports precedents. */
-      const emailAAjouter = it.email && !ex.email && !detenteurEmail.has(it.email) ? it.email : null;
-      const telAAjouter = it.telephone && !ex.telephone && !detenteurTel.has(it.telephone) ? it.telephone : null;
 
       /* Tout ce que cette liste apporte et qui manque a la fiche. Une personne
          inscrite a trois formations voit ainsi sa fiche se completer au fil
          des listes, chacune apportant les colonnes que les autres n'avaient
          pas. Rien de deja renseigne n'est ecrase. */
       const maj = {};
-      if (emailAAjouter) maj.email = emailAAjouter;
-      if (telAAjouter) maj.telephone = telAAjouter;
+      if (it.email && !ex.email) maj.email = it.email;
+      if (it.telephone && !ex.telephone) maj.telephone = it.telephone;
       for (const [colonne, champ] of CHAMPS_COMPLETABLES) {
         if (!ex[colonne] && it[champ]) maj[colonne] = it[champ];
       }
@@ -535,52 +547,52 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
            portant la meme personne ne doivent pas compter deux fois le meme
            champ complete. */
         Object.assign(ex, maj);
+        if (maj.email) ajouter(byEmail, maj.email, ex);
+        if (maj.telephone) ajouter(byPhone, maj.telephone, ex);
       }
-      if (it.email && !emailAAjouter && !ex.email) {
-        signaler(it, "email", it.email, "deja_attribuee", detenteurEmail.get(it.email)?.fiche);
-      } else if (it.email && ex.email && normalizeEmail(ex.email) !== it.email) {
-        /* La personne est connue sous une autre adresse. On garde celle de la
-           base — le fichier n'est pas forcement plus a jour — mais on le dit,
-           faute de quoi la campagne partirait a l'ancienne adresse sans que
-           rien ne l'indique. */
+
+      /* La personne est connue sous une autre adresse. On garde celle de la
+         base — le fichier n'est pas forcement plus a jour — mais on le dit,
+         faute de quoi la campagne partirait a l'ancienne adresse sans que
+         rien ne l'indique. */
+      if (it.email && ex.email && normalizeEmail(ex.email) !== it.email) {
         signaler(it, "email", it.email, "adresse_differente", ex);
       }
-      if (emailAAjouter) detenteurEmail.set(emailAAjouter, { cle: it.cle, fiche: ex });
-      if (telAAjouter) detenteurTel.set(telAAjouter, { cle: it.cle, fiche: ex });
-      if (ex.email) detenteurEmail.set(normalizeEmail(ex.email), { cle: clePersonne(ex.nom, ex.prenom), fiche: ex });
+
+      if (it.cle && !dejaVu.has(it.cle)) dejaVu.set(it.cle, i);
       continue;
     }
 
-    // Nouvelle fiche : on ne lui attribue un contact que s'il est libre.
-    let email = it.email;
-    let telephone = it.telephone;
-    if (email) {
-      const detenteur = detenteurEmail.get(email);
-      if (detenteur && detenteur.cle !== it.cle) {
-        signaler(it, "email", email, detenteur.fiche ? "deja_attribuee" : "doublon_fichier", detenteur.fiche);
-        email = null;
+    /* Deja rencontree plus haut dans ce meme fichier : une seule fiche, qui
+       recoit ce que cette ligne-ci apporte en plus. */
+    if (it.cle && dejaVu.has(it.cle)) {
+      const premier = items[dejaVu.get(it.cle)];
+      const ajoutes = completerDepuis(premier, it);
+      for (const [colonne, valeur] of Object.entries(ajoutes)) {
+        const champ = CHAMPS_COMPLETABLES.find(([c]) => c === colonne)?.[1] || colonne;
+        premier[champ] = valeur;
+        if (colonne === "email" || colonne === "telephone") premier[colonne] = valeur;
       }
-    }
-    if (telephone) {
-      const detenteur = detenteurTel.get(telephone);
-      if (detenteur && detenteur.cle !== it.cle) {
-        signaler(it, "telephone", telephone, detenteur.fiche ? "deja_attribuee" : "doublon_fichier", detenteur.fiche);
-        telephone = null;
+      /* Si la premiere occurrence designait une fiche deja en base, ce
+         supplement doit y etre ecrit ; sinon il partira avec l'insertion. */
+      if (premier.resolvedId && Object.keys(ajoutes).length) {
+        aCompleter.push({ id: premier.resolvedId, maj: ajoutes });
       }
+      items[i].memeQue = dejaVu.get(it.cle);
+      continue;
     }
-    if (email && !detenteurEmail.has(email)) detenteurEmail.set(email, { cle: it.cle, fiche: null });
-    if (telephone && !detenteurTel.has(telephone)) detenteurTel.set(telephone, { cle: it.cle, fiche: null });
 
-    /* Apres retrait des contacts qui appartiennent a quelqu'un d'autre, il
-       peut ne rien rester : une ligne sans nom dont l'adresse etait deja prise
-       ne designe plus personne. L'inserer creerait une fiche vide, qui
-       gonflerait les compteurs sans correspondre a personne — exactement ce
-       qu'on cherche a eviter. Elle est deja rapportee plus haut. */
-    if (!it.nom && !it.prenom && !email && !telephone) continue;
-
-    toInsert.push({ ...it, email, telephone });
-    toInsertIdx.push(i);
+    if (it.cle) dejaVu.set(it.cle, i);
+    items[i].aInserer = true;
   }
+
+  /* Les fiches a creer sont relevees apres la boucle : une ligne repetee plus
+     bas a pu completer la premiere entre-temps. */
+  const toInsert = [];
+  const toInsertIdx = [];
+  items.forEach((it, i) => {
+    if (it.aInserer) { toInsert.push(it); toInsertIdx.push(i); }
+  });
 
   /* 3b. Completer les fiches deja connues avec ce que la liste apporte.
      Les noms de colonnes viennent de CHAMPS_COMPLETABLES et des deux champs de
@@ -606,72 +618,42 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     champsCompletes += colonnes.length;
   }
 
-  // 4a. Insertion groupee des fiches qui portent un contact
-  const withContact = toInsert.map((p, j) => ({ p, j })).filter(({ p }) => p.email || p.telephone);
-  if (withContact.length > 0) {
-    await client.query(
+  /* 4. Creation des nouvelles fiches.
+     Plus rien ne peut echouer sur un index d'unicite : chaque ligne donne une
+     fiche, avec les coordonnees que la liste porte. On lit les identifiants
+     rendus dans l'ordre d'insertion plutot que de relire la table — avec des
+     contacts partages, une relecture par adresse serait ambigue. */
+  if (toInsert.length > 0) {
+    const { rows: crees } = await client.query(
       `INSERT INTO participants (nom, prenom, genre, age_range, email, telephone, statut, structure)
-       SELECT unnest($1::text[]), unnest($2::text[]), unnest($3::text[]), unnest($4::text[]),
-              unnest($5::text[]), unnest($6::text[]), unnest($7::text[]), unnest($8::text[])
-       ON CONFLICT DO NOTHING`,
+       SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[],
+                            $5::text[], $6::text[], $7::text[], $8::text[])
+       RETURNING id`,
       [
-        withContact.map(({ p }) => p.nom),
-        withContact.map(({ p }) => p.prenom),
-        withContact.map(({ p }) => p.normalizedGender || null),
-        withContact.map(({ p }) => p.ageRange || null),
-        withContact.map(({ p }) => p.email || null),
-        withContact.map(({ p }) => p.telephone || null),
-        withContact.map(({ p }) => p.statut || null),
-        withContact.map(({ p }) => p.structure || null),
+        toInsert.map((p) => p.nom),
+        toInsert.map((p) => p.prenom),
+        toInsert.map((p) => p.normalizedGender || null),
+        toInsert.map((p) => p.ageRange || null),
+        toInsert.map((p) => p.email || null),
+        toInsert.map((p) => p.telephone || null),
+        toInsert.map((p) => p.statut || null),
+        toInsert.map((p) => p.structure || null),
       ]
     );
-
-    // Relire pour recuperer les identifiants
-    const newEmails = [...new Set(withContact.filter(({ p }) => p.email).map(({ p }) => p.email))];
-    const newPhones = [...new Set(withContact.filter(({ p }) => p.telephone).map(({ p }) => p.telephone))];
-    if (newEmails.length > 0 || newPhones.length > 0) {
-      const parts2 = [], params2 = [];
-      if (newEmails.length > 0) { params2.push(newEmails); parts2.push(`LOWER(email) = ANY($${params2.length})`); }
-      if (newPhones.length > 0) { params2.push(newPhones); parts2.push(`telephone = ANY($${params2.length})`); }
-      const { rows: refetched } = await client.query(
-        `SELECT id, nom, prenom, email, telephone FROM participants WHERE ${parts2.join(' OR ')}`,
-        params2
+    if (crees.length !== toInsert.length) {
+      throw new Error(
+        `Import interrompu : ${toInsert.length} fiches a creer, ${crees.length} creees.`
       );
-      for (const r of refetched) {
-        if (r.email) byEmail.set(normalizeEmail(r.email), r);
-        if (r.telephone) byPhone.set(normalizePhone(r.telephone), r);
-      }
     }
-    /* On ne reprend un identifiant que si la fiche relue designe bien la meme
-       personne : c'est le garde-fou contre l'echange d'identite decrit plus
-       haut. Une insertion refusee laisse la ligne sans identifiant plutot que
-       de la rattacher a quelqu'un d'autre. */
-    for (const { p, j } of withContact) {
-      let found = p.email ? byEmail.get(p.email) : null;
-      if (!found && p.telephone) found = byPhone.get(p.telephone);
-      /* Le controle par le nom est le garde-fou contre l'echange d'identite.
-         Il ne s'applique pas aux lignes dont le nom est incomplet : leur cle
-         est nulle, donc ne concorde avec rien, et exiger la concordance les
-         faisait inserer une seconde fois — une fiche avec ses contacts, une
-         autre sans. Pour celles-la, le contact suffit : l'etape precedente a
-         deja retire tout contact appartenant a quelqu'un d'autre, celui qui
-         reste est donc libre ou deja le sien. */
-      const reconnue = found && (memePersonne(found, p) || !p.cle);
-      if (reconnue) {
-        items[toInsertIdx[j]].resolvedId = found.id;
-      } else {
-        const id = await insertParticipant(client, { ...p, email: null, telephone: null });
-        if (id) items[toInsertIdx[j]].resolvedId = id;
-        if (p.email) signaler(p, "email", p.email, "deja_attribuee", found || null);
-      }
-    }
+    crees.forEach((r, j) => { items[toInsertIdx[j]].resolvedId = r.id; });
   }
 
-  // 4b. Fiches sans contact : insertion une par une
-  const noContact = toInsert.map((p, j) => ({ p, j })).filter(({ p }) => !p.email && !p.telephone);
-  for (const { p, j } of noContact) {
-    const id = await insertParticipant(client, p);
-    if (id) items[toInsertIdx[j]].resolvedId = id;
+  /* Les lignes repetees dans le fichier reprennent l'identifiant de la
+     premiere occurrence, une fois celle-ci resolue. */
+  for (const it of items) {
+    if (it.resolvedId == null && it.memeQue != null) {
+      it.resolvedId = items[it.memeQue].resolvedId;
+    }
   }
 
   // 5. Rattachement a l'activite

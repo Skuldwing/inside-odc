@@ -122,23 +122,27 @@ router.post("/:activityId", async (req, res) => {
        Le telephone, lui, se partage — un numero de famille, celui d'un
        encadrant — et se saisit de travers : on ne s'y fie que si le nom
        concorde. */
+    /* Une adresse peut desormais figurer sur plusieurs fiches — un numero de
+       famille, une adresse de service, la meme personne ecrite autrement. La
+       recherche rend donc une liste, et c'est le nom qui departage. A defaut
+       de nom concordant, une adresse portee par une seule fiche suffit : c'est
+       le cas de quelqu'un qui ecrit son nom autrement qu'a l'inscription. */
     let fiche = null;
     const parEmail = await client.query(
       `SELECT id, nom, prenom, email, telephone, genre, structure, age_range
-         FROM participants WHERE lower(email) = $1 LIMIT 1`,
+         FROM participants WHERE lower(email) = $1`,
       [email]
     );
-    if (parEmail.rows.length) fiche = parEmail.rows[0];
+    fiche = parEmail.rows.find((f) => memePersonne(f, { nom, prenom })) || null;
+    if (!fiche && parEmail.rows.length === 1) fiche = parEmail.rows[0];
 
     if (!fiche) {
       const parTel = await client.query(
         `SELECT id, nom, prenom, email, telephone, genre, structure, age_range
-           FROM participants WHERE telephone = $1 LIMIT 1`,
+           FROM participants WHERE telephone = $1`,
         [telephone]
       );
-      if (parTel.rows.length && memePersonne(parTel.rows[0], { nom, prenom })) {
-        fiche = parTel.rows[0];
-      }
+      fiche = parTel.rows.find((f) => memePersonne(f, { nom, prenom })) || null;
     }
 
     /* Ni adresse ni numero connus : la personne a peut-etre ete inscrite par
@@ -180,17 +184,6 @@ router.post("/:activityId", async (req, res) => {
         age_range: fiche.age_range ? null : trancheAge,
       };
 
-      /* Un contact deja porte par quelqu'un d'autre ne peut pas etre repris :
-         l'index d'unicite le refuserait, et le prendre reviendrait a le retirer
-         a son titulaire. */
-      if (apport.telephone) {
-        const pris = await client.query(
-          "SELECT 1 FROM participants WHERE telephone = $1 AND id <> $2 LIMIT 1",
-          [apport.telephone, participantId]
-        );
-        if (pris.rows.length) apport.telephone = null;
-      }
-
       const colonnes = CHAMPS_FICHE.filter((c) => apport[c]);
       if (colonnes.length) {
         const affectations = colonnes.map((c, i) => `${c} = COALESCE(${c}, $${i + 2})`).join(", ");
@@ -201,19 +194,15 @@ router.post("/:activityId", async (req, res) => {
         champsCompletes = colonnes.length;
       }
     } else {
-      /* Nouvelle fiche. Le numero peut appartenir a quelqu'un d'autre — un
-         telephone de famille, celui d'un encadrant qui inscrit plusieurs
-         personnes : on cree alors la fiche sans lui plutot que d'echouer.
-         L'adresse, elle, est unique et vient d'etre verifiee libre. */
-      const telPris = await client.query(
-        "SELECT 1 FROM participants WHERE telephone = $1 LIMIT 1",
-        [telephone]
-      );
+      /* Nouvelle fiche, avec les coordonnees telles qu'elles ont ete saisies.
+         Qu'un numero ou une adresse figure deja sur une autre fiche ne les
+         retire plus : un telephone de famille inscrit un frere et une soeur,
+         et chacun garde le sien. */
       const ins = await client.query(
         `INSERT INTO participants (nom, prenom, telephone, email, genre, structure, age_range, statut)
          VALUES ($1,$2,$3,$4,$5,$6,$7,'Participant')
          RETURNING id`,
-        [nom, prenom, telPris.rows.length ? null : telephone, email, genre, structure, trancheAge]
+        [nom, prenom, telephone, email, genre, structure, trancheAge]
       );
       participantId = ins.rows[0].id;
     }

@@ -59,14 +59,17 @@ CREATE TABLE IF NOT EXISTS participants (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
--- Deduplication: email unique si present
-CREATE UNIQUE INDEX IF NOT EXISTS participants_email_unique
-  ON participants(email)
+-- Recherche par adresse. Volontairement NON unique : une meme adresse peut
+-- figurer sur plusieurs fiches — la meme personne ecrite autrement d'une liste
+-- a l'autre, un numero de famille, une adresse de service. Voir
+-- migrations/contactsPartages.js.
+CREATE INDEX IF NOT EXISTS idx_participants_email
+  ON participants (lower(email))
   WHERE email IS NOT NULL;
 
--- Deduplication: telephone unique si present
-CREATE UNIQUE INDEX IF NOT EXISTS participants_telephone_unique
-  ON participants(telephone)
+-- Recherche par numero. NON unique, meme raison que pour l'adresse.
+CREATE INDEX IF NOT EXISTS idx_participants_telephone
+  ON participants (telephone)
   WHERE telephone IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS activity_participants (
