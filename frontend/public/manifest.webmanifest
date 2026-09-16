@@ -1,7 +1,7 @@
 {
   "name": "Inside ODC — Centre de pilotage",
   "short_name": "Inside ODC",
-  "description": "Pilotage des activités, des bénéficiaires et des partenaires d'Orange Digital Center Sénégal.",
+  "description": "Suivi des activités, des bénéficiaires et des partenaires. Inside ODC Sénégal.",
   "lang": "fr",
   "dir": "ltr",
   "start_url": "/",
@@ -10,7 +10,10 @@
   "orientation": "portrait-primary",
   "background_color": "#F6F8FC",
   "theme_color": "#FF7900",
-  "categories": ["business", "productivity"],
+  "categories": [
+    "business",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
