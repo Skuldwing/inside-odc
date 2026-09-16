@@ -518,10 +518,16 @@ export default function ModelesAttestation() {
                     <p className="mb-2 text-xs text-gray-500">
                       Aperçu des valeurs à l'écran, avec un nom d'exemple.
                     </p>
+                    {/* Le lecteur PDF du navigateur ouvre par defaut sa barre
+                        d'outils et son volet de vignettes, qui prennent
+                        l'essentiel d'un cadre de cette taille et laissent
+                        l'attestation minuscule sur le cote. On les ferme et on
+                        demande la page entiere. Le fragment ne va pas dans
+                        l'etat : revokeObjectURL veut l'URL nue. */}
                     <iframe
                       title="Aperçu de l'attestation"
-                      src={apercu}
-                      className="h-[32rem] w-full rounded-lg border"
+                      src={`${apercu}#toolbar=0&navpanes=0&view=Fit`}
+                      className="aspect-[297/210] w-full rounded-lg border bg-white"
                     />
                   </div>
                 )}
