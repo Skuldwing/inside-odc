@@ -1,5 +1,18 @@
 const PDFDocument = require("pdfkit");
-const { IDENTITE } = require("../config/identite");
+
+/**
+ * Attestation de participation.
+ *
+ * Ce document porte volontairement l'identite de l'Orange Digital Center
+ * Senegal, alors que le reste de la plateforme porte la sienne — « Inside ODC
+ * Senegal ». Ce n'est pas un oubli : l'interface est un outil de travail, mais
+ * l'attestation est remise a un beneficiaire et atteste d'une participation
+ * aux activites du centre. C'est le centre qui l'emet, pas l'outil qui
+ * l'imprime, et l'exploitant a l'autorisation de sa hierarchie pour le faire.
+ *
+ * Le nom n'est donc pas lu depuis config/identite.js, contrairement aux
+ * rapports et aux emails. Ne pas « harmoniser » sans demander.
+ */
 
 const ORANGE = "#FF6600";
 const DARK = "#1A1A2E";
@@ -41,7 +54,7 @@ function generateAttestationPDF({ participant, activity, partner, device }) {
       .font("Helvetica-Bold")
       .fontSize(20)
       .fillColor(ORANGE)
-      .text(IDENTITE.nomCourt, L, 30, { align: "center" });
+      .text("Orange Digital Center", L, 30, { align: "center" });
 
     doc
       .font("Helvetica")
@@ -83,7 +96,7 @@ function generateAttestationPDF({ participant, activity, partner, device }) {
       .font("Helvetica")
       .fontSize(13)
       .fillColor(DARK)
-      .text("La présente attestation est délivrée à :", {
+      .text("Nous soussignés, l'Orange Digital Center Sénégal, certifions que :", {
         align: "center",
       });
 
@@ -195,7 +208,7 @@ function generateAttestationPDF({ participant, activity, partner, device }) {
       .fontSize(8)
       .fillColor(GRAY)
       .text(
-        `${IDENTITE.nom} · ${IDENTITE.contact}`,
+        "Orange Digital Center Sénégal · orangedigitalcenter@orange-sonatel.com",
         L,
         pageH - 30,
         { align: "center" }
