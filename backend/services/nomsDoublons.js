@@ -45,4 +45,34 @@ function repetitionsDans(lignes) {
     .filter((x) => x.propose !== null);
 }
 
-module.exports = { prenomSansNomRepete, repetitionsDans, normaliser };
+/**
+ * La forme sous laquelle deux ecritures d'un meme nom se reconnaissent :
+ * sans accent, sans casse, sans espaces superflus, et debarrassee du nom de
+ * famille repete. « Samb / Rockaya Samb » et « Samb / Rockaya » donnent la
+ * meme cle, donc la meme personne.
+ *
+ * Renvoie null si le nom ou le prenom manque : on ne rapproche pas deux
+ * fiches sur du vide.
+ */
+function clePersonne(nom, prenom) {
+  const aplatir = (v) => normaliser(v).replace(/[^a-z0-9]+/g, " ").trim();
+  const p = prenomSansNomRepete(prenom, nom) ?? prenom;
+  const cleNom = aplatir(nom);
+  const clePrenom = aplatir(p);
+  if (!cleNom || !clePrenom) return null;
+  return `${cleNom}|${clePrenom}`;
+}
+
+function memePersonne(a, b) {
+  const ca = clePersonne(a?.nom, a?.prenom);
+  const cb = clePersonne(b?.nom, b?.prenom);
+  return Boolean(ca && cb && ca === cb);
+}
+
+module.exports = {
+  prenomSansNomRepete,
+  repetitionsDans,
+  normaliser,
+  clePersonne,
+  memePersonne,
+};
