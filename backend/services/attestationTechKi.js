@@ -260,12 +260,14 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
       };
 
       /* Le modele empile quatre traits sous « Decernee a », le nom devant
-         s'ecrire dessus comme sur du papier regle. A l'usage, un nom compose
-         traverse les trois traits du haut et parait barre : on n'en garde que
-         celui sur lequel il repose. Les trois autres sont volontairement
-         omis — ne pas les retablir « par fidelite au modele ». */
+         s'ecrire dessus comme sur du papier regle. Aucun n'est trace : sur un
+         document imprime, le nom se lit mieux pose sur le vide que barre par
+         des lignes destinees a une ecriture manuscrite. Le trait a pastilles,
+         plus bas, marque deja la fin de la zone.
+         LIGNE_NOM_Y reste la base sur laquelle le nom s'appuie, meme sans
+         trait visible — ne pas retablir ces lignes « par fidelite au
+         modele », c'est une decision. */
       const LIGNE_NOM_Y = 4.29 * POUCE;
-      ligne(2.35 * POUCE, LIGNE_NOM_Y, 6.41 * POUCE);
 
       /* Sous la zone du nom, un trait bleu nuit termine par deux pastilles
          rondes — l'equivalent des extremites « oval » du modele. */
