@@ -1156,6 +1156,15 @@ function AttestationsTab({ activities }) {
     .map((p) => ({ p, propose: prenomSansNomRepete(p.prenom, p.nom) }))
     .filter((x) => x.propose);
 
+  /* Qui reste à servir. Une attestation déjà reçue ne repart pas : le même
+     document envoyé deux fois passe pour du spam, et compte contre la
+     réputation du compte d'expédition. Tant que la liste n'est pas chargée,
+     on s'en tient au nombre d'inscrits annoncé par l'activité. */
+  const dejaRecues = (participants || []).filter((p) => p.attestation_envoyee_le).length;
+  const restants = participants
+    ? participants.filter((p) => p.email && !p.attestation_envoyee_le).length
+    : null;
+
   const corrigerTousLesDoublons = async () => {
     setCorrigeTout(true);
     let faits = 0;
@@ -1220,6 +1229,9 @@ function AttestationsTab({ activities }) {
     try {
       const res = await api.post(`/activities/${a.id}/send-attestations`, { module: intitule.trim() });
       setResultat(res.data);
+      /* La liste doit refléter les envois qui viennent d'avoir lieu, sinon le
+         bouton proposerait de servir des gens déjà servis. */
+      if (participants) await chargerParticipants(a.id);
     } catch (err) {
       toast.error(err?.response?.data?.error || "L'envoi a échoué.");
     } finally {
@@ -1354,12 +1366,23 @@ function AttestationsTab({ activities }) {
                               </button>
                             </div>
                           ) : (
-                            <div className="space-y-1">
+                            <div className={`space-y-1 ${p.attestation_envoyee_le ? "opacity-50" : ""}`}>
                               <div className="flex items-center gap-2">
                                 <span className="min-w-0 flex-1 truncate text-slate-800">
                                   {p.prenom} {p.nom}
                                   {!p.email && (
                                     <span className="ml-2 text-amber-600">sans adresse email</span>
+                                  )}
+                                  {/* Déjà servie : la ligne est grisée et ne
+                                      repartira pas. Le même document envoyé
+                                      deux fois passe pour du spam. */}
+                                  {p.attestation_envoyee_le && (
+                                    <span
+                                      className="ml-2 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+                                      title={`Envoyée le ${new Date(p.attestation_envoyee_le).toLocaleDateString("fr-FR")}${p.attestation_module ? ` — « ${p.attestation_module} »` : ""}`}
+                                    >
+                                      reçue
+                                    </span>
                                   )}
                                 </span>
                                 <span className="hidden min-w-0 flex-1 truncate text-slate-400 sm:block">{p.email || ""}</span>
@@ -1411,11 +1434,15 @@ function AttestationsTab({ activities }) {
                     <button
                       type="button"
                       onClick={() => { setConfirme(true); setResultat(null); }}
-                      disabled={envoi || !intitule.trim()}
+                      disabled={envoi || !intitule.trim() || restants === 0}
                       className="flex items-center gap-1.5 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-medium text-orange-700 transition-colors hover:bg-orange-100 disabled:opacity-50"
                     >
                       <Send className="h-3.5 w-3.5" aria-hidden="true" />
-                      Envoyer aux {a.participants_count} participant{a.participants_count > 1 ? "s" : ""}
+                      {restants === null
+                        ? `Envoyer aux ${a.participants_count} participant${a.participants_count > 1 ? "s" : ""}`
+                        : restants === 0
+                          ? "Tout le monde a reçu son attestation"
+                          : `Envoyer aux ${restants} participant${restants > 1 ? "s" : ""}`}
                     </button>
                   )}
                 </div>
@@ -1423,12 +1450,13 @@ function AttestationsTab({ activities }) {
                 {confirme && (
                   <div className="space-y-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
                     <p className="text-xs font-semibold text-orange-800">
-                      Envoyer l&apos;attestation « {intitule.trim()} » à {a.participants_count} participant
-                      {a.participants_count > 1 ? "s" : ""} ?
+                      Envoyer l&apos;attestation « {intitule.trim()} » à {restants ?? a.participants_count} participant
+                      {(restants ?? a.participants_count) > 1 ? "s" : ""} ?
                     </p>
                     <p className="text-xs text-orange-700">
                       Regardez l&apos;aperçu d&apos;abord : un message envoyé ne se reprend pas.
-                      {a.participants_count > 30 && " L'envoi durera plusieurs minutes, ne fermez pas la page."}
+                      {dejaRecues > 0 && ` ${dejaRecues} personne${dejaRecues > 1 ? "s l'ont" : " l'a"} déjà reçue et ne ${dejaRecues > 1 ? "seront" : "sera"} pas resollicitée${dejaRecues > 1 ? "s" : ""}.`}
+                      {(restants ?? a.participants_count) > 30 && " L'envoi durera plusieurs minutes, ne fermez pas la page."}
                     </p>
                     <div className="flex gap-2">
                       <button type="button" onClick={() => setConfirme(false)} disabled={envoi} className="btn-ghost border text-xs">
@@ -1453,6 +1481,13 @@ function AttestationsTab({ activities }) {
                       <Check className="h-3.5 w-3.5" aria-hidden="true" />
                       {resultat.sent} attestation{resultat.sent > 1 ? "s" : ""} envoyée{resultat.sent > 1 ? "s" : ""}
                     </p>
+                    {resultat.deja_envoyees > 0 && (
+                      <p className="text-emerald-700">
+                        {resultat.deja_envoyees} personne{resultat.deja_envoyees > 1 ? "s l'avaient" : " l'avait"} déjà
+                        reçue et n&apos;{resultat.deja_envoyees > 1 ? "ont" : "a"} pas été resollicitée
+                        {resultat.deja_envoyees > 1 ? "s" : ""}.
+                      </p>
+                    )}
                     {resultat.skipped > 0 && (
                       <p className="text-emerald-700">
                         {resultat.skipped} participant{resultat.skipped > 1 ? "s" : ""} sans adresse email,
