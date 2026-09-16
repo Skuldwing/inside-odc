@@ -397,9 +397,13 @@ router.get("/:id/participants", authMiddleware, async (req, res) => {
     if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
 
     const r = await pool.query(
-      `SELECT p.id, p.nom, p.prenom, p.email
+      `SELECT p.id, p.nom, p.prenom, p.email,
+              ae.envoye_le AS attestation_envoyee_le,
+              ae.module    AS attestation_module
          FROM participants p
          JOIN activity_participants ap ON ap.participant_id = p.id
+         LEFT JOIN attestations_envoyees ae
+                ON ae.activity_id = ap.activity_id AND ae.participant_id = p.id
         WHERE ap.activity_id = $1
         ORDER BY p.nom, p.prenom`,
       [id]
@@ -603,21 +607,36 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
     const withEmail = participants.filter((p) => p.email && joignables.has(String(p.email).trim().toLowerCase()));
     const injoignables = rejetes.map((d) => ({ email: d.email, explication: d.explication }));
 
-    if (withEmail.length === 0) {
+    /* Ceux qui l'ont deja recue ne la recoivent pas deux fois. Renvoyer le
+       meme document a la meme personne est au mieux desagreable, au pire pris
+       pour du spam par sa messagerie — et cela compte contre la reputation du
+       compte d'expedition. */
+    const { rows: dejaRecues } = await pool.query(
+      "SELECT participant_id FROM attestations_envoyees WHERE activity_id = $1",
+      [id]
+    );
+    const dejaServis = new Set(dejaRecues.map((r) => r.participant_id));
+    const dejaEnvoyees = withEmail.filter((p) => dejaServis.has(p.id)).length;
+    const destinataires = withEmail.filter((p) => !dejaServis.has(p.id));
+
+    if (destinataires.length === 0) {
       return res.status(200).json({
         sent: 0,
         skipped: withoutEmail.length,
+        deja_envoyees: dejaEnvoyees,
         injoignables,
-        message: injoignables.length
-          ? `Aucune adresse joignable : ${injoignables.length} adresse(s) invalide(s) ou dont le domaine n'existe pas.`
-          : "Aucun participant avec adresse email.",
+        message: dejaEnvoyees
+          ? `Tout le monde a déjà reçu son attestation pour cette activité (${dejaEnvoyees}).`
+          : injoignables.length
+            ? `Aucune adresse joignable : ${injoignables.length} adresse(s) invalide(s) ou dont le domaine n'existe pas.`
+            : "Aucun participant avec adresse email.",
       });
     }
 
     let sent = 0;
     const errors = [];
 
-    for (const participant of withEmail) {
+    for (const participant of destinataires) {
       try {
         const pdfBuffer = await attestationPour({ participant, activity, module: intitule });
 
@@ -654,6 +673,15 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           ],
         });
 
+        /* Trace posee apres l'envoi, jamais avant : si l'expedition echoue,
+           la personne doit rester dans la liste des restants. */
+        await pool.query(
+          `INSERT INTO attestations_envoyees (activity_id, participant_id, email, module)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (activity_id, participant_id) DO NOTHING`,
+          [id, participant.id, participant.email, intitule]
+        );
+
         sent++;
       } catch (err) {
         console.error(`Attestation error for ${participant.email}:`, err.message);
@@ -664,10 +692,12 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
     res.json({
       sent,
       skipped: withoutEmail.length,
+      deja_envoyees: dejaEnvoyees,
       injoignables,
       errors: errors.length > 0 ? errors : undefined,
       message:
         `${sent} attestation(s) envoyée(s)` +
+        (dejaEnvoyees > 0 ? `, ${dejaEnvoyees} déjà reçue(s) auparavant` : "") +
         (withoutEmail.length > 0 ? `, ${withoutEmail.length} ignorée(s) (pas d'email)` : "") +
         (injoignables.length > 0 ? `, ${injoignables.length} adresse(s) injoignable(s)` : "") +
         ".",

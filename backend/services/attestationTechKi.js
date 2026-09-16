@@ -270,6 +270,36 @@ function genererAttestationTechKi({ participant = {}, module: intitule, date, li
         .fillColor(GRIS)
         .text("Fait à :", 6.08 * POUCE, 6.98 * POUCE, { lineBreak: false });
 
+      /* ── Signature Tech-Ki, sur le bandeau orange de droite ───────────── */
+      /* Le modele la porte en gras italique dans une boite etroite collee au
+         bord droit, soulignee d'un trait orange. Elle y est ecrite en blanc,
+         donc invisible sur ce fond clair — vestige d'un aplat de couleur
+         retire depuis. On la rend dans le meme gris que « Fait a : » : une
+         devise qu'on ne lit pas ne sert a rien. */
+      doc
+        .font("Helvetica-BoldOblique")
+        .fontSize(10)
+        .fillColor(GRIS)
+        .text("Le coup de pouce numérique pour tous", 10.05 * POUCE, 6.92 * POUCE, {
+          width: 1.39 * POUCE,
+          align: "left",
+          lineGap: 1,
+        });
+
+      ligne(10.05 * POUCE, 7.46 * POUCE, 0.27 * POUCE, ORANGE);
+
+      /* La virgule qui ferme la proposition : « ... formation pratique sur
+         [module], organisee dans le cadre du programme... ». Elle est posee au
+         bout de la ligne du module, comme dans le modele. */
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(16.8)
+        .fillColor(NOIR)
+        .text(",", 8.44 * POUCE, 5.08 * POUCE, {
+          width: 0.63 * POUCE,
+          align: "center",
+        });
+
       /* ── Les trois champs variables, a la main ────────────────────────── */
       ecrireManuscrit(doc, nomComplet(participant), {
         x: 2.35 * POUCE,

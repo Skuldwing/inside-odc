@@ -33,6 +33,7 @@ const { ensureProfileSchema } = require("./migrations/profileSchema");
 const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
 const { ensureCampagnesSchema } = require("./migrations/campagnesSchema");
 const { ensureContactsPartages } = require("./migrations/contactsPartages");
+const { ensureAttestationsEnvoyees } = require("./migrations/attestationsEnvoyees");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
 const { infoVersion } = require("./version");
 
@@ -733,6 +734,15 @@ pool.query(`
     console.log("Migration OK: contacts partages (index d'unicite leves)");
   } catch (e) {
     console.error("Migration contacts partages ECHOUEE :", e.message);
+  }
+})();
+
+(async () => {
+  try {
+    await ensureAttestationsEnvoyees();
+    console.log("Migration OK: attestations envoyees");
+  } catch (e) {
+    console.error("Migration attestations envoyees ECHOUEE :", e.message);
   }
 })();
 
