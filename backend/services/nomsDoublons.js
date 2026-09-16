@@ -46,21 +46,40 @@ function repetitionsDans(lignes) {
 }
 
 /**
- * La forme sous laquelle deux ecritures d'un meme nom se reconnaissent :
- * sans accent, sans casse, sans espaces superflus, et debarrassee du nom de
- * famille repete. « Samb / Rockaya Samb » et « Samb / Rockaya » donnent la
- * meme cle, donc la meme personne.
+ * Les mots qui composent une identite, sans accent, sans casse, sans
+ * ponctuation, et sans repetition.
+ */
+function motsDuNom(nom, prenom) {
+  return new Set(
+    normaliser(`${nom || ""} ${prenom || ""}`)
+      .replace(/[^a-z0-9]+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+}
+
+/**
+ * La forme sous laquelle deux ecritures d'un meme nom se reconnaissent.
  *
- * Renvoie null si le nom ou le prenom manque : on ne rapproche pas deux
- * fiches sur du vide.
+ * C'est l'ensemble des mots de l'identite, trie. L'ordre ne compte donc pas :
+ * sur les feuilles de presence, la meme personne signe « Mouhamed Abdoul
+ * Fall » un jour et « Abdoul Mouhamed FALL » le lendemain, et les colonnes
+ * « Nom » et « Prenom » sont remplies dans un sens ou dans l'autre selon qui
+ * tient la feuille. Les traiter comme deux personnes faisait refuser a la
+ * seconde l'adresse « deja attribuee » a la premiere, et creait une fiche sans
+ * contact — c'est exactement ce qui s'observait a l'import.
+ *
+ * L'ensemble absorbe aussi le nom de famille recopie dans la case « Prenom » :
+ * « Samb / Rockaya Samb » et « Samb / Rockaya » donnent les memes deux mots.
+ *
+ * Renvoie null si le nom ou le prenom manque : on ne rapproche pas deux fiches
+ * sur du vide.
  */
 function clePersonne(nom, prenom) {
   const aplatir = (v) => normaliser(v).replace(/[^a-z0-9]+/g, " ").trim();
-  const p = prenomSansNomRepete(prenom, nom) ?? prenom;
-  const cleNom = aplatir(nom);
-  const clePrenom = aplatir(p);
-  if (!cleNom || !clePrenom) return null;
-  return `${cleNom}|${clePrenom}`;
+  if (!aplatir(nom) || !aplatir(prenom)) return null;
+  const mots = [...motsDuNom(nom, prenom)].sort();
+  return mots.length ? mots.join(" ") : null;
 }
 
 function memePersonne(a, b) {
@@ -69,10 +88,33 @@ function memePersonne(a, b) {
   return Boolean(ca && cb && ca === cb);
 }
 
+/**
+ * Deux ecritures qui peuvent designer la meme personne bien que leurs mots ne
+ * coincident pas exactement : l'une porte un second prenom que l'autre omet.
+ * « Assietou Sy » et « Assietou Ndeye Sy » sont le cas type.
+ *
+ * On l'exige contenue dans l'autre — pas seulement recoupee — et sur au moins
+ * deux mots : un seul mot commun, c'est un homonyme partiel, pas une identite.
+ *
+ * Volontairement plus permissif que clePersonne, donc reserve aux cas ou un
+ * contact identique corrobore le rapprochement. Sur le nom seul, il
+ * confondrait « Fatou Sarr » et « Fatou Ndeye Sarr », qui peuvent etre deux
+ * personnes.
+ */
+function nomsCompatibles(a, b) {
+  const A = motsDuNom(a?.nom, a?.prenom);
+  const B = motsDuNom(b?.nom, b?.prenom);
+  if (!A.size || !B.size) return false;
+  const communs = [...A].filter((m) => B.has(m)).length;
+  return communs === Math.min(A.size, B.size) && communs >= 2;
+}
+
 module.exports = {
   prenomSansNomRepete,
   repetitionsDans,
   normaliser,
+  motsDuNom,
   clePersonne,
   memePersonne,
+  nomsCompatibles,
 };

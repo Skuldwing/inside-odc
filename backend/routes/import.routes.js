@@ -8,7 +8,9 @@ const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 
-const { repetitionsDans, normaliser, clePersonne, memePersonne } = require("../services/nomsDoublons");
+const {
+  repetitionsDans, normaliser, clePersonne, memePersonne, nomsCompatibles,
+} = require("../services/nomsDoublons");
 
 const router = express.Router();
 
@@ -498,13 +500,21 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     if (!ex && it.telephone) ex = byPhone.get(it.telephone);
     if (!ex && it.cle) {
       const candidat = parNom.get(it.cle);
+      /* Ici le nom est seul — aucun contact ne corrobore. On s'en tient donc
+         a la concordance stricte des mots, sans la tolerance au second
+         prenom, qui confondrait « Fatou Sarr » et « Fatou Ndeye Sarr ». */
       if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
     }
 
-    /* Une ligne dont le nom est incomplet ne peut pas etre comparee par le
-       nom — mais son adresse, elle, la rattache sans ambiguite. C'est meme le
-       seul moyen de ne pas en faire une seconde fiche anonyme. */
-    if (ex && (memePersonne(ex, it) || (trouveParEmail && !it.cle))) {
+    /* Le rapprochement est acquis si les mots du nom coincident. Il l'est
+       aussi quand un contact identique corrobore une ecriture seulement
+       compatible — un second prenom ajoute ou omis : « Assietou Sy » et
+       « Assietou Ndeye Sy » partagent une adresse, c'est la meme personne.
+       Sans cette tolerance, la seconde se voyait refuser son adresse « deja
+       attribuee » a la premiere et repartait avec une fiche sans contact.
+       Et une ligne dont le nom est incomplet ne peut etre comparee par le nom :
+       son adresse la rattache seule. */
+    if (ex && (memePersonne(ex, it) || nomsCompatibles(ex, it) || (trouveParEmail && !it.cle))) {
       items[i].resolvedId = ex.id;
       /* La fiche existe mais il lui manque ce que le fichier apporte : c'est
          ce qui repare les adresses perdues par les imports precedents. */
@@ -648,7 +658,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
          autre sans. Pour celles-la, le contact suffit : l'etape precedente a
          deja retire tout contact appartenant a quelqu'un d'autre, celui qui
          reste est donc libre ou deja le sien. */
-      const reconnue = found && (memePersonne(found, p) || !p.cle);
+      const reconnue = found && (memePersonne(found, p) || nomsCompatibles(found, p) || !p.cle);
       if (reconnue) {
         items[toInsertIdx[j]].resolvedId = found.id;
       } else {
