@@ -1,3 +1,4 @@
+const { IDENTITE } = require("../config/identite");
 const express = require("express");
 const PDFDocument = require("pdfkit");
 const pool = require("../db");
@@ -210,7 +211,7 @@ function buildPDF({ range, platformData, totals, monthly }) {
 
     /* ── HEADER ── */
     doc.font("Helvetica-Bold").fontSize(15).fillColor(ORANGE)
-       .text("Orange Digital Center", L, 22, { width: CW, align: "center" });
+       .text(IDENTITE.nomCourt, L, 22, { width: CW, align: "center" });
     doc.font("Helvetica").fontSize(9).fillColor(GRAY)
        .text("Sénégal", L, 41, { width: CW, align: "center" });
     hr(58);
@@ -331,7 +332,7 @@ function buildPDF({ range, platformData, totals, monthly }) {
       const pH = doc.page.height;
       doc.rect(0, pH - 14, W, 14).fill(ORANGE);
       doc.font("Helvetica").fontSize(7.5).fillColor(GRAY)
-         .text("Orange Digital Center Sénégal · Rapport confidentiel",
+         .text(`${IDENTITE.nom} · Rapport confidentiel`,
                L, pH - 30, { width: CW, align: "center" });
     }
 

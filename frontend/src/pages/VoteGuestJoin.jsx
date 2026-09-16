@@ -260,7 +260,7 @@ export default function VoteGuestJoin() {
               </button>
             </p>
 
-            <p className="text-center text-xs text-slate-500 pb-4">Orange Digital Center Sénégal</p>
+            <p className="text-center text-xs text-slate-500 pb-4">Inside ODC Sénégal</p>
           </form>
         )}
       </div>

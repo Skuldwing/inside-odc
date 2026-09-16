@@ -42,7 +42,7 @@ function page({ titre, message, action = "" }) {
   .fin { font-size:13px; color:#94a3b8; margin-top:20px }
 </style></head>
 <body><main class="carte">
-  <div class="marque">Orange Digital Center Sénégal</div>
+  <div class="marque">Inside ODC Sénégal</div>
   <h1>${ECHAPPER(titre)}</h1>
   <p>${message}</p>
   ${action}
@@ -93,7 +93,7 @@ router.get("/:jeton", async (req, res) => {
     res.type("html").send(
       page({
         titre: deja ? "Vous étiez déjà désabonné" : "C'est fait",
-        message: `L'adresse <strong>${ECHAPPER(email)}</strong> ne recevra plus les campagnes d'information d'Orange Digital Center Sénégal. Les messages liés à vos inscriptions — convocations, attestations — continuent de vous parvenir.`,
+        message: `L'adresse <strong>${ECHAPPER(email)}</strong> ne recevra plus les campagnes d'information d'Inside ODC Sénégal. Les messages liés à vos inscriptions — convocations, attestations — continuent de vous parvenir.`,
         action: `<form method="post" action="reabonnement/${ECHAPPER(req.params.jeton)}">
                    <button type="submit">Je me suis trompé, me réabonner</button>
                  </form>`,

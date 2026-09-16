@@ -136,7 +136,7 @@ function avecPiedDesabonnement(html, lien) {
   return `${html}
 <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0 16px">
 <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#64748b;line-height:1.6">
-  Vous recevez ce message en tant que membre de la communauté Orange Digital Center Sénégal.<br>
+  Vous recevez ce message parce que vous avez participé à une activité du centre.<br>
   <a href="${lien}" style="color:#64748b">Se désabonner de ces envois</a>
 </p>`;
 }
@@ -320,7 +320,7 @@ async function envoyerEnCopieCachee(camp, baseUrl) {
   const html = `${camp.html_body}
 <hr style="border:none;border-top:1px solid #e2e8f0;margin:32px 0 16px">
 <p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#64748b;line-height:1.6">
-  Vous recevez ce message en tant que membre de la communauté Orange Digital Center Sénégal.<br>
+  Vous recevez ce message parce que vous avez participé à une activité du centre.<br>
   Pour ne plus recevoir ces informations, répondez à ce message avec le mot « Désabonnement ».
 </p>`;
 

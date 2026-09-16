@@ -1,4 +1,5 @@
 const PDFDocument = require("pdfkit");
+const { IDENTITE } = require("../config/identite");
 
 const ORANGE = "#FF6600";
 const DARK = "#1A1A2E";
@@ -40,7 +41,7 @@ function generateAttestationPDF({ participant, activity, partner, device }) {
       .font("Helvetica-Bold")
       .fontSize(20)
       .fillColor(ORANGE)
-      .text("Orange Digital Center", L, 30, { align: "center" });
+      .text(IDENTITE.nomCourt, L, 30, { align: "center" });
 
     doc
       .font("Helvetica")
@@ -82,7 +83,7 @@ function generateAttestationPDF({ participant, activity, partner, device }) {
       .font("Helvetica")
       .fontSize(13)
       .fillColor(DARK)
-      .text("Nous soussignés, l'Orange Digital Center Sénégal, certifions que :", {
+      .text("La présente attestation est délivrée à :", {
         align: "center",
       });
 
@@ -194,7 +195,7 @@ function generateAttestationPDF({ participant, activity, partner, device }) {
       .fontSize(8)
       .fillColor(GRAY)
       .text(
-        "Orange Digital Center Sénégal · orangedigitalcenter@orange-sonatel.com",
+        `${IDENTITE.nom} · ${IDENTITE.contact}`,
         L,
         pageH - 30,
         { align: "center" }

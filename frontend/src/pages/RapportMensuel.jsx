@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { X, FileDown, Loader2 } from "lucide-react";
-import { ODC_LOGO_B64 } from "../components/branding/odcLogoB64.js";
+import { LOGO_INSIDE_ODC } from "../components/branding/logoInsideOdc.js";
 import { useToast } from "../components/ui";
 
 /* ── Utilitaires ── */
@@ -75,10 +75,10 @@ function RapportContent({ summary, filters, partners, devices, role }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ display: "inline-block", background: "#fff", borderRadius: 10, padding: "6px 14px", marginBottom: 10 }}>
-              <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 40, objectFit: "contain", display: "block" }} />
+              <img src={LOGO_INSIDE_ODC} alt="Inside ODC Sénégal" style={{ height: 40, objectFit: "contain", display: "block" }} />
             </div>
             <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", opacity: 0.85 }}>
-              Orange Digital Center · Senegal
+              Inside ODC Senegal
             </div>
             <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8, lineHeight: 1.2 }}>
               Rapport d&apos;activites
@@ -258,8 +258,8 @@ function RapportContent({ summary, filters, partners, devices, role }) {
 
         {/* ── Pied de page ── */}
         <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 16, marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: 11 }}>
-          <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 22, objectFit: "contain", opacity: 0.4 }} />
-          <span>Orange Digital Center Senegal — Inside ODC</span>
+          <img src={LOGO_INSIDE_ODC} alt="Inside ODC Sénégal" style={{ height: 22, objectFit: "contain", opacity: 0.4 }} />
+          <span>Inside ODC Senegal</span>
           <span>Rapport genere le {format(now, "dd/MM/yyyy 'a' HH:mm", { locale: fr })}</span>
         </div>
       </div>
@@ -342,10 +342,10 @@ function RapportDispositif({ summary, filters, devices }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <div style={{ display: "inline-block", background: "#fff", borderRadius: 10, padding: "6px 14px" }}>
-            <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 42, objectFit: "contain", display: "block" }} />
+            <img src={LOGO_INSIDE_ODC} alt="Inside ODC Sénégal" style={{ height: 42, objectFit: "contain", display: "block" }} />
           </div>
             <div style={{ fontSize: 11, letterSpacing: "0.15em", textTransform: "uppercase", opacity: 0.85, marginTop: 10 }}>
-              Orange Digital Center · Sénégal
+              Inside ODC Sénégal
             </div>
           </div>
           <div style={{ textAlign: "right", fontSize: 12 }}>
@@ -419,8 +419,8 @@ function RapportDispositif({ summary, filters, devices }) {
 
         {/* ── Pied de page ── */}
         <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center", color: "#94a3b8", fontSize: 11 }}>
-          <img src={ODC_LOGO_B64} alt="ODC" style={{ height: 24, objectFit: "contain", opacity: 0.4 }} />
-          <span>Orange Digital Center Sénégal — Inside ODC</span>
+          <img src={LOGO_INSIDE_ODC} alt="Inside ODC Sénégal" style={{ height: 24, objectFit: "contain", opacity: 0.4 }} />
+          <span>Inside ODC Sénégal</span>
           <span>Rapport généré le {format(now, "dd/MM/yyyy 'à' HH:mm", { locale: fr })}</span>
         </div>
       </div>
