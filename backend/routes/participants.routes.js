@@ -310,7 +310,8 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
 
     const { baseFrom, params } = buildFilters(req);
     const r = await pool.query(
-      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone ${baseFrom}
+      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone,
+              p.genre, p.age_range, p.statut, p.structure ${baseFrom}
        ORDER BY p.id`,
       params
     );
@@ -341,7 +342,8 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
 
     const { baseFrom, params } = buildFilters(req);
     const portee = await client.query(
-      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone ${baseFrom} ORDER BY p.id`,
+      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone,
+              p.genre, p.age_range, p.statut, p.structure ${baseFrom} ORDER BY p.id`,
       params
     );
 
@@ -360,16 +362,51 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
 
     let fusionnees = 0;
     for (const [id, { garder, fiche }] of aAbsorber) {
+      /* La fiche absorbee n'a ni email ni telephone, mais elle peut porter un
+         genre, une tranche d'age, un statut ou une structure que la fiche
+         conservee n'a pas. La supprimer sans les reprendre perdrait de
+         l'information — et le genre alimente les statistiques de la page
+         d'accueil. COALESCE ne remplit que ce qui manque : rien de renseigne
+         n'est ecrase. */
+      await client.query(
+        `UPDATE participants SET
+           genre     = COALESCE(genre, $2),
+           age_range = COALESCE(age_range, $3),
+           statut    = COALESCE(statut, $4),
+           structure = COALESCE(structure, $5)
+         WHERE id = $1`,
+        [garder.id, fiche.genre || null, fiche.age_range || null, fiche.statut || null, fiche.structure || null]
+      );
+
       await client.query(
         `INSERT INTO activity_participants (activity_id, participant_id)
          SELECT activity_id, $2 FROM activity_participants WHERE participant_id = $1
          ON CONFLICT DO NOTHING`,
         [id, garder.id]
       );
+
+      /* Les activites de la fiche supprimee sont relevees avant de la
+         supprimer : la fusion est definitive, et le journal d'audit est le
+         seul endroit ou l'on pourra reconstituer ce qui a ete absorbe si un
+         rapprochement se revele faux — deux homonymes, par exemple. */
+      const { rows: activites } = await client.query(
+        "SELECT activity_id FROM activity_participants WHERE participant_id = $1",
+        [id]
+      );
+
       await client.query("DELETE FROM participants WHERE id = $1", [id]);
       logAudit(req, "DELETE", "participants", id, `${fiche.prenom} ${fiche.nom}`, {
         motif: "fiche en double sans coordonnées",
         fusionnee_avec: garder.id,
+        fiche_absorbee: {
+          nom: fiche.nom,
+          prenom: fiche.prenom,
+          genre: fiche.genre || null,
+          age_range: fiche.age_range || null,
+          statut: fiche.statut || null,
+          structure: fiche.structure || null,
+          activites: activites.map((a) => a.activity_id),
+        },
       });
       fusionnees += 1;
     }

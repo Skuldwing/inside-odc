@@ -78,18 +78,35 @@ export default function Participants() {
   const [fiches, setFiches] = useState(null);
   const [fichesOuvertes, setFichesOuvertes] = useState(false);
   const [fusion, setFusion] = useState(false);
+  /* Groupes volontairement écartés. Le rapprochement se fait sur le nom : deux
+     personnes qui portent le même, et dont une seule a des coordonnées, sont
+     indiscernables pour la machine. Sur des noms très répandus, c'est à
+     l'utilisateur de trancher — d'où le décochage, un par un. */
+  const [ecartes, setEcartes] = useState(() => new Set());
+
+  const basculerGroupe = (id) =>
+    setEcartes((prec) => {
+      const suivant = new Set(prec);
+      if (suivant.has(id)) suivant.delete(id);
+      else suivant.add(id);
+      return suivant;
+    });
+
+  const groupesRetenus = (fiches?.groupes || []).filter((g) => !ecartes.has(g.garder.id));
+  const idsRetenus = groupesRetenus.flatMap((g) => g.absorber.map((f) => f.id));
 
   const chercherFiches = useCallback(async () => {
     try {
       const res = await api.get("/participants/fiches-doublons");
       setFiches(res.data);
+      setEcartes(new Set());
     } catch {
       setFiches(null);
     }
   }, []);
 
   const fusionnerFiches = async () => {
-    const ids = (fiches?.groupes || []).flatMap((g) => g.absorber.map((f) => f.id));
+    const ids = idsRetenus;
     if (!ids.length) return;
     setFusion(true);
     try {
@@ -292,37 +309,57 @@ export default function Participants() {
 
           {fichesOuvertes && (
             <div className="border-t border-sky-200">
-              <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
-                {fiches.groupes.map((g) => (
-                  <li key={g.garder.id} className="px-4 py-2 text-xs">
-                    <p className="font-medium text-slate-800">
-                      {g.garder.prenom} {g.garder.nom}
-                      <span className="ml-1.5 font-normal text-slate-500">
-                        {g.garder.email || g.garder.telephone} — fiche conservée
-                      </span>
-                    </p>
-                    {g.absorber.map((f) => (
-                      <p key={f.id} className="text-slate-500 line-through">
-                        {f.prenom} {f.nom} — fiche supprimée
-                      </p>
-                    ))}
-                  </li>
-                ))}
+              <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+                {fiches.groupes.map((g) => {
+                  const ecarte = ecartes.has(g.garder.id);
+                  return (
+                    <li key={g.garder.id} className={`px-4 py-2 text-xs ${ecarte ? "opacity-45" : ""}`}>
+                      <label className="flex cursor-pointer items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={!ecarte}
+                          onChange={() => basculerGroupe(g.garder.id)}
+                          className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-sky-600"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-medium text-slate-800">
+                            {g.garder.prenom} {g.garder.nom}
+                            <span className="ml-1.5 font-normal text-slate-500">
+                              {g.garder.email || g.garder.telephone} — fiche conservée
+                            </span>
+                          </span>
+                          {g.absorber.map((f) => (
+                            <span key={f.id} className="block text-slate-500 line-through">
+                              {f.prenom} {f.nom} — fiche supprimée
+                            </span>
+                          ))}
+                        </span>
+                      </label>
+                    </li>
+                  );
+                })}
               </ul>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
-                <p className="text-xs text-slate-500">
-                  Les présences de la fiche supprimée passent sur celle qui est conservée : aucune
-                  activité n&apos;est perdue. L&apos;opération est définitive et consignée dans le
-                  journal d&apos;audit.
+                <p className="max-w-xl text-xs text-slate-500">
+                  Les présences et les informations de la fiche supprimée — genre, tranche
+                  d&apos;âge, statut, structure — passent sur celle qui est conservée : rien
+                  n&apos;est perdu. L&apos;opération est définitive ; le journal d&apos;audit
+                  conserve le détail de chaque fiche absorbée.
+                  {" "}
+                  <strong className="text-slate-600">
+                    Décochez les lignes où deux personnes différentes pourraient porter le même
+                    nom
+                  </strong>
+                  {" "}— le rapprochement se fait sur le nom, il ne sait pas les distinguer.
                 </p>
                 <button
                   type="button"
                   onClick={fusionnerFiches}
-                  disabled={fusion}
+                  disabled={fusion || idsRetenus.length === 0}
                   className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-60"
                 >
                   {fusion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  {fusion ? "Fusion…" : `Fusionner les ${fiches.total}`}
+                  {fusion ? "Fusion…" : `Fusionner les ${idsRetenus.length}`}
                 </button>
               </div>
             </div>
