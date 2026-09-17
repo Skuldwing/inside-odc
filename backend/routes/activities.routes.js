@@ -13,6 +13,7 @@ const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
+const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 
 /* Le modele Tech-Ki fourni par l'equipe remplace le rendu generique des que
    ses ressources sont en place — fond, logo, signature, police manuscrite.
@@ -165,7 +166,14 @@ router.get("/", authMiddleware, async (req, res) => {
              d.name AS device_name,
              u.full_name AS coach_name,
              COALESCE(ap.participants_count, 0) AS participants_count,
-             COALESCE(ph.photo_count, 0) AS photo_count
+             COALESCE(ph.photo_count, 0) AS photo_count,
+             /* Ou en est l'envoi des attestations, sans avoir a ouvrir
+                l'activite. Le denominateur est le nombre de personnes
+                joignables, pas le nombre d'inscrits : une personne sans
+                adresse ne recevra jamais rien, et la compter ferait afficher
+                « 18 / 24 » pour un envoi pourtant termine. */
+             COALESCE(att.attestations_envoyees, 0) AS attestations_envoyees,
+             COALESCE(joi.participants_joignables, 0) AS participants_joignables
       FROM activities a
       LEFT JOIN partners p ON a.partner_id = p.id
       LEFT JOIN devices d ON a.device_id = d.id
@@ -175,6 +183,18 @@ router.get("/", authMiddleware, async (req, res) => {
         FROM activity_participants
         GROUP BY activity_id
       ) ap ON ap.activity_id = a.id
+      LEFT JOIN (
+        SELECT ap2.activity_id, COUNT(*)::int AS participants_joignables
+        FROM activity_participants ap2
+        JOIN participants pa ON pa.id = ap2.participant_id
+        WHERE COALESCE(TRIM(pa.email), '') <> ''
+        GROUP BY ap2.activity_id
+      ) joi ON joi.activity_id = a.id
+      LEFT JOIN (
+        SELECT activity_id, COUNT(*)::int AS attestations_envoyees
+        FROM attestations_envoyees
+        GROUP BY activity_id
+      ) att ON att.activity_id = a.id
       LEFT JOIN (
         SELECT activity_id, COUNT(*)::int AS photo_count
         FROM activity_photos
@@ -194,7 +214,17 @@ router.get("/", authMiddleware, async (req, res) => {
 
     query += " ORDER BY a.activity_date DESC";
 
-    const result = await pool.query(query, params);
+    /* Cette liste est la page d'accueil du travail quotidien : elle ne doit
+       pas tomber parce qu'une table de comptage manque. Si la migration de
+       demarrage a echoue, on la rejoue et on reessaie une fois. */
+    let result;
+    try {
+      result = await pool.query(query, params);
+    } catch (err) {
+      if (!tableAbsente(err)) throw err;
+      await ensureAttestationsEnvoyees();
+      result = await pool.query(query, params);
+    }
     res.json(result.rows);
   } catch (err) {
     console.error(err);

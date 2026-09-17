@@ -1120,7 +1120,41 @@ function prenomSansNomRepete(prenom, nom) {
   return null;
 }
 
-function AttestationsTab({ activities }) {
+/**
+ * Ou en est l'envoi des attestations pour une activite.
+ *
+ * Le denominateur est le nombre de personnes joignables, pas le nombre
+ * d'inscrits : une personne sans adresse ne recevra jamais son attestation par
+ * mail, et la compter ferait afficher « 18 / 24 » pour un envoi pourtant
+ * termine — on chercherait indefiniment six envois qui ne partiront pas. Les
+ * personnes sans adresse sont dites a part, parce qu'elles demandent autre
+ * chose : recuperer leur adresse, ou leur remettre le document en main.
+ */
+function etatAttestations(a) {
+  const envoyees = a.attestations_envoyees ?? 0;
+  const joignables = a.participants_joignables ?? 0;
+  const sansAdresse = Math.max(0, (a.participants_count ?? 0) - joignables);
+
+  if (joignables === 0) {
+    return { ton: "muet", texte: "aucune adresse email", envoyees, joignables, sansAdresse };
+  }
+  if (envoyees === 0) {
+    return { ton: "attente", texte: `0 / ${joignables} envoyée${joignables > 1 ? "s" : ""}`, envoyees, joignables, sansAdresse };
+  }
+  if (envoyees >= joignables) {
+    return { ton: "fait", texte: `${envoyees} / ${joignables} envoyée${envoyees > 1 ? "s" : ""}`, envoyees, joignables, sansAdresse };
+  }
+  return { ton: "partiel", texte: `${envoyees} / ${joignables} envoyées`, envoyees, joignables, sansAdresse };
+}
+
+const TONS_ATTESTATION = {
+  fait: "bg-green-50 text-green-700 border-green-200",
+  partiel: "bg-orange-50 text-orange-700 border-orange-200",
+  attente: "bg-slate-50 text-slate-500 border-slate-200",
+  muet: "bg-slate-50 text-slate-400 border-slate-200",
+};
+
+function AttestationsTab({ activities, onEnvoye }) {
   const toast = useToast();
   const [ouverte, setOuverte] = useState(null);   // id de l'activité dépliée
   const [intitule, setIntitule] = useState("");
@@ -1232,6 +1266,7 @@ function AttestationsTab({ activities }) {
       /* La liste doit refléter les envois qui viennent d'avoir lieu, sinon le
          bouton proposerait de servir des gens déjà servis. */
       if (participants) await chargerParticipants(a.id);
+      await onEnvoye?.();
     } catch (err) {
       toast.error(err?.response?.data?.error || "L'envoi a échoué.");
     } finally {
@@ -1259,6 +1294,7 @@ function AttestationsTab({ activities }) {
 
       {avecParticipants.map((a) => {
         const depliee = ouverte === a.id;
+        const etat = etatAttestations(a);
         return (
           <div key={a.id} className="card-solid overflow-hidden border border-slate-200">
             <button
@@ -1273,8 +1309,26 @@ function AttestationsTab({ activities }) {
                   {a.activity_date ? new Date(a.activity_date).toLocaleDateString("fr-FR") : "date inconnue"}
                   {" · "}
                   {a.participants_count} participant{a.participants_count > 1 ? "s" : ""}
+                  {etat.sansAdresse > 0 && ` · ${etat.sansAdresse} sans email`}
                 </span>
               </span>
+
+              {/* L'etat de l'envoi se lit dans la liste : sans lui, il fallait
+                  ouvrir chaque activite une par une pour savoir laquelle
+                  restait a servir. */}
+              <span
+                className={`flex-shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${TONS_ATTESTATION[etat.ton]}`}
+                title={
+                  etat.ton === "muet"
+                    ? "Aucun participant n'a d'adresse email : aucune attestation ne peut partir."
+                    : `${etat.envoyees} attestation(s) envoyée(s) sur ${etat.joignables} participant(s) joignable(s)` +
+                      (etat.sansAdresse ? `, ${etat.sansAdresse} sans adresse email` : "")
+                }
+              >
+                {etat.ton === "fait" && <Check className="mr-1 inline h-3 w-3" aria-hidden="true" />}
+                {etat.texte}
+              </span>
+
               <ChevronDown
                 className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${depliee ? "rotate-180" : ""}`}
                 aria-hidden="true"
@@ -1586,10 +1640,18 @@ export default function Campagnes() {
     catch (err) { console.error("Erreur chargement campagnes", err); }
   }, []);
 
+  /* Le compteur d'attestations de chaque activite vient de cette liste : elle
+     doit se relire apres un envoi, sinon le badge resterait a son ancienne
+     valeur et on renverrait a des gens deja servis. */
+  const fetchActivities = useCallback(async () => {
+    try { const r = await api.get("/activities"); setActivities(r.data || []); }
+    catch { /* la liste garde sa valeur precedente */ }
+  }, []);
+
   useEffect(() => {
     fetchCampagnes();
-    api.get("/activities").then(r => setActivities(r.data || [])).catch(() => {});
-  }, []);
+    fetchActivities();
+  }, [fetchCampagnes, fetchActivities]);
 
   const handleSaved = (savedId, andSend, savedName) => {
     fetchCampagnes();
@@ -1675,7 +1737,7 @@ export default function Campagnes() {
       </div>
 
       {tab === "templates" ? <TemplatesTab /> : tab === "attestations" ? (
-        <AttestationsTab activities={activities} />
+        <AttestationsTab activities={activities} onEnvoye={fetchActivities} />
       ) : (
         <>
           {/* Modal éditeur campagne */}
