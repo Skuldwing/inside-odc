@@ -531,14 +531,22 @@ export default function DeliverabilitePanel() {
                       </span>
                       <BoutonCopier valeur={adresseSortie.adresse} />
                     </div>
-                    {/* Dire tout de suite que l'autoriser ne règle rien
-                        durablement évite de recommencer chaque semaine. */}
+                    {/* Deux réserves, et la seconde est la plus coûteuse à
+                        ignorer : l'hébergement peut sortir par plusieurs
+                        adresses. Autoriser celle-ci sans le savoir, voir
+                        l'envoi échouer quand même et conclure que le panneau
+                        ment serait pire que de n'avoir rien affiché. */}
                     <p className="mt-2 text-slate-600">
                       Cette adresse n&apos;est pas fixe : elle change au redéploiement et après une
-                      période d&apos;inactivité. L&apos;autoriser débloque l&apos;envoi maintenant,
-                      mais le blocage reviendra — mieux vaut désactiver la restriction par IP chez
-                      le service d&apos;envoi, ou lui attribuer une adresse de sortie fixe côté
-                      hébergement.
+                      période d&apos;inactivité. L&apos;hébergement peut aussi sortir par plusieurs
+                      adresses — celle-ci n&apos;est donc pas forcément celle que le service
+                      d&apos;envoi a vue lors du refus.
+                    </p>
+                    <p className="mt-1.5 text-slate-600">
+                      L&apos;autoriser peut débloquer l&apos;envoi maintenant, mais le blocage
+                      reviendra. Le régler pour de bon demande de désactiver la restriction par IP
+                      chez le service d&apos;envoi, ou d&apos;attribuer une adresse de sortie fixe
+                      au service côté hébergement.
                     </p>
                   </>
                 ) : (
