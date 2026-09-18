@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Copy,
+  Globe,
   Loader2,
   RefreshCw,
   Send,
@@ -309,6 +310,28 @@ export default function DeliverabilitePanel() {
     }
   };
 
+  /* L'adresse de sortie du serveur. Un service d'envoi qui filtre par IP
+     refuse sans prévenir personne : le refus vit dans sa réponse à l'API, pas
+     dans une boîte mail. Il fallait donc provoquer un échec en espérant que le
+     service recopie l'adresse dans son message. On la demande directement. */
+  const [adresseSortie, setAdresseSortie] = useState(null);
+  const [adresseEnCours, setAdresseEnCours] = useState(false);
+
+  const chercherAdresseSortie = async () => {
+    setAdresseEnCours(true);
+    try {
+      const res = await api.get("/email/adresse-sortie");
+      setAdresseSortie(res.data);
+    } catch (err) {
+      setAdresseSortie({
+        adresse: null,
+        message: err?.response?.data?.error || "Recherche impossible.",
+      });
+    } finally {
+      setAdresseEnCours(false);
+    }
+  };
+
   const envoyerEssai = async () => {
     setEssaiEnCours(true);
     setEssai(null);
@@ -472,6 +495,66 @@ export default function DeliverabilitePanel() {
               </p>
             </div>
           )}
+
+          {/* L'adresse que le service d'envoi voit. Indispensable dès qu'il
+              filtre par IP : il refuse sans écrire à personne. */}
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-slate-700">Adresse de sortie du serveur</p>
+                <p className="text-xs text-slate-500">
+                  Celle que voit le service d&apos;envoi. À autoriser s&apos;il filtre par IP.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={chercherAdresseSortie}
+                disabled={adresseEnCours}
+                className="btn-ghost border text-xs"
+              >
+                {adresseEnCours ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Globe className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                {adresseSortie ? "Revérifier" : "Afficher"}
+              </button>
+            </div>
+
+            {adresseSortie && (
+              <div className="mt-2.5 text-xs">
+                {adresseSortie.adresse ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 break-all rounded-lg bg-slate-50 px-2.5 py-1.5 font-mono text-slate-800">
+                        {adresseSortie.adresse}
+                      </span>
+                      <BoutonCopier valeur={adresseSortie.adresse} />
+                    </div>
+                    {/* Deux réserves, et la seconde est la plus coûteuse à
+                        ignorer : l'hébergement peut sortir par plusieurs
+                        adresses. Autoriser celle-ci sans le savoir, voir
+                        l'envoi échouer quand même et conclure que le panneau
+                        ment serait pire que de n'avoir rien affiché. */}
+                    <p className="mt-2 text-slate-600">
+                      Cette adresse n&apos;est pas fixe : elle change au redéploiement et après une
+                      période d&apos;inactivité. L&apos;hébergement peut aussi sortir par plusieurs
+                      adresses — celle-ci n&apos;est donc pas forcément celle que le service
+                      d&apos;envoi a vue lors du refus.
+                    </p>
+                    <p className="mt-1.5 text-slate-600">
+                      L&apos;autoriser peut débloquer l&apos;envoi maintenant, mais le blocage
+                      reviendra. Le régler pour de bon demande de désactiver la restriction par IP
+                      chez le service d&apos;envoi, ou d&apos;attribuer une adresse de sortie fixe
+                      au service côté hébergement.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-slate-600">{adresseSortie.message}</p>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Un envoi réel vaut mieux que cinq contrôles DNS : c'est le seul
               test qui dise si le service d'envoi accepte nos messages. */}
