@@ -22,6 +22,62 @@ function extraireDomaine(valeur) {
   return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(sansArobase) ? sansArobase : null;
 }
 
+/* ===== ADRESSE DE SORTIE DU SERVEUR =====
+ * Quelle adresse le monde exterieur voit-il quand la plateforme appelle le
+ * service d'envoi ?
+ *
+ * La question se pose des que le service d'envoi filtre par IP : il refuse,
+ * et il n'ecrit a personne — le refus vit dans sa reponse a l'API, pas dans
+ * une boite mail. Sans cette route, il fallait provoquer un echec en esperant
+ * que le service recopie l'adresse dans son message, ce qu'il ne fait pas
+ * toujours.
+ *
+ * L'adresse est demandee a un service d'echo : c'est la seule facon de
+ * connaitre l'adresse publique depuis l'interieur du conteneur, qui ne voit
+ * que son adresse privee. Deux services, pour ne pas dependre d'un seul.
+ */
+const ECHOS_IP = ["https://api.ipify.org", "https://ifconfig.me/ip"];
+/* Une adresse de sortie ne change pas d'une seconde a l'autre : la garder
+   quelques minutes evite d'appeler un service tiers a chaque ouverture du
+   panneau. Elle change en revanche au redeploiement — mais le processus
+   redemarre alors, et ce cache avec lui. */
+let cacheIp = { valeur: null, expire: 0 };
+
+async function adresseDeSortie() {
+  if (cacheIp.valeur && Date.now() < cacheIp.expire) return cacheIp.valeur;
+  for (const url of ECHOS_IP) {
+    try {
+      const reponse = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (!reponse.ok) continue;
+      const texte = (await reponse.text()).trim();
+      /* On ne renvoie que ce qui ressemble a une adresse : un service
+         d'echo en panne peut repondre une page d'erreur avec un code 200. */
+      if (/^(\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]+)$/i.test(texte)) {
+        cacheIp = { valeur: texte, expire: Date.now() + 5 * 60 * 1000 };
+        return texte;
+      }
+    } catch {
+      /* service injoignable : on tente le suivant */
+    }
+  }
+  return null;
+}
+
+router.get("/adresse-sortie", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const adresse = await adresseDeSortie();
+    res.json({
+      adresse,
+      message: adresse
+        ? null
+        : "Impossible de joindre un service d'écho. Réessayez, ou lisez l'adresse dans le refus du service d'envoi après un essai.",
+    });
+  } catch (err) {
+    console.error("[ADRESSE SORTIE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== DIAGNOSTIC DE DELIVRABILITE ===== */
 router.get("/diagnostic", authMiddleware, requireAdmin, async (req, res) => {
   try {
