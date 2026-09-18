@@ -446,6 +446,12 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
       /* Les groupes ou deux fiches figurent sur la meme formation : ceux-la
          ne s'expliquent pas par une personne revenue. */
       avec_activite_partagee: groupes.filter((g) => g.activite_partagee).length,
+      /* Ce que le bandeau annonce : les groupes qui partent decoches, quelle
+         que soit la raison. Additionner les deux compteurs precedents
+         surestimerait un groupe qui cumule les deux motifs ; en prendre le
+         plus grand le sous-estimerait des qu'ils portent sur des groupes
+         differents — ce qui est le cas courant. */
+      a_regarder: groupes.filter((g) => g.conflits.length > 0 || g.activite_partagee).length,
       groupes,
     });
   } catch (err) {

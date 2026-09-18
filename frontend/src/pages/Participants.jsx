@@ -487,11 +487,10 @@ export default function Participants() {
                     complèterai{fiches.a_completer > 1 ? "ent" : "t"} avec ce que portent les autres
                   </>
                 )}
-                {fiches.a_completer > 0 && (fiches.avec_conflit > 0 || fiches.avec_activite_partagee > 0) && " · "}
-                {(fiches.avec_conflit > 0 || fiches.avec_activite_partagee > 0) && (
+                {fiches.a_completer > 0 && fiches.a_regarder > 0 && " · "}
+                {fiches.a_regarder > 0 && (
                   <span className="text-amber-700">
-                    {Math.max(fiches.avec_conflit, fiches.avec_activite_partagee)} à regarder,
-                    {" "}décochée{Math.max(fiches.avec_conflit, fiches.avec_activite_partagee) > 1 ? "s" : ""} par précaution
+                    {fiches.a_regarder} à regarder, décochée{fiches.a_regarder > 1 ? "s" : ""} par précaution
                   </span>
                 )}
               </span>
