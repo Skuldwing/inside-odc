@@ -18,6 +18,175 @@ function formatDate(value) {
   }
 }
 
+/* Les colonnes du tableau d'un groupe, dans l'ordre où on les lit sur une
+   liste de présence. */
+const CHAMPS_FICHE = [
+  ["email", "Email"],
+  ["telephone", "Téléphone"],
+  ["genre", "Genre"],
+  ["age_range", "Tranche d'âge"],
+  ["statut", "Statut"],
+  ["structure", "Structure"],
+];
+
+const vide = (v) => v === null || v === undefined || String(v).trim() === "";
+const normaliser = (champ, v) =>
+  vide(v) ? null : champ === "telephone" ? String(v).replace(/\s+/g, "") : String(v).trim().toLowerCase();
+
+/**
+ * Un groupe de fiches, montré tel qu'il est plutôt que résumé.
+ *
+ * Le panneau disait « gagne email « x » » et « genre : garde « F », écarte
+ * « M » ». C'était juste, mais illisible : pour décider si deux fiches sont
+ * bien la même personne, il faut voir les fiches, pas une phrase à leur sujet.
+ *
+ * Une ligne par fiche, une colonne par renseignement, et seulement les
+ * colonnes où quelque chose est écrit — afficher six colonnes vides pour un
+ * groupe qui ne porte qu'une adresse noierait la seule information utile.
+ *
+ * Les formations sont la preuve qui permet de trancher : deux fiches sur deux
+ * formations différentes, c'est une personne revenue ; deux fiches sur la même
+ * formation, c'est un doublon d'import ou deux homonymes.
+ */
+function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
+  const membres = [g.garder, ...g.absorber];
+
+  /* On ne garde que les colonnes renseignées quelque part dans le groupe. */
+  const colonnes = CHAMPS_FICHE.filter(([champ]) =>
+    membres.some((f) => !vide(f[champ]))
+  );
+
+  /* Ce que portera la fiche après réunion : la valeur de la fiche conservée,
+     ou, à défaut, la première trouvée sur les autres. C'est exactement ce que
+     fait la fusion côté serveur. */
+  const resultat = (champ) => {
+    if (!vide(g.garder[champ])) return String(g.garder[champ]).trim();
+    const trouve = g.absorber.find((f) => !vide(f[champ]));
+    return trouve ? String(trouve[champ]).trim() : null;
+  };
+
+  /* Une valeur est écartée si elle diffère de celle qui sera retenue. C'est
+     elle qu'il faut voir barrée : c'est la seule chose que l'opération perd. */
+  const perdue = (champ, valeur) => {
+    if (vide(valeur)) return false;
+    const garde = resultat(champ);
+    return garde !== null && normaliser(champ, valeur) !== normaliser(champ, garde);
+  };
+
+  const activites = (f) =>
+    (f.activites || []).map((a) => a.titre + (a.date ? ` (${formatDate(a.date)})` : "")).join(" · ");
+
+  return (
+    <li className={`px-4 py-3 ${ecarte ? "opacity-50" : ""}`}>
+      <label className="flex cursor-pointer items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={!ecarte}
+          onChange={onBasculer}
+          className="mt-1 h-3.5 w-3.5 flex-shrink-0 accent-sky-600"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="text-sm font-semibold text-slate-800">
+              {g.garder.prenom} {g.garder.nom}
+            </span>
+            <span className="text-xs text-slate-500">
+              {membres.length} fiches → 1
+            </span>
+            {/* L'alerte la plus utile du panneau : elle désigne précisément
+                les lignes où le rapprochement par le nom peut se tromper. */}
+            {g.activite_partagee && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                deux fiches sur la même formation — homonymes ?
+              </span>
+            )}
+            {g.conflits.length > 0 && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                {g.conflits.length} désaccord{g.conflits.length > 1 ? "s" : ""}
+              </span>
+            )}
+          </span>
+
+          {colonnes.length > 0 ? (
+            <span className="mt-2 block overflow-x-auto">
+              <table className="w-full min-w-[30rem] text-left text-xs">
+                <thead>
+                  <tr className="text-slate-500">
+                    <th className="pb-1 pr-3 font-medium">Fiche</th>
+                    {colonnes.map(([champ, libelle]) => (
+                      <th key={champ} className="pb-1 pr-3 font-medium">{libelle}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="align-top">
+                  {membres.map((f, i) => (
+                    <tr key={f.id} className="border-t border-slate-100">
+                      <td className="py-1 pr-3 whitespace-nowrap text-slate-500">
+                        {i === 0 ? (
+                          <span className="font-medium text-sky-700">conservée</span>
+                        ) : (
+                          "absorbée"
+                        )}
+                      </td>
+                      {colonnes.map(([champ]) => (
+                        <td key={champ} className="py-1 pr-3 break-all">
+                          {vide(f[champ]) ? (
+                            <span className="text-slate-300">—</span>
+                          ) : perdue(champ, f[champ]) ? (
+                            <span className="text-amber-700 line-through decoration-amber-400">
+                              {String(f[champ]).trim()}
+                            </span>
+                          ) : (
+                            <span className="text-slate-700">{String(f[champ]).trim()}</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-200 bg-emerald-50/60">
+                    <td className="py-1 pr-3 whitespace-nowrap font-medium text-emerald-800">
+                      après réunion
+                    </td>
+                    {colonnes.map(([champ]) => (
+                      <td key={champ} className="py-1 pr-3 break-all font-medium text-emerald-800">
+                        {resultat(champ) ?? <span className="text-slate-300">—</span>}
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </span>
+          ) : (
+            <span className="mt-1 block text-xs text-slate-500">
+              Ces fiches ne portent aucun renseignement : les doublons disparaissent simplement.
+            </span>
+          )}
+
+          {/* Les formations de chaque fiche : c'est ce qui permet de dire si
+              une même personne est revenue, ou si deux personnes se
+              ressemblent. */}
+          <span className="mt-2 block space-y-0.5 text-[11px] text-slate-500">
+            {membres.map((f, i) => (
+              <span key={f.id} className="block">
+                <span className="text-slate-400">{i === 0 ? "conservée" : "absorbée"} :</span>{" "}
+                {f.activites_total ? (
+                  <>
+                    {activites(f)}
+                    {f.activites_total > (f.activites || []).length &&
+                      ` · et ${f.activites_total - f.activites.length} autre(s)`}
+                  </>
+                ) : (
+                  <span className="italic">aucune formation</span>
+                )}
+              </span>
+            ))}
+          </span>
+        </span>
+      </label>
+    </li>
+  );
+}
+
 export default function Participants() {
   const { isCompact } = useDensity();
   const { isViewer } = useAuth();
@@ -100,12 +269,14 @@ export default function Participants() {
     try {
       const res = await api.get("/participants/fiches-doublons");
       setFiches(res.data);
-      /* Les groupes dont les fiches se contredisent partent décochés : garder
-         une adresse plutôt qu'une autre ne se décide pas tout seul. */
+      /* Partent décochés : les groupes dont les fiches se contredisent — garder
+         une adresse plutôt qu'une autre ne se décide pas tout seul — et ceux où
+         deux fiches figurent sur la même formation, qui ne s'expliquent pas par
+         une personne revenue et sont le cas le plus probable d'homonymes. */
       setEcartes(
         new Set(
           (res.data?.groupes || [])
-            .filter((g) => g.conflits?.length > 0)
+            .filter((g) => g.conflits?.length > 0 || g.activite_partagee)
             .map((g) => g.garder.id)
         )
       );
@@ -316,10 +487,10 @@ export default function Participants() {
                     complèterai{fiches.a_completer > 1 ? "ent" : "t"} avec ce que portent les autres
                   </>
                 )}
-                {fiches.a_completer > 0 && fiches.avec_conflit > 0 && " · "}
-                {fiches.avec_conflit > 0 && (
+                {fiches.a_completer > 0 && fiches.a_regarder > 0 && " · "}
+                {fiches.a_regarder > 0 && (
                   <span className="text-amber-700">
-                    {fiches.avec_conflit} à regarder : les fiches se contredisent
+                    {fiches.a_regarder} à regarder, décochée{fiches.a_regarder > 1 ? "s" : ""} par précaution
                   </span>
                 )}
               </span>
@@ -330,51 +501,14 @@ export default function Participants() {
           {fichesOuvertes && (
             <div className="border-t border-sky-200">
               <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
-                {fiches.groupes.map((g) => {
-                  const ecarte = ecartes.has(g.garder.id);
-                  return (
-                    <li key={g.garder.id} className={`px-4 py-2.5 text-xs ${ecarte ? "opacity-45" : ""}`}>
-                      <label className="flex cursor-pointer items-start gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={!ecarte}
-                          onChange={() => basculerGroupe(g.garder.id)}
-                          className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-sky-600"
-                        />
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-medium text-slate-800">
-                            {g.garder.prenom} {g.garder.nom}
-                            <span className="ml-1.5 font-normal text-slate-500">
-                              {g.absorber.length + 1} fiches → 1
-                            </span>
-                          </span>
-
-                          {/* Ce que la fiche conservée gagnerait. C'est la raison
-                              d'être de l'opération, donc ce qu'on montre. */}
-                          {g.apport.length > 0 && (
-                            <span className="mt-0.5 block text-emerald-700">
-                              gagne {g.apport.map((a) => `${a.libelle} « ${a.valeur} »`).join(", ")}
-                            </span>
-                          )}
-
-                          {/* Un désaccord ne se tranche pas par une règle. */}
-                          {g.conflits.map((k) => (
-                            <span key={k.champ} className="mt-0.5 block text-amber-700">
-                              {k.libelle} : garde « {k.conserve ?? "—"} », écarte
-                              {" "}« {k.ecartees.join(" », « ")} »
-                            </span>
-                          ))}
-
-                          {g.apport.length === 0 && g.conflits.length === 0 && (
-                            <span className="mt-0.5 block text-slate-500">
-                              rien à ajouter — les fiches en double disparaissent simplement
-                            </span>
-                          )}
-                        </span>
-                      </label>
-                    </li>
-                  );
-                })}
+                {fiches.groupes.map((g) => (
+                  <GroupeFiches
+                    key={g.garder.id}
+                    groupe={g}
+                    ecarte={ecartes.has(g.garder.id)}
+                    onBasculer={() => basculerGroupe(g.garder.id)}
+                  />
+                ))}
               </ul>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
                 <p className="max-w-xl text-xs text-slate-500">
@@ -383,11 +517,13 @@ export default function Participants() {
                   n&apos;est perdue. L&apos;opération est définitive ; le journal d&apos;audit
                   conserve le détail de chaque fiche absorbée.
                   {" "}
+                  {" "}
                   <strong className="text-slate-600">
-                    Décochez les lignes qui se contredisent, et celles où deux personnes
-                    différentes pourraient porter le même nom
+                    Le rapprochement se fait sur le nom : il ne distingue pas deux homonymes.
                   </strong>
-                  {" "}— le rapprochement se fait sur le nom, il ne sait pas les distinguer.
+                  {" "}Les lignes qui se contredisent, et celles où deux fiches figurent sur la
+                  même formation, partent décochées — regardez leurs formations avant de les
+                  cocher.
                 </p>
                 <button
                   type="button"

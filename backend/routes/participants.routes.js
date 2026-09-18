@@ -365,6 +365,63 @@ function analyserGroupes(fiches) {
   return resultat;
 }
 
+/**
+ * Les formations de chaque fiche.
+ *
+ * C'est la preuve qui manquait pour decider. Le rapprochement se fait sur le
+ * nom, et le nom ne distingue pas deux homonymes : on demandait donc de
+ * trancher « meme personne ou non ? » sans montrer ce qui permet de repondre.
+ * Deux fiches sur deux formations differentes, c'est une personne qui est
+ * revenue. Deux fiches sur la meme formation, c'est un doublon d'import — ou
+ * deux personnes qui portent le meme nom, et il faut alors regarder de pres.
+ *
+ * Une seule requete pour tout le panneau : une par fiche en ferait des
+ * centaines sur une base un peu fournie.
+ */
+const MAX_ACTIVITES_AFFICHEES = 8;
+
+async function attacherActivites(groupes) {
+  const fiches = groupes.flatMap((g) => [g.garder, ...g.absorber]);
+  if (!fiches.length) return;
+
+  const { rows } = await pool.query(
+    `SELECT ap.participant_id, a.id, a.title, a.activity_date
+       FROM activity_participants ap
+       JOIN activities a ON a.id = ap.activity_id
+      WHERE ap.participant_id = ANY($1::int[])
+      ORDER BY a.activity_date DESC NULLS LAST, a.id DESC`,
+    [fiches.map((f) => f.id)]
+  );
+
+  const parFiche = new Map();
+  for (const r of rows) {
+    if (!parFiche.has(r.participant_id)) parFiche.set(r.participant_id, []);
+    parFiche.get(r.participant_id).push({ id: r.id, titre: r.title, date: r.activity_date });
+  }
+
+  for (const f of fiches) {
+    const liste = parFiche.get(f.id) || [];
+    f.activites = liste.slice(0, MAX_ACTIVITES_AFFICHEES);
+    /* Le total sert a dire « et 3 autres » plutot que de tout deverser. */
+    f.activites_total = liste.length;
+  }
+
+  /* Deux fiches inscrites a la meme formation ne s'expliquent pas par une
+     personne revenue : c'est soit un doublon d'import, soit deux homonymes.
+     Dans les deux cas, la ligne merite d'etre regardee avant d'etre validee. */
+  for (const g of groupes) {
+    const vues = new Set();
+    g.activite_partagee = false;
+    for (const f of [g.garder, ...g.absorber]) {
+      for (const a of parFiche.get(f.id) || []) {
+        if (vues.has(a.id)) { g.activite_partagee = true; break; }
+        vues.add(a.id);
+      }
+      if (g.activite_partagee) break;
+    }
+  }
+}
+
 router.get("/fiches-doublons", authMiddleware, async (req, res) => {
   try {
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
@@ -378,6 +435,7 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
     );
 
     const groupes = analyserGroupes(r.rows);
+    await attacherActivites(groupes);
     res.json({
       /* Le nombre de fiches en trop, pas le nombre de groupes : c'est ce qui
          disparaitra des listes et des compteurs. */
@@ -385,6 +443,15 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
       personnes: groupes.length,
       a_completer: groupes.filter((g) => g.apport.length > 0).length,
       avec_conflit: groupes.filter((g) => g.conflits.length > 0).length,
+      /* Les groupes ou deux fiches figurent sur la meme formation : ceux-la
+         ne s'expliquent pas par une personne revenue. */
+      avec_activite_partagee: groupes.filter((g) => g.activite_partagee).length,
+      /* Ce que le bandeau annonce : les groupes qui partent decoches, quelle
+         que soit la raison. Additionner les deux compteurs precedents
+         surestimerait un groupe qui cumule les deux motifs ; en prendre le
+         plus grand le sous-estimerait des qu'ils portent sur des groupes
+         differents — ce qui est le cas courant. */
+      a_regarder: groupes.filter((g) => g.conflits.length > 0 || g.activite_partagee).length,
       groupes,
     });
   } catch (err) {
