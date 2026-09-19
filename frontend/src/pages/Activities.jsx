@@ -168,6 +168,10 @@ export default function Activities({
           date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
           report_filename: a.report_filename || null,
           photo_count: a.photo_count ?? 0,
+          /* La page reconstruit chaque activité champ par champ : ce qui n'est
+             pas recopié ici n'existe pas pour les cartes, quoi que renvoie
+             l'API. */
+          emargement_actif: a.emargement_actif !== false,
           mode: a.mode || "presentiel",
           reliability_score: a.reliability_score != null ? Number(a.reliability_score) : null,
           reliability_status: a.reliability_status || null,
@@ -2305,6 +2309,13 @@ function QrModal({ activity, onClose }) {
 }
 
 function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport, onDownloadReport, onOpenGallery, showQrCode = true, cardPadding = "p-5" }) {
+  /* Le partenaire peut avoir fermé l'émargement par lien et QR code pour ses
+     séances. On combine ici plutôt qu'à chaque endroit qui affiche une carte :
+     une vue oubliée laisserait le bouton proposer un lien que le serveur
+     refuse d'ouvrir. Une activité sans partenaire n'est soumise à aucune
+     convention, d'où le « différent de false » plutôt qu'un test de vérité —
+     une ancienne réponse d'API ne porte pas encore le champ. */
+  const emargementOuvert = activity.emargement_actif !== false;
   const statusColors = {
     planned: "bg-blue-100 border-blue-200 text-blue-700",
     ongoing: "bg-orange-100 border-orange-200 text-orange-700",
@@ -2430,7 +2441,7 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
           )}
 
           <div className="flex items-center gap-2">
-            {showQrCode && (
+            {showQrCode && emargementOuvert && (
               <button
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:text-orange-600 hover:bg-orange-50"
                 onClick={onQrCode}
