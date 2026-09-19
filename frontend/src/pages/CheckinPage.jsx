@@ -70,8 +70,10 @@ export default function CheckinPage() {
     }
   };
 
-  /* ── Chargement ── */
-  if (!activity && !loadError) {
+  /* ── Chargement ──
+     L'émargement fermé doit sortir d'ici, sinon la page tourne indéfiniment :
+     l'activité n'est jamais chargée et aucune erreur n'est posée. */
+  if (!activity && !loadError && !emargementFerme) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />

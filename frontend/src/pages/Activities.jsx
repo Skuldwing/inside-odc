@@ -168,6 +168,10 @@ export default function Activities({
           date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
           report_filename: a.report_filename || null,
           photo_count: a.photo_count ?? 0,
+          /* La page reconstruit chaque activité champ par champ : ce qui n'est
+             pas recopié ici n'existe pas pour les cartes, quoi que renvoie
+             l'API. */
+          emargement_actif: a.emargement_actif !== false,
           mode: a.mode || "presentiel",
           reliability_score: a.reliability_score != null ? Number(a.reliability_score) : null,
           reliability_status: a.reliability_status || null,

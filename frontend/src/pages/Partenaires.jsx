@@ -466,6 +466,18 @@ export default function Partenaires() {
                           }`} />
                           {PIPELINE_STAGES.find((s) => s.key === p.pipeline_stage)?.label || "Actif"}
                         </span>
+                        {/* Visible sur la carte : sinon il faudrait ouvrir
+                            chaque fiche pour savoir lesquels sont fermés.
+                            L'état ordinaire — ouvert — ne porte pas de badge :
+                            un badge sur tout le monde ne signale plus rien. */}
+                        {p.emargement_actif === false && (
+                          <span
+                            className="badge bg-amber-100 text-amber-800"
+                            title="Les activités de ce partenaire ne proposent ni QR code ni lien d'inscription."
+                          >
+                            Émargement fermé
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
