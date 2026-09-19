@@ -20,6 +20,9 @@ router.get("/:activityId", async (req, res) => {
     const result = await pool.query(
       `SELECT a.id, a.title, a.description, a.activity_date, a.date_fin, a.location,
               p.name AS partner_name, d.name AS device_name,
+              /* Une activite sans partenaire n'est soumise a aucune convention :
+                 l'emargement y reste ouvert. */
+              COALESCE(p.emargement_actif, TRUE) AS emargement_actif,
               COALESCE(ap.cnt, 0)::int AS participants_count
        FROM activities a
        LEFT JOIN partners p ON p.id = a.partner_id
@@ -33,6 +36,18 @@ router.get("/:activityId", async (req, res) => {
       return res.status(404).json({ error: "Activite introuvable" });
     }
     const activity = result.rows[0];
+
+    /* Le partenaire peut avoir ferme l'emargement par lien et QR code. On le
+       dit ici plutot que de se contenter de masquer le bouton cote
+       administration : l'adresse a pu etre notee, projetee, ou partagee. Un
+       bouton cache ne ferme rien. */
+    if (!activity.emargement_actif) {
+      return res.status(403).json({
+        error: "L'émargement par lien n'est pas activé pour cette activité.",
+        emargement_desactive: true,
+      });
+    }
+
     activity.is_open = isFormOpen(activity.activity_date, activity.date_fin);
     res.json(activity);
   } catch (err) {
@@ -102,10 +117,25 @@ router.post("/:activityId", async (req, res) => {
     }
 
     const actRes = await client.query(
-      "SELECT id, title, activity_date, date_fin FROM activities WHERE id = $1",
+      `SELECT a.id, a.title, a.activity_date, a.date_fin,
+              COALESCE(p.emargement_actif, TRUE) AS emargement_actif
+         FROM activities a
+         LEFT JOIN partners p ON p.id = a.partner_id
+        WHERE a.id = $1`,
       [activityId]
     );
     if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    /* Le controle est refait ici, et pas seulement a l'affichage : le
+       formulaire s'envoie par une requete que rien n'oblige a passer par la
+       page. Un onglet ouvert avant la desactivation en est le cas le plus
+       banal. */
+    if (!actRes.rows[0].emargement_actif) {
+      return res.status(403).json({
+        error: "L'émargement par lien n'est pas activé pour cette activité.",
+        emargement_desactive: true,
+      });
+    }
 
     if (!isFormOpen(actRes.rows[0].activity_date, actRes.rows[0].date_fin)) {
       return res.status(403).json({ error: "La période d'inscription est clôturée.", closed: true });

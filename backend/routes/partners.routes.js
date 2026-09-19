@@ -5,7 +5,25 @@ const requireAdmin = require("../middleware/role.middleware");
 const requireAdminPin = require("../middleware/pin.middleware");
 const { logAudit } = require("../services/audit");
 
+const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
+
 const router = express.Router();
+
+/* Si la migration de demarrage a echoue, enregistrer un partenaire echouerait
+   sur « colonne inconnue » sans rien expliquer. On la rejoue une fois, comme
+   ailleurs dans la plateforme. */
+let schemaRejoue = false;
+async function avecEmargement(travail) {
+  try {
+    return await travail();
+  } catch (err) {
+    if (err?.code !== "42703" || schemaRejoue) throw err;
+    schemaRejoue = true;
+    console.warn("[PARTENAIRES] colonne emargement_actif absente, migration rejouée");
+    await ensureEmargementPartenaire();
+    return travail();
+  }
+}
 
 /* ===== GET ALL PARTNERS ===== */
 router.get("/", authMiddleware, requireAdmin, async (req, res) => {
@@ -271,17 +289,21 @@ router.post("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res)
       contact_phone = null,
       objective_beneficiaries = 0,
       status = "active",
+      /* Le formulaire ouvert par lien ou QR code est public. Certains
+         partenaires n'en veulent pas pour leurs seances : la plateforme a
+         toujours fonctionne ainsi, donc l'absence de choix vaut « autorise ». */
+      emargement_actif = true,
     } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Nom requis" });
     }
 
-    const result = await pool.query(
+    const result = await avecEmargement(() => pool.query(
       `
       INSERT INTO partners
-      (name, description, contact_email, contact_phone, objective_beneficiaries, status)
-      VALUES ($1,$2,$3,$4,$5,$6)
+      (name, description, contact_email, contact_phone, objective_beneficiaries, status, emargement_actif)
+      VALUES ($1,$2,$3,$4,$5,$6,$7)
       RETURNING *
       `,
       [
@@ -291,8 +313,9 @@ router.post("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res)
         contact_phone,
         objective_beneficiaries,
         status,
+        emargement_actif !== false,
       ]
-    );
+    ));
 
     const created = result.rows[0];
     logAudit(req, "CREATE", "partners", created.id, created.name, { status: created.status });
@@ -314,13 +337,14 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
       contact_phone = null,
       objective_beneficiaries = 0,
       status = "active",
+      emargement_actif = true,
     } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: "Nom requis" });
     }
 
-    const result = await pool.query(
+    const result = await avecEmargement(() => pool.query(
       `
       UPDATE partners
       SET name = $1,
@@ -328,8 +352,9 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
           contact_email = $3,
           contact_phone = $4,
           objective_beneficiaries = $5,
-          status = $6
-      WHERE id = $7
+          status = $6,
+          emargement_actif = $7
+      WHERE id = $8
       RETURNING *
       `,
       [
@@ -339,9 +364,10 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
         contact_phone,
         objective_beneficiaries,
         status,
+        emargement_actif !== false,
         id,
       ]
-    );
+    ));
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Partenaire introuvable" });

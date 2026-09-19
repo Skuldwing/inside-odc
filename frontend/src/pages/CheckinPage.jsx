@@ -16,6 +16,7 @@ export default function CheckinPage() {
   const { activityId } = useParams();
   const [activity, setActivity] = useState(null);
   const [loadError, setLoadError] = useState("");
+  const [emargementFerme, setEmargementFerme] = useState(false);
   const [form, setForm] = useState({ nom: "", prenom: "", telephone: "", email: "", genre: "", structure: "", tranche_age: "" });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null); // { ok, message, already }
@@ -29,7 +30,13 @@ export default function CheckinPage() {
     }
     api.get(`/checkin/${activityId}`)
       .then((r) => setActivity(r.data))
-      .catch((err) => setLoadError(err?.response?.data?.error || "Activité introuvable"));
+      .catch((err) => {
+        /* Émargement fermé par le partenaire : ce n'est pas une erreur, et
+           « Activité introuvable » ferait croire à un lien cassé — la personne
+           réessaierait, ou irait demander. On le dit. */
+        if (err?.response?.data?.emargement_desactive) setEmargementFerme(true);
+        else setLoadError(err?.response?.data?.error || "Activité introuvable");
+      });
   }, [activityId]);
 
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
@@ -68,6 +75,23 @@ export default function CheckinPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="w-8 h-8 text-orange-400 animate-spin" />
+      </div>
+    );
+  }
+
+  /* ── Émargement fermé par le partenaire ── */
+  if (emargementFerme) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-white px-4 text-center">
+        <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mb-6">
+          <AlertCircle className="w-10 h-10 text-slate-500" />
+        </div>
+        <p className="text-xl font-bold text-slate-800 mb-2">Inscription en ligne indisponible</p>
+        <p className="text-sm text-slate-500 max-w-xs">
+          L&apos;inscription par lien n&apos;est pas ouverte pour cette activité. Rapprochez-vous
+          de l&apos;équipe sur place pour être inscrit&middot;e.
+        </p>
+        <p className="mt-8 text-xs text-slate-500">Inside ODC Sénégal</p>
       </div>
     );
   }

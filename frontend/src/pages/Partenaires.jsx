@@ -47,6 +47,7 @@ export default function Partenaires() {
     contact_phone: "",
     objective_beneficiaries: "",
     status: "active",
+    emargement_actif: true,
   });
   const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
 
@@ -81,6 +82,7 @@ export default function Partenaires() {
       contact_phone: "",
       objective_beneficiaries: "",
       status: "active",
+      emargement_actif: true,
     });
     setSelectedDeviceIds([]);
     setEditing(null);
@@ -91,6 +93,7 @@ export default function Partenaires() {
     const payload = {
       ...form,
       objective_beneficiaries: Number(form.objective_beneficiaries || 0),
+      emargement_actif: form.emargement_actif !== false,
     };
 
     try {
@@ -122,6 +125,7 @@ export default function Partenaires() {
       contact_phone: partner.contact_phone || "",
       objective_beneficiaries: partner.objective_beneficiaries ?? "",
       status: partner.status || "active",
+      emargement_actif: partner.emargement_actif !== false,
     });
     setEditing(partner.id);
 
@@ -298,6 +302,33 @@ export default function Partenaires() {
                   <option value="active">Actif</option>
                   <option value="inactive">Inactif</option>
                 </select>
+              </div>
+
+              {/* Le formulaire ouvert par lien ou QR code est public :
+                  quiconque a l'adresse peut s'inscrire. C'est sa commodite, et
+                  c'est aussi ce qui fait qu'un partenaire peut ne pas en
+                  vouloir pour ses seances. */}
+              <div className="rounded-lg border border-dashed p-3">
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    className="mt-0.5"
+                    checked={form.emargement_actif !== false}
+                    onChange={(e) =>
+                      setForm({ ...form, emargement_actif: e.target.checked })
+                    }
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">
+                      Émargement par lien et QR code
+                    </span>
+                    <span className="mt-0.5 block text-xs text-gray-500">
+                      {form.emargement_actif !== false
+                        ? "Les activités de ce partenaire peuvent proposer un QR code et un lien d'inscription publics."
+                        : "Le bouton disparaît des activités de ce partenaire, et les liens déjà partagés cessent de fonctionner. Les listes s'alimentent alors par import."}
+                    </span>
+                  </span>
+                </label>
               </div>
 
               {/* Dispositifs assignés */}

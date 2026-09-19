@@ -35,6 +35,7 @@ const { ensureCampagnesSchema } = require("./migrations/campagnesSchema");
 const { ensureContactsPartages } = require("./migrations/contactsPartages");
 const { ensureAttestationsEnvoyees } = require("./migrations/attestationsEnvoyees");
 const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
+const { ensureEmargementPartenaire } = require("./migrations/emargementPartenaire");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
 const { infoVersion } = require("./version");
@@ -758,6 +759,16 @@ pool.query(`
     console.log("Migration OK: modeles d'attestation");
   } catch (e) {
     console.error("Migration modeles d'attestation ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Emargement par lien et QR code, autorise par partenaire ── */
+(async () => {
+  try {
+    await ensureEmargementPartenaire();
+    console.log("Migration OK: emargement par partenaire");
+  } catch (e) {
+    console.error("Migration emargement par partenaire ECHOUEE :", e.message);
   }
 })();
 

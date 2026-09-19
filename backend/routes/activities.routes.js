@@ -14,6 +14,7 @@ const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
+const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
 
 /* Le modele Tech-Ki fourni par l'equipe remplace le rendu generique des que
    ses ressources sont en place — fond, logo, signature, police manuscrite.
@@ -165,6 +166,10 @@ router.get("/", authMiddleware, async (req, res) => {
              p.name AS partner_name,
              d.name AS device_name,
              u.full_name AS coach_name,
+             /* Le partenaire peut avoir ferme l'emargement par lien et QR
+                code. Une activite sans partenaire n'est soumise a aucune
+                convention : il y reste ouvert. */
+             COALESCE(p.emargement_actif, TRUE) AS emargement_actif,
              COALESCE(ap.participants_count, 0) AS participants_count,
              COALESCE(ph.photo_count, 0) AS photo_count,
              /* Ou en est l'envoi des attestations, sans avoir a ouvrir
@@ -215,14 +220,18 @@ router.get("/", authMiddleware, async (req, res) => {
     query += " ORDER BY a.activity_date DESC";
 
     /* Cette liste est la page d'accueil du travail quotidien : elle ne doit
-       pas tomber parce qu'une table de comptage manque. Si la migration de
-       demarrage a echoue, on la rejoue et on reessaie une fois. */
+       pas tomber parce qu'une migration de demarrage a echoue. On les rejoue
+       et on reessaie une fois. Le code 42703 — colonne inconnue — compte
+       autant que 42P01 : il suffit d'une colonne manquante pour que la
+       requete entiere echoue, et l'ecran avec elle. */
+    const schemaIncomplet = (err) => err?.code === "42P01" || err?.code === "42703";
     let result;
     try {
       result = await pool.query(query, params);
     } catch (err) {
-      if (!tableAbsente(err)) throw err;
+      if (!schemaIncomplet(err)) throw err;
       await ensureAttestationsEnvoyees();
+      await ensureEmargementPartenaire();
       result = await pool.query(query, params);
     }
     res.json(result.rows);
