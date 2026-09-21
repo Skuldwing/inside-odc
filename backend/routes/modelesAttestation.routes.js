@@ -6,6 +6,10 @@ const requireAdmin = require("../middleware/role.middleware");
 const { logAudit } = require("../services/audit");
 const { ensureModelesAttestation } = require("../migrations/modelesAttestation");
 const { genererAttestationTechKi } = require("../services/attestationTechKi");
+const { sendEmail, fournisseurRetenu } = require("../services/mail");
+const { trierAdresses } = require("../services/adressesValides");
+const { interpreterErreurEnvoi } = require("../services/deliverability");
+const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 
 const router = express.Router();
 
@@ -306,6 +310,48 @@ router.get("/:id/logo", authMiddleware, async (req, res) => {
    L'apercu prend les valeurs en cours de saisie — pas celles enregistrees —
    pour qu'on voie ce qu'on ecrit ; le logo, lui, vient du modele enregistre,
    puisqu'un fichier ne se transporte pas dans un JSON. */
+/* Le modele enregistre, logo compris. L'apercu prend en plus les valeurs en
+   cours de saisie ; la generation ponctuelle, elle, s'en tient a ce qui est
+   enregistre — on ne veut pas remettre un document compose a moitie. */
+async function modeleEnregistre(id) {
+  if (!Number.isInteger(id) || id <= 0) return {};
+  const r = await avecSchema(() =>
+    pool.query("SELECT * FROM modeles_attestation WHERE id = $1", [id])
+  );
+  return r.rows[0] || {};
+}
+
+const LONGUEUR_MODULE = 120;
+const LONGUEUR_NOM = 120;
+
+/* Ce que l'on ecrit sur un document ponctuel. Les memes bornes qu'ailleurs :
+   au-dela, le rendu reduit la police jusqu'a l'illisible pour faire tenir le
+   texte sur sa ligne. */
+function lireDemande(corps) {
+  const nom = String(corps.nom || "").trim().slice(0, LONGUEUR_NOM);
+  const prenom = String(corps.prenom || "").trim().slice(0, LONGUEUR_NOM);
+  const intitule = String(corps.module || "").trim().slice(0, LONGUEUR_MODULE);
+  const lieu = String(corps.lieu || "").trim().slice(0, 60) || "Dakar";
+
+  /* Une date absente vaut aujourd'hui ; une date illisible est refusee plutot
+     que remplacee en silence — « Invalid Date » s'imprimerait tel quel. */
+  let date = new Date();
+  if (corps.date) {
+    const d = new Date(corps.date);
+    if (Number.isNaN(d.getTime())) return { erreur: "Date illisible." };
+    date = d;
+  }
+
+  if (!nom && !prenom) return { erreur: "Le nom du bénéficiaire est requis." };
+  if (!intitule) return { erreur: "L'intitulé du module est requis." };
+  return { nom, prenom, intitule, date, lieu };
+}
+
+const nomFichier = (prenom, nom) =>
+  `attestation_${[prenom, nom].filter(Boolean).join("_")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9_]+/gi, "_").toLowerCase() || "beneficiaire"}.pdf`;
+
 router.post("/apercu", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const corps = req.body || {};
@@ -329,6 +375,129 @@ router.post("/apercu", authMiddleware, requireAdmin, async (req, res) => {
     res.send(pdf);
   } catch (err) {
     console.error("[MODELES ATTESTATION APERCU]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== ATTESTATION PONCTUELLE =====
+   Toutes les attestations ne naissent pas d'une liste de presence. Un
+   intervenant, un jury, quelqu'un dont la seance n'a pas ete saisie : il
+   fallait jusqu'ici creer une activite fictive et l'y inscrire pour obtenir un
+   document. On ecrit le nom, le module et la date, on choisit le modele, et on
+   telecharge. */
+router.post("/generer", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const corps = req.body || {};
+    const d = lireDemande(corps);
+    if (d.erreur) return res.status(400).json({ error: d.erreur });
+
+    const modele = await modeleEnregistre(Number(corps.modele_id));
+    const pdf = await genererAttestationTechKi({
+      participant: { prenom: d.prenom, nom: d.nom },
+      module: d.intitule,
+      date: d.date,
+      lieu: d.lieu,
+      modele,
+    });
+
+    /* Un document nominatif remis a quelqu'un merite une trace : on ne saura
+       pas autrement qui l'a etabli, ni pour qui. */
+    logAudit(req, "CREATE", "attestation_ponctuelle", null, `${d.prenom} ${d.nom}`.trim(), {
+      module: d.intitule,
+      date: d.date.toISOString().slice(0, 10),
+      modele: modele.nom || null,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${nomFichier(d.prenom, d.nom)}"`);
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.send(pdf);
+  } catch (err) {
+    console.error("[ATTESTATION PONCTUELLE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Le meme document, envoye depuis la plateforme. Telecharger puis joindre a la
+   main reste possible — c'est meme le plus simple pour un seul destinataire —
+   mais l'envoi d'ici porte la mise en page habituelle et l'adresse
+   d'expedition authentifiee du centre. */
+router.post("/envoyer", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const corps = req.body || {};
+    const d = lireDemande(corps);
+    if (d.erreur) return res.status(400).json({ error: d.erreur });
+
+    const email = String(corps.email || "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ error: "Adresse du destinataire requise." });
+
+    if (fournisseurRetenu() === "aucun") {
+      return res.status(503).json({
+        error: "Aucun service d'envoi configuré.",
+        remede: "Téléchargez le PDF et envoyez-le depuis votre messagerie.",
+      });
+    }
+
+    /* Le meme controle qu'ailleurs : une adresse dont le domaine n'existe pas
+       ne part pas. Le rebond n'apporterait rien et compte contre la
+       reputation du compte d'expedition. */
+    const nomComplet = [d.prenom, d.nom].filter(Boolean).join(" ");
+    const { rejetes } = await trierAdresses([{ email, nom: nomComplet }]);
+    if (rejetes.length) {
+      return res.status(400).json({
+        error: `Cette adresse ne peut pas recevoir de courrier : ${rejetes[0].explication}.`,
+        champ: "email",
+      });
+    }
+
+    const modele = await modeleEnregistre(Number(corps.modele_id));
+    const pdf = await genererAttestationTechKi({
+      participant: { prenom: d.prenom, nom: d.nom },
+      module: d.intitule,
+      date: d.date,
+      lieu: d.lieu,
+      modele,
+    });
+
+    const tpl = await getTemplate("attestation");
+    const vars = {
+      nom: nomComplet,
+      activite: d.intitule,
+      date: d.date.toLocaleDateString("fr-FR"),
+      partenaire: modele.organisation || "",
+      dispositif: modele.programme || "",
+      duree: "",
+    };
+
+    try {
+      await sendEmail({
+        toEmail: email,
+        toName: nomComplet || email,
+        subject: renderTemplate(tpl.subject, vars),
+        html: renderTemplate(tpl.body_html, vars),
+        text: `Bonjour ${nomComplet},\n\nVeuillez trouver ci-joint votre attestation de participation à "${d.intitule}".\n\n— ODC Sénégal`,
+        attachments: [
+          { filename: nomFichier(d.prenom, d.nom), content: pdf, contentType: "application/pdf" },
+        ],
+      });
+    } catch (err) {
+      /* Dire pourquoi, et rappeler que le document existe : l'utilisateur peut
+         le telecharger et l'envoyer lui-meme sans rien ressaisir. */
+      console.error("[ATTESTATION PONCTUELLE ENVOI]", err);
+      const brut = [err?.message, err?.code, err?.response].filter(Boolean).join(" · ");
+      const lecture = interpreterErreurEnvoi(brut);
+      return res.status(502).json({ success: false, ...lecture, brut: brut.slice(0, 600) });
+    }
+
+    logAudit(req, "SEND", "attestation_ponctuelle", null, `${nomComplet} — ${email}`, {
+      module: d.intitule,
+      date: d.date.toISOString().slice(0, 10),
+      modele: modele.nom || null,
+    });
+
+    res.json({ ok: true, destinataire: email });
+  } catch (err) {
+    console.error("[ATTESTATION PONCTUELLE ENVOI]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });

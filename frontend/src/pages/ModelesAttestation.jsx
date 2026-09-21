@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Award,
+  ChevronDown,
+  Download,
+  FilePlus,
   Plus,
+  Send,
   Star,
   Trash2,
   Upload,
@@ -42,6 +46,193 @@ const VIDE = {
 };
 
 const CHAMPS_TEXTE = Object.keys(VIDE);
+
+
+/**
+ * Attestation ponctuelle.
+ *
+ * Toutes les attestations ne naissent pas d'une liste de presence : un
+ * intervenant, un membre de jury, quelqu'un dont la seance n'a pas ete saisie.
+ * Il fallait jusqu'ici creer une activite fictive et l'y inscrire pour obtenir
+ * un document — ce qui gonflait les compteurs au passage.
+ *
+ * On ecrit le nom, le module et la date, on choisit le modele, on telecharge.
+ * L'envoi depuis la plateforme est propose en plus, pas a la place : pour un
+ * seul destinataire, joindre le PDF a son propre message reste souvent le plus
+ * simple, et c'est ce que le bouton principal permet.
+ */
+function AttestationPonctuelle({ modeles }) {
+  const toast = useToast();
+  const [ouvert, setOuvert] = useState(false);
+  const [form, setForm] = useState({
+    modele_id: "",
+    prenom: "",
+    nom: "",
+    module: "",
+    date: new Date().toISOString().slice(0, 10),
+    lieu: "Dakar",
+    email: "",
+  });
+  const [enCours, setEnCours] = useState(null); // "pdf" | "mail"
+
+  const modifier = (champ) => (e) => setForm((f) => ({ ...f, [champ]: e.target.value }));
+
+  /* Le modèle par défaut est préselectionné : c'est celui qui sert dans la
+     plupart des cas, et l'oublier produirait un document sans identité. */
+  useEffect(() => {
+    if (form.modele_id || !modeles.length) return;
+    const parDefaut = modeles.find((m) => m.par_defaut) || modeles[0];
+    setForm((f) => ({ ...f, modele_id: String(parDefaut.id) }));
+  }, [modeles, form.modele_id]);
+
+  const manque = !form.nom.trim() && !form.prenom.trim() ? "le nom du bénéficiaire"
+    : !form.module.trim() ? "l'intitulé du module"
+    : null;
+
+  const telecharger = async () => {
+    if (manque) return toast.error(`Il manque ${manque}.`);
+    setEnCours("pdf");
+    try {
+      const res = await api.post("/modeles-attestation/generer", form, { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `attestation_${[form.prenom, form.nom].filter(Boolean).join("_") || "beneficiaire"}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      /* La réponse est un blob : le message d'erreur du serveur y est
+         enfermé et ne se lit pas comme un objet ordinaire. */
+      let message = "La génération a échoué.";
+      try {
+        const texte = await err.response?.data?.text?.();
+        if (texte) message = JSON.parse(texte).error || message;
+      } catch { /* on garde le message générique */ }
+      toast.error(message);
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  const envoyer = async () => {
+    if (manque) return toast.error(`Il manque ${manque}.`);
+    if (!form.email.trim()) return toast.error("Indiquez l'adresse du destinataire.");
+    setEnCours("mail");
+    try {
+      const res = await api.post("/modeles-attestation/envoyer", form);
+      toast.success(`Attestation envoyée à ${res.data.destinataire}.`);
+    } catch (err) {
+      const d = err.response?.data || {};
+      toast.error(d.cause || d.error || "L'envoi a échoué.");
+      if (d.remede) toast.error(d.remede);
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  return (
+    <section className="card-solid overflow-hidden border border-slate-200">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <FilePlus className="h-4 w-4 flex-shrink-0 text-orange-500" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-slate-800">
+            Générer une attestation à l&apos;unité
+          </span>
+          <span className="block text-xs text-slate-500">
+            Pour quelqu&apos;un qui ne figure sur aucune liste de présence — un intervenant, un
+            jury, une séance non saisie.
+          </span>
+        </span>
+        <ChevronDown
+          className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${ouvert ? "rotate-180" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+
+      {ouvert && (
+        <div className="space-y-4 border-t border-slate-200 px-4 py-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-slate-600">
+              Modèle
+              <select value={form.modele_id} onChange={modifier("modele_id")} className="select mt-1 text-sm">
+                {modeles.length === 0 && <option value="">Aucun modèle enregistré</option>}
+                {modeles.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nom}{m.par_defaut ? " (par défaut)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-slate-600">
+              Date écrite sur le document
+              <input type="date" value={form.date} onChange={modifier("date")} className="input mt-1 text-sm" />
+            </label>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-slate-600">
+              Prénom
+              <input value={form.prenom} onChange={modifier("prenom")} placeholder="Awa" className="input mt-1 text-sm" />
+            </label>
+            <label className="text-xs text-slate-600">
+              Nom
+              <input value={form.nom} onChange={modifier("nom")} placeholder="Diop" className="input mt-1 text-sm" />
+            </label>
+          </div>
+
+          <label className="block text-xs text-slate-600">
+            Intitulé du module
+            <input
+              value={form.module}
+              onChange={modifier("module")}
+              maxLength={120}
+              placeholder="Initiation à l'intelligence artificielle"
+              className="input mt-1 text-sm"
+            />
+          </label>
+
+          <label className="block text-xs text-slate-600 sm:max-w-xs">
+            Lieu
+            <input value={form.lieu} onChange={modifier("lieu")} className="input mt-1 text-sm" />
+          </label>
+
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            <button type="button" onClick={telecharger} disabled={enCours !== null} className="btn-primary text-sm">
+              {enCours === "pdf" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Télécharger le PDF
+            </button>
+            <span className="text-xs text-slate-400">ou</span>
+            <input
+              type="email"
+              value={form.email}
+              onChange={modifier("email")}
+              placeholder="Envoyer à cette adresse"
+              className="input min-w-0 flex-1 text-sm sm:max-w-xs"
+            />
+            <button
+              type="button"
+              onClick={envoyer}
+              disabled={enCours !== null || !form.email.trim()}
+              className="btn-ghost border text-sm"
+            >
+              {enCours === "mail" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Envoyer
+            </button>
+          </div>
+
+          <p className="text-[11px] text-slate-500">
+            Ce document ne s&apos;attache à aucune activité : il n&apos;entre dans aucun compteur et
+            n&apos;apparaît pas dans le suivi des envois.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function ModelesAttestation() {
   const toast = useToast();
@@ -237,6 +428,8 @@ export default function ModelesAttestation() {
           buttonIcon={Plus}
           onAdd={() => ouvrir(null)}
         />
+
+        <AttestationPonctuelle modeles={modeles} />
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* ===== La liste ===== */}
