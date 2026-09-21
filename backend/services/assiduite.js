@@ -98,6 +98,10 @@ function classerParAssiduite(lignes) {
         titre: l.titre || "",
         date: l.date || null,
         dispositif: l.dispositif || null,
+        /* Quelle fiche etait inscrite a cette activite. Le groupe en reunit
+           plusieurs ; pour ecrire ou lire un envoi d'attestation, il faut
+           celle-la precisement, pas l'identite d'affichage. */
+        fiche_id: l.id,
       });
     }
   }

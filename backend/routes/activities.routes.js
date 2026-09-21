@@ -5,9 +5,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
-const { generateAttestationPDF } = require("../services/attestation");
-const { genererAttestationTechKi, ressourcesPresentes } = require("../services/attestationTechKi");
-const { modelePourActivite } = require("./modelesAttestation.routes");
+const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
 
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
@@ -15,53 +13,6 @@ const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
-
-/* Le modele Tech-Ki fourni par l'equipe remplace le rendu generique des que
-   ses ressources sont en place — fond, logo, signature, police manuscrite.
-   Si l'une manque, on retombe sur l'ancien rendu plutot que d'echouer. */
-const MODELE_TECH_KI_DISPONIBLE = ressourcesPresentes().length === 0;
-if (!MODELE_TECH_KI_DISPONIBLE) {
-  console.warn(
-    "[ATTESTATION] modele Tech-Ki indisponible, ressources manquantes :",
-    ressourcesPresentes().join(", ")
-  );
-}
-
-/* L'intitule du module tel qu'il sera trace sur le document. Par defaut celui
-   de l'activite, mais un titre interne — « Atelier IA - session 3 (reporte) »
-   — n'a rien a faire sur une attestation remise a un beneficiaire. L'appelant
-   peut donc le reecrire. On borne la longueur : au-dela, le rendu reduit la
-   police jusqu'a l'illisible pour faire tenir le texte sur sa ligne. */
-const LONGUEUR_MODULE_MAX = 120;
-
-function moduleRetenu(activity, remplacement) {
-  const propose = String(remplacement ?? "").trim();
-  return (propose || activity.title || "").slice(0, LONGUEUR_MODULE_MAX);
-}
-
-async function attestationPour({ participant, activity, module: intituleModule }) {
-  if (MODELE_TECH_KI_DISPONIBLE) {
-    /* Le dispositif peut avoir son propre modele : la Tech Academy menee avec
-       le COJOJ porte le logo et la mention du partenaire. A defaut, le modele
-       par defaut ; a defaut encore, les valeurs d'origine du rendu. */
-    const modele = await modelePourActivite(activity);
-    return genererAttestationTechKi({
-      participant,
-      /* Le module imprime sur la ligne est l'intitule de la seance : c'est ce
-         que la personne a suivi, plus parlant que le nom du dispositif. */
-      module: moduleRetenu(activity, intituleModule),
-      date: activity.activity_date,
-      lieu: activity.location && activity.location !== "-" ? activity.location : "Dakar",
-      modele: modele || {},
-    });
-  }
-  return generateAttestationPDF({
-    participant,
-    activity,
-    partner: activity.partner_name || activity.coach_name,
-    device: activity.device_name,
-  });
-}
 
 const router = express.Router();
 
@@ -591,7 +542,7 @@ router.get("/:id/attestation-apercu", authMiddleware, requireWriteAccess, async 
     );
 
     const participant = partRes.rows[0] || { prenom: "Prénom", nom: "Nom du participant" };
-    const pdf = await attestationPour({ participant, activity, module: req.query.module });
+    const pdf = await attestationPourActivite({ participant, activity, module: req.query.module });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="attestation-apercu.pdf"');
@@ -731,7 +682,7 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
 
     for (const participant of destinataires) {
       try {
-        const pdfBuffer = await attestationPour({ participant, activity, module: intitule });
+        const pdfBuffer = await attestationPourActivite({ participant, activity, module: intitule });
 
         const fullName =
           [participant.prenom, participant.nom].filter(Boolean).join(" ") ||

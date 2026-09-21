@@ -37,6 +37,7 @@ const { ensureAttestationsEnvoyees } = require("./migrations/attestationsEnvoyee
 const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
 const { ensureEmargementPartenaire } = require("./migrations/emargementPartenaire");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
+const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
 const { infoVersion } = require("./version");
 
@@ -179,6 +180,7 @@ app.use("/profile", profileRoutes);
 app.use("/search", searchRoutes);
 app.use("/email", emailRoutes);
 app.use("/modeles-attestation", modelesAttestationRoutes);
+app.use("/attestations-participant", attestationsParticipantRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: "Route introuvable" });
