@@ -1215,6 +1215,11 @@ function ParParticipant() {
   const [seulsARegler, setSeulsARegler] = useState(true);
   const [ouverte, setOuverte] = useState(null);
   const [choix, setChoix] = useState({});      // clé module → coché
+  /* L'intitulé écrit sur le document, quand on ne veut pas celui de
+     l'activité : « Tech Academy S4 - Outils collaboratifs (report) » est un
+     titre de travail, pas ce qu'on remet à un bénéficiaire. */
+  const [intitules, setIntitules] = useState({}); // clé module → intitulé réécrit
+  const [enEdition, setEnEdition] = useState(null);
   const [adresse, setAdresse] = useState("");
   const [envoi, setEnvoi] = useState(false);
 
@@ -1242,6 +1247,8 @@ function ParParticipant() {
     if (ouverte === p.cle) { setOuverte(null); return; }
     setOuverte(p.cle);
     setChoix(Object.fromEntries(p.modules.map((m) => [cle(m), m.suggere])));
+    setIntitules(Object.fromEntries(p.modules.map((m) => [cle(m), m.titre])));
+    setEnEdition(null);
     setAdresse(p.adresses[0] || p.email || "");
   };
 
@@ -1266,7 +1273,11 @@ function ParParticipant() {
     try {
       const res = await api.post("/attestations-participant/envoyer", {
         email: adresse.trim(),
-        modules: modules.map((m) => ({ activity_id: m.id, participant_id: m.fiche_id })),
+        modules: modules.map((m) => ({
+          activity_id: m.id,
+          participant_id: m.fiche_id,
+          module: (intitules[cle(m)] || "").trim() || m.titre,
+        })),
         forcer,
       });
       toast.success(
@@ -1418,7 +1429,47 @@ function ParParticipant() {
                         />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span className="font-medium text-slate-800">{m.titre}</span>
+                            {/* L'intitulé se réécrit ici : c'est le texte qui
+                                sera tracé sur le document, et on ne le relit
+                                nulle part ailleurs avant l'envoi. */}
+                            {enEdition === cle(m) ? (
+                              <input
+                                autoFocus
+                                value={intitules[cle(m)] ?? m.titre}
+                                maxLength={120}
+                                onChange={(e) =>
+                                  setIntitules((t) => ({ ...t, [cle(m)]: e.target.value }))
+                                }
+                                onBlur={() => setEnEdition(null)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === "Escape") {
+                                    e.preventDefault();
+                                    setEnEdition(null);
+                                  }
+                                }}
+                                onClick={(e) => e.preventDefault()}
+                                className="input min-w-[16rem] flex-1 text-xs"
+                              />
+                            ) : (
+                              <>
+                                <span className="font-medium text-slate-800">
+                                  {(intitules[cle(m)] ?? m.titre) || m.titre}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.preventDefault(); setEnEdition(cle(m)); }}
+                                  className="text-slate-400 hover:text-orange-600"
+                                  title="Modifier l'intitulé écrit sur l'attestation"
+                                >
+                                  <Pencil className="h-3 w-3" aria-hidden="true" />
+                                </button>
+                                {(intitules[cle(m)] ?? m.titre) !== m.titre && (
+                                  <span className="text-[10px] text-slate-400">
+                                    (activité : {m.titre})
+                                  </span>
+                                )}
+                              </>
+                            )}
                             <span className="text-slate-500">
                               {m.date ? new Date(m.date).toLocaleDateString("fr-FR") : ""}
                             </span>

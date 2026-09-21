@@ -186,9 +186,22 @@ router.post("/envoyer", authMiddleware, async (req, res) => {
        demander l'attestation d'une activite qui ne le regarde pas. */
     const { where, params } = perimetre(req);
     const couples = demandes
-      .map((m) => ({ activity_id: Number(m.activity_id), participant_id: Number(m.participant_id) }))
+      .map((m) => ({
+        activity_id: Number(m.activity_id),
+        participant_id: Number(m.participant_id),
+        /* L'intitule ecrit sur le document. Le titre de l'activite est un
+           titre de travail — « Tech Academy S4 - Outils collaboratifs (report) »
+           — qui n'a rien a faire sur une piece remise a un beneficiaire. Vide,
+           on garde celui de l'activite ; la borne est celle du rendu, au-dela
+           duquel la police retrecit jusqu'a l'illisible. */
+        module: typeof m.module === "string" ? m.module.trim() : null,
+      }))
       .filter((m) => Number.isInteger(m.activity_id) && Number.isInteger(m.participant_id));
     if (!couples.length) return res.status(400).json({ error: "Sélection illisible." });
+
+    const intitulesChoisis = new Map(
+      couples.filter((c) => c.module).map((c) => [`${c.activity_id}:${c.participant_id}`, c.module])
+    );
 
     const idx = params.length;
     const autorisees = await pool.query(
@@ -266,7 +279,10 @@ router.post("/envoyer", authMiddleware, async (req, res) => {
         device_name: r.device_name,
         coach_name: r.coach_name,
       };
-      const intitule = moduleRetenu(activity, null);
+      const intitule = moduleRetenu(
+        activity,
+        intitulesChoisis.get(`${r.activity_id}:${r.participant_id}`) || null
+      );
       const pdf = await attestationPourActivite({
         participant: { nom: r.nom, prenom: r.prenom },
         activity,
