@@ -14,7 +14,6 @@ import TeamOdcRoute from "./routes/TeamOdcRoute";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Activities = lazy(() => import("./pages/Activities"));
 const Participants = lazy(() => import("./pages/Participants"));
-const Assiduite = lazy(() => import("./pages/Assiduite"));
 const Campagnes = lazy(() => import("./pages/Campagnes"));
 const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
@@ -165,14 +164,10 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route
-          path="assiduite"
-          element={
-            <Suspense fallback={<PageLoader />}>
-              <Assiduite />
-            </Suspense>
-          }
-        />
+        {/* L'assiduité est devenue un onglet de Participants. L'ancienne
+            adresse y mène : un lien noté ou un favori ne doit pas tomber sur
+            une page inconnue. */}
+        <Route path="assiduite" element={<Navigate to="/participants?vue=assiduite" replace />} />
         <Route
           path="profil"
           element={

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Award,
   ChevronDown,
-  Download,
+  ChevronLeft,
+  ChevronRight,
   Loader2,
   Mail,
   Phone,
@@ -14,7 +15,7 @@ import {
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
-import { EmptyState, StatTile, useToast } from "../components/ui";
+import { EmptyState, StatTile } from "../components/ui";
 
 /**
  * Assiduité : qui revient, et à quoi.
@@ -22,6 +23,10 @@ import { EmptyState, StatTile, useToast } from "../components/ui";
  * La liste des participants répond à « qui est venu ? ». Elle ne répond pas à
  * « qui revient ? » — or c'est cette question qui dit si un parcours se
  * construit, et qui repérer pour la suite.
+ *
+ * C'est la même matière, vue par personne plutôt que par ligne de présence :
+ * elle vit donc dans la page Participants, en second onglet, plutôt que dans
+ * une entrée de menu séparée qu'il fallait penser à ouvrir.
  *
  * Une personne qui suit trois formations figure sur trois listes de présence,
  * remplies à trois moments différents : elle peut donc avoir trois fiches. Le
@@ -42,14 +47,17 @@ const normaliser = (v) =>
   String(v || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export default function Assiduite() {
-  const toast = useToast();
   const [data, setData] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [recherche, setRecherche] = useState("");
   const [ouverte, setOuverte] = useState(null);
   const [minModules, setMinModules] = useState(1);
-  const [export_, setExport] = useState(false);
+  /* Pagination. Une base de plusieurs centaines de personnes tenait sur une
+     seule page interminable : on n'y retrouvait rien, et le classement perdait
+     son sens passé le premier écran. */
+  const [page, setPage] = useState(1);
+  const [parPage, setParPage] = useState(25);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -80,22 +88,21 @@ export default function Assiduite() {
     });
   }, [data, recherche, minModules]);
 
-  const telecharger = async () => {
-    setExport(true);
-    try {
-      const res = await api.get("/participants/assiduite/export.csv", { responseType: "blob" });
-      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8;" }));
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `assiduite-odc-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      toast.error("L'export a échoué.");
-    } finally {
-      setExport(false);
-    }
-  };
+  /* Le classement est rangé du plus assidu au moins assidu : le rang d'une
+     personne se lit sur la liste entière, jamais sur la page affichée. */
+  const rangs = useMemo(() => {
+    const m = new Map();
+    (data?.classement || []).forEach((x, i) => m.set(x.cle, i + 1));
+    return m;
+  }, [data]);
+
+  const pages = Math.max(1, Math.ceil(filtres.length / parPage));
+  const pageSure = Math.min(page, pages);
+  const visibles = filtres.slice((pageSure - 1) * parPage, pageSure * parPage);
+
+  /* Changer de filtre remet au début : rester page 4 d'une liste qui n'en a
+     plus que deux afficherait un vide inexplicable. */
+  useEffect(() => { setPage(1); }, [recherche, minModules, parPage]);
 
   if (chargement) {
     return (
@@ -115,22 +122,10 @@ export default function Assiduite() {
 
   return (
     <div className="space-y-6">
-      <section className="surface-glass p-5 lg:p-6">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Suivi des parcours</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-900 lg:text-3xl">Assiduité</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Qui revient, et à quels modules. Une personne inscrite sous plusieurs fiches est
-              reconnue par son adresse, son téléphone ou son nom.
-            </p>
-          </div>
-          <button onClick={telecharger} className="btn-primary" disabled={export_ || !data?.personnes}>
-            {export_ ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Exporter CSV
-          </button>
-        </div>
-      </section>
+      <p className="text-sm text-slate-500">
+        Qui revient, et à quels modules. Une personne inscrite sous plusieurs fiches est
+        reconnue par son adresse, son téléphone ou son nom.
+      </p>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatTile label="Personnes distinctes" value={data?.personnes ?? 0} icon={Users} />
@@ -171,12 +166,22 @@ export default function Assiduite() {
           <select
             value={minModules}
             onChange={(e) => setMinModules(Number(e.target.value))}
-            className="select sm:w-56"
+            className="select sm:w-52"
           >
             <option value={1}>Tout le monde</option>
             <option value={2}>2 modules et plus</option>
             <option value={3}>3 modules et plus</option>
             <option value={5}>5 modules et plus</option>
+          </select>
+          <select
+            value={parPage}
+            onChange={(e) => setParPage(Number(e.target.value))}
+            className="select sm:w-40"
+            aria-label="Nombre de personnes par page"
+          >
+            {[10, 25, 50, 100].map((n) => (
+              <option key={n} value={n}>{n} par page</option>
+            ))}
           </select>
         </div>
       </section>
@@ -193,7 +198,7 @@ export default function Assiduite() {
         />
       ) : (
         <ul className="card divide-y divide-slate-100 overflow-hidden p-0">
-          {filtres.map((x, i) => {
+          {visibles.map((x) => {
             const depliee = ouverte === x.cle;
             return (
               <li key={x.cle}>
@@ -206,7 +211,7 @@ export default function Assiduite() {
                       un classement qui se renumérote à chaque recherche ne
                       veut plus rien dire. */}
                   <span className="w-8 flex-shrink-0 text-center text-sm font-semibold tabular-nums text-slate-400">
-                    {(data.classement.indexOf(x) + 1) || i + 1}
+                    {rangs.get(x.cle)}
                   </span>
 
                   <span className="min-w-0 flex-1">
@@ -281,10 +286,37 @@ export default function Assiduite() {
         </ul>
       )}
 
-      <p className="text-xs text-slate-500">
-        {filtres.length} personne{filtres.length > 1 ? "s" : ""} affichée
-        {filtres.length > 1 ? "s" : ""} sur {data?.personnes ?? 0}.
-      </p>
+      {filtres.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            {filtres.length === data?.personnes
+              ? `${filtres.length} personne${filtres.length > 1 ? "s" : ""}`
+              : `${filtres.length} personne${filtres.length > 1 ? "s" : ""} sur ${data?.personnes ?? 0}`}
+            {pages > 1 && ` · page ${pageSure} / ${pages}`}
+          </p>
+
+          {pages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((n) => Math.max(1, n - 1))}
+                disabled={pageSure <= 1}
+                className="btn-ghost border text-xs disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Précédent
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((n) => Math.min(pages, n + 1))}
+                disabled={pageSure >= pages}
+                className="btn-ghost border text-xs disabled:opacity-40"
+              >
+                Suivant <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
