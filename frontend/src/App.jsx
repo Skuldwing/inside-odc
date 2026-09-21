@@ -14,6 +14,7 @@ import TeamOdcRoute from "./routes/TeamOdcRoute";
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Activities = lazy(() => import("./pages/Activities"));
 const Participants = lazy(() => import("./pages/Participants"));
+const Assiduite = lazy(() => import("./pages/Assiduite"));
 const Campagnes = lazy(() => import("./pages/Campagnes"));
 const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
@@ -161,6 +162,14 @@ export default function App() {
           element={
             <Suspense fallback={<PageLoader />}>
               <Participants />
+            </Suspense>
+          }
+        />
+        <Route
+          path="assiduite"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <Assiduite />
             </Suspense>
           }
         />
