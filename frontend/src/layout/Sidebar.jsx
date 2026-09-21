@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   KanbanSquare,
+  TrendingUp,
   X,
   ChevronLeft,
   ChevronRight,
@@ -55,6 +56,14 @@ const GROUPES = [
         path: "/participants",
         roles: ["admin", "partner", "coach", "viewer"],
         tourId: "nav-participants",
+      },
+      /* Se lit juste apres la liste des participants : c'est la meme matiere,
+         vue par personne plutot que par ligne de presence. */
+      {
+        name: "Assiduité",
+        icon: TrendingUp,
+        path: "/assiduite",
+        roles: ["admin", "partner", "coach", "viewer"],
       },
       /* L'assistant se lit apres les pages qu'il commente, pas avant : il etait
          place en deuxieme position, entre le tableau de bord et les activites. */

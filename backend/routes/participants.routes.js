@@ -4,6 +4,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const { prenomSansNomRepete, repetitionsDans, clePersonne } = require("../services/nomsDoublons");
 const { trierAdresses } = require("../services/adressesValides");
+const { classerParAssiduite } = require("../services/assiduite");
 
 const router = express.Router();
 
@@ -186,6 +187,89 @@ router.get("/export.csv", authMiddleware, async (req, res) => {
     console.error("[EXPORT PARTICIPANTS]", err);
     /* Si l'ecriture a commence, les en-tetes sont deja partis : on ne peut
        plus renvoyer un JSON d'erreur, on coupe le flux. */
+    if (res.headersSent) return res.end();
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== ASSIDUITE =====
+ *
+ * Combien de modules une personne a suivis, et lesquels. Le classement met en
+ * tete les plus assidus : ce sont eux que l'on veut reconnaitre, relancer ou
+ * orienter vers la suite du parcours.
+ *
+ * Le rapprochement des fiches vit dans son propre service, qui l'explique et
+ * que l'on peut eprouver a part. Ici, on se contente de lire le perimetre de
+ * l'utilisateur et de le lui passer.
+ */
+router.get("/assiduite", authMiddleware, async (req, res) => {
+  try {
+    const { baseFrom, params } = buildFilters(req);
+    const r = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure,
+              a.id AS activity_id, a.title AS titre,
+              to_char(a.activity_date, 'YYYY-MM-DD') AS date,
+              d.name AS dispositif
+       ${baseFrom}
+       ORDER BY p.id`,
+      params
+    );
+
+    const classement = classerParAssiduite(r.rows);
+    res.json({
+      personnes: classement.length,
+      /* Ce que l'on regarde en premier : combien reviennent. Une personne qui
+         n'est venue qu'une fois n'est pas un parcours, c'est un passage. */
+      fideles: classement.filter((x) => x.total_modules > 1).length,
+      homonymes: classement.filter((x) => x.homonymes).length,
+      classement,
+    });
+  } catch (err) {
+    console.error("[ASSIDUITE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Le meme classement en CSV. L'ecran montre les premiers ; un bilan se fait
+   dans un tableur, avec les modules de chacun sur la ligne. */
+router.get("/assiduite/export.csv", authMiddleware, async (req, res) => {
+  try {
+    const { baseFrom, params } = buildFilters(req);
+    const r = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure,
+              a.id AS activity_id, a.title AS titre,
+              to_char(a.activity_date, 'YYYY-MM-DD') AS date,
+              d.name AS dispositif
+       ${baseFrom}
+       ORDER BY p.id`,
+      params
+    );
+    const classement = classerParAssiduite(r.rows);
+
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="assiduite-odc-${stamp}.csv"`);
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.write("\ufeff");
+    res.write(csvLine([
+      "Rang", "Nom", "Prénom", "Modules suivis", "Email", "Téléphone",
+      "Genre", "Structure", "Homonyme possible", "Modules",
+    ]) + "\r\n");
+
+    classement.forEach((x, i) => {
+      res.write(csvLine([
+        i + 1, x.nom, x.prenom, x.total_modules, x.email, x.telephone,
+        x.genre, x.structure, x.homonymes ? "oui" : "",
+        x.modules.map((m) => `${m.titre}${m.date ? ` (${m.date})` : ""}`).join(" | "),
+      ]) + "\r\n");
+    });
+    res.end();
+
+    logAudit(req, "EXPORT", "participants", null, `assiduité — ${classement.length} personne(s)`, {
+      personnes: classement.length,
+    });
+  } catch (err) {
+    console.error("[EXPORT ASSIDUITE]", err);
     if (res.headersSent) return res.end();
     res.status(500).json({ error: "Erreur serveur" });
   }
