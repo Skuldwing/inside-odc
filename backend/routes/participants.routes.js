@@ -3,6 +3,7 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const { prenomSansNomRepete, repetitionsDans, clePersonne } = require("../services/nomsDoublons");
+const { trierAdresses } = require("../services/adressesValides");
 
 const router = express.Router();
 
@@ -574,31 +575,79 @@ router.patch("/:id", authMiddleware, async (req, res) => {
   try {
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
 
-    const nom = String(req.body?.nom ?? "").trim();
-    const prenom = String(req.body?.prenom ?? "").trim();
-
-    /* Les deux colonnes sont NOT NULL : une chaine vide ferait echouer la
-       requete avec un message que personne ne saurait lire. */
-    if (!nom || !prenom) {
-      return res.status(400).json({ error: "Le nom et le prénom sont tous deux requis." });
-    }
-    if (nom.length > 120 || prenom.length > 120) {
-      return res.status(400).json({ error: "Nom ou prénom trop long." });
-    }
-
-    const avant = await pool.query("SELECT nom, prenom FROM participants WHERE id = $1", [req.params.id]);
+    const avant = await pool.query(
+      "SELECT nom, prenom, email FROM participants WHERE id = $1",
+      [req.params.id]
+    );
     if (!avant.rows.length) return res.status(404).json({ error: "Participant introuvable" });
 
+    /* Modification partielle : un appel qui ne porte que l'adresse ne doit pas
+       exiger de renvoyer le nom, et surtout ne doit pas l'ecraser. */
+    const champs = {};
+
+    if (req.body?.nom !== undefined || req.body?.prenom !== undefined) {
+      const nom = String(req.body?.nom ?? avant.rows[0].nom ?? "").trim();
+      const prenom = String(req.body?.prenom ?? avant.rows[0].prenom ?? "").trim();
+
+      /* Les deux colonnes sont NOT NULL : une chaine vide ferait echouer la
+         requete avec un message que personne ne saurait lire. */
+      if (!nom || !prenom) {
+        return res.status(400).json({ error: "Le nom et le prénom sont tous deux requis." });
+      }
+      if (nom.length > 120 || prenom.length > 120) {
+        return res.status(400).json({ error: "Nom ou prénom trop long." });
+      }
+      champs.nom = nom;
+      champs.prenom = prenom;
+    }
+
+    if (req.body?.email !== undefined) {
+      const email = String(req.body.email ?? "").trim().toLowerCase();
+      if (email) {
+        if (email.length > 190) {
+          return res.status(400).json({ error: "Adresse email trop longue." });
+        }
+        /* Le meme controle qu'a l'envoi, mais joue ici : une adresse dont le
+           domaine n'existe pas se corrige tant qu'on a la personne en tete.
+           Decouverte au moment de l'envoi, elle a deja compte comme un rebond
+           contre la reputation du compte d'expedition. */
+        const nomComplet = `${champs.prenom ?? avant.rows[0].prenom} ${champs.nom ?? avant.rows[0].nom}`;
+        const { rejetes } = await trierAdresses([{ email, nom: nomComplet }]);
+        if (rejetes.length) {
+          return res.status(400).json({
+            error: `Cette adresse ne peut pas recevoir de courrier : ${rejetes[0].explication}.`,
+            champ: "email",
+          });
+        }
+      }
+      /* Une adresse vide est acceptee : mieux vaut aucune adresse qu'une
+         fausse, qui rebondit et ne sert personne. */
+      champs.email = email || null;
+    }
+
+    if (!Object.keys(champs).length) {
+      return res.status(400).json({ error: "Rien à modifier." });
+    }
+
+    const colonnes = Object.keys(champs);
     const r = await pool.query(
-      "UPDATE participants SET nom = $1, prenom = $2 WHERE id = $3 RETURNING id, nom, prenom, email",
-      [nom, prenom, req.params.id]
+      `UPDATE participants SET ${colonnes.map((c, i) => `${c} = $${i + 1}`).join(", ")}
+        WHERE id = $${colonnes.length + 1}
+        RETURNING id, nom, prenom, email`,
+      [...colonnes.map((c) => champs[c]), req.params.id]
     );
 
-    /* Une identite corrigee se retrouve dans toutes les activites de la
-       personne : la trace dit qui a change quoi, et depuis quelle valeur. */
-    logAudit(req, "UPDATE", "participants", r.rows[0].id, `${prenom} ${nom}`, {
-      avant: `${avant.rows[0].prenom} ${avant.rows[0].nom}`,
-      apres: `${prenom} ${nom}`,
+    /* Une correction se retrouve dans toutes les activites de la personne :
+       la trace dit qui a change quoi, et depuis quelle valeur. */
+    logAudit(req, "UPDATE", "participants", r.rows[0].id, `${r.rows[0].prenom} ${r.rows[0].nom}`, {
+      avant: {
+        nom: `${avant.rows[0].prenom} ${avant.rows[0].nom}`,
+        email: avant.rows[0].email || null,
+      },
+      apres: {
+        nom: `${r.rows[0].prenom} ${r.rows[0].nom}`,
+        email: r.rows[0].email || null,
+      },
     });
 
     res.json(r.rows[0]);

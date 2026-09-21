@@ -602,6 +602,54 @@ router.get("/:id/attestation-apercu", authMiddleware, requireWriteAccess, async 
   }
 });
 
+/* ===== REMETTRE UNE ATTESTATION DANS LES RESTANTS =====
+ *
+ * Une attestation partie a une adresse fautive n'est jamais arrivee. La trace
+ * dit pourtant « recue », et cette trace est ce qui empeche un second envoi :
+ * la personne serait donc definitivement privee de son document, alors que
+ * c'est precisement le cas ou il faut le renvoyer.
+ *
+ * On efface la trace pour ce couple (activite, personne) : elle repart dans
+ * les restants et sera servie au prochain envoi, a sa nouvelle adresse. Rien
+ * n'est expedie ici — l'envoi reste une action explicite.
+ */
+router.delete("/:id/attestations-envoyees/:participantId", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const { id, participantId } = req.params;
+
+    const actRes = await pool.query(
+      `SELECT ${ACTIVITY_COLUMNS} FROM activities a WHERE a.id = $1`,
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    const r = await pool.query(
+      `DELETE FROM attestations_envoyees
+        WHERE activity_id = $1 AND participant_id = $2
+        RETURNING email, module, envoye_le`,
+      [id, participantId]
+    );
+    if (!r.rows.length) {
+      return res.status(404).json({ error: "Aucun envoi enregistré pour cette personne." });
+    }
+
+    /* Ce que l'on efface est une preuve d'envoi : le journal la conserve. */
+    logAudit(req, "DELETE", "attestations_envoyees", Number(participantId), actRes.rows[0].title, {
+      adresse_utilisee: r.rows[0].email,
+      module: r.rows[0].module,
+      envoye_le: r.rows[0].envoye_le,
+      motif: "adresse corrigée, attestation à renvoyer",
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    if (tableAbsente(err)) return res.status(404).json({ error: "Aucun envoi enregistré." });
+    console.error("[ATTESTATION A RENVOYER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== SEND ATTESTATIONS ===== */
 router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
