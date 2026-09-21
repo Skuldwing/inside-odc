@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
@@ -1154,6 +1154,329 @@ const TONS_ATTESTATION = {
   muet: "bg-slate-50 text-slate-400 border-slate-200",
 };
 
+/**
+ * Attestations, personne par personne.
+ *
+ * L'envoi par activite a un defaut qu'on ne voit jamais depuis une activite,
+ * parce qu'il ne s'y manifeste pas : quelqu'un qui suit deux fois la meme
+ * formation — « Bureautique avancee » un vendredi, puis quinze jours plus tard
+ * — recoit deux fois la meme attestation, a deux dates. Chaque activite, prise
+ * seule, a raison ; c'est l'ensemble qui est faux.
+ *
+ * Ici ses modules tiennent sur un ecran : la repetition saute aux yeux, on
+ * coche ce qu'elle recoit, et tout part dans un seul message.
+ */
+/**
+ * Deux facons d'envoyer, et elles ne servent pas la meme chose.
+ *
+ * Par personne : on voit tout son parcours, on choisit ce qu'elle recoit, tout
+ * part en un seul message. C'est la seule vue ou l'on s'apercoit qu'un module
+ * a ete suivi deux fois — depuis une activite, la repetition est invisible.
+ *
+ * Par activite : la seance est finie, tout le monde recoit son document. Plus
+ * rapide quand il n'y a rien a arbitrer, et c'est ce qui a servi jusqu'ici :
+ * la retirer priverait d'un envoi en lot qui marche.
+ */
+function Attestations({ activities, onEnvoye }) {
+  const [methode, setMethode] = useState("participant");
+  return (
+    <div className="space-y-4">
+      <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+        {[
+          ["participant", "Par participant", Users],
+          ["activite", "Par activité", Calendar],
+        ].map(([cle, libelle, Icone]) => (
+          <button
+            key={cle}
+            type="button"
+            onClick={() => setMethode(cle)}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+              methode === cle ? "bg-orange-500 text-white" : "text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            <Icone className="h-3.5 w-3.5" aria-hidden="true" />
+            {libelle}
+          </button>
+        ))}
+      </div>
+
+      {methode === "participant"
+        ? <ParParticipant />
+        : <AttestationsTab activities={activities} onEnvoye={onEnvoye} />}
+    </div>
+  );
+}
+
+function ParParticipant() {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
+  const [seulsARegler, setSeulsARegler] = useState(true);
+  const [ouverte, setOuverte] = useState(null);
+  const [choix, setChoix] = useState({});      // clé module → coché
+  const [adresse, setAdresse] = useState("");
+  const [envoi, setEnvoi] = useState(false);
+
+  const charger = useCallback(async () => {
+    setChargement(true);
+    try {
+      const res = await api.get("/attestations-participant");
+      setData(res.data);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Chargement impossible.");
+      setData(null);
+    } finally {
+      setChargement(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  const cle = (m) => `${m.id}:${m.fiche_id}`;
+
+  /* Ouvrir une fiche applique la proposition du serveur : une attestation par
+     intitulé, la plus récente, hors de celles déjà reçues. C'est ce réglage
+     de départ qui évite le double envoi — le reste se corrige à la main. */
+  const ouvrir = (p) => {
+    if (ouverte === p.cle) { setOuverte(null); return; }
+    setOuverte(p.cle);
+    setChoix(Object.fromEntries(p.modules.map((m) => [cle(m), m.suggere])));
+    setAdresse(p.adresses[0] || p.email || "");
+  };
+
+  const filtres = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    return (data?.liste || []).filter((p) => {
+      if (seulsARegler && p.modules_a_envoyer === 0) return false;
+      if (!q) return true;
+      return (
+        `${p.prenom} ${p.nom}`.toLowerCase().includes(q) ||
+        (p.email || "").toLowerCase().includes(q) ||
+        p.modules.some((m) => (m.titre || "").toLowerCase().includes(q))
+      );
+    });
+  }, [data, recherche, seulsARegler]);
+
+  const envoyer = async (p, forcer = false) => {
+    const modules = p.modules.filter((m) => choix[cle(m)]);
+    if (!modules.length) return toast.error("Aucune attestation sélectionnée.");
+    if (!adresse.trim()) return toast.error("Indiquez l'adresse du destinataire.");
+    setEnvoi(true);
+    try {
+      const res = await api.post("/attestations-participant/envoyer", {
+        email: adresse.trim(),
+        modules: modules.map((m) => ({ activity_id: m.id, participant_id: m.fiche_id })),
+        forcer,
+      });
+      toast.success(
+        `${res.data.envoyees} attestation${res.data.envoyees > 1 ? "s" : ""} envoyée${res.data.envoyees > 1 ? "s" : ""} à ${res.data.destinataire}.`
+      );
+      setOuverte(null);
+      await charger();
+    } catch (err) {
+      const d = err.response?.data || {};
+      /* Le serveur refuse un renvoi non demandé plutôt que d'expédier un
+         doublon sur un double clic. On demande, et on force si c'est voulu. */
+      if (err.response?.status === 409) {
+        const titres = (d.deja_envoyees || []).map((x) => x.module).join(", ");
+        if (window.confirm(
+          `Déjà envoyé : ${titres}.\n\nRenvoyer quand même à ${adresse.trim()} ?`
+        )) return envoyer(p, true);
+        setEnvoi(false);
+        return;
+      }
+      toast.error(d.cause || d.error || "L'envoi a échoué.");
+    } finally {
+      setEnvoi(false);
+    }
+  };
+
+  if (chargement) {
+    return (
+      <div className="card-solid flex items-center gap-2 p-6 text-sm text-slate-600">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        Rapprochement des fiches…
+      </div>
+    );
+  }
+
+  if (!data?.personnes) {
+    return (
+      <EmptyState
+        icon={Award}
+        title="Aucun bénéficiaire"
+        description="Les attestations se construisent à partir des listes de présence. Importez-en une dans une activité."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        Une personne, tous ses modules, un seul message. Les fiches d&apos;une même personne
+        sont réunies par son adresse, son téléphone ou son nom.
+      </p>
+
+      {data.avec_repetition > 0 && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <AlertTriangle className="mr-1.5 inline h-3.5 w-3.5" aria-hidden="true" />
+          {data.avec_repetition} personne{data.avec_repetition > 1 ? "s ont" : " a"} suivi deux fois
+          un même module. Une seule attestation est proposée par intitulé — la plus récente.
+        </p>
+      )}
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder="Nom, adresse ou module…"
+          className="input min-w-0 flex-1 text-sm"
+        />
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={seulsARegler}
+            onChange={(e) => setSeulsARegler(e.target.checked)}
+          />
+          Seulement ceux qui attendent une attestation ({data.a_servir})
+        </label>
+      </div>
+
+      {filtres.length === 0 ? (
+        <EmptyState icon={Award} title="Personne à servir" compact
+          description="Tout le monde a reçu ses attestations, ou aucun bénéficiaire ne correspond." />
+      ) : filtres.map((p) => {
+        const depliee = ouverte === p.cle;
+        const coches = p.modules.filter((m) => choix[cle(m)]).length;
+        return (
+          <div key={p.cle} className="card-solid overflow-hidden border border-slate-200">
+            <button
+              type="button"
+              onClick={() => ouvrir(p)}
+              className="flex w-full items-center gap-3 px-4 py-3 text-left"
+            >
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-sm font-medium text-slate-800">{p.prenom} {p.nom}</span>
+                  {p.titres_repetes > 0 && (
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                      module suivi deux fois
+                    </span>
+                  )}
+                  {p.homonymes && (
+                    <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                      homonyme
+                    </span>
+                  )}
+                  {p.fiches.length > 1 && (
+                    <span className="text-[11px] text-slate-400">{p.fiches.length} fiches réunies</span>
+                  )}
+                </span>
+                <span className="mt-0.5 block text-xs text-slate-500">
+                  {p.adresses[0] || <span className="text-amber-600">sans adresse email</span>}
+                  {" · "}
+                  {p.total_modules} module{p.total_modules > 1 ? "s" : ""} suivi{p.total_modules > 1 ? "s" : ""}
+                </span>
+              </span>
+              <span
+                className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                  p.modules_a_envoyer > 0
+                    ? "bg-orange-50 text-orange-700"
+                    : "bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {p.modules_a_envoyer > 0
+                  ? `${p.modules_a_envoyer} à envoyer`
+                  : `${p.modules_recus} reçue${p.modules_recus > 1 ? "s" : ""}`}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${depliee ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {depliee && (
+              <div className="space-y-3 border-t border-slate-200 px-4 py-3">
+                <ul className="divide-y divide-slate-100">
+                  {p.modules.map((m) => (
+                    <li key={cle(m)} className="py-2">
+                      <label className="flex cursor-pointer items-start gap-2.5 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={!!choix[cle(m)]}
+                          onChange={(e) => setChoix((c) => ({ ...c, [cle(m)]: e.target.checked }))}
+                          className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-orange-500"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span className="font-medium text-slate-800">{m.titre}</span>
+                            <span className="text-slate-500">
+                              {m.date ? new Date(m.date).toLocaleDateString("fr-FR") : ""}
+                            </span>
+                            {m.dispositif && (
+                              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500">
+                                {m.dispositif}
+                              </span>
+                            )}
+                            {m.repete && (
+                              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                                déjà suivi à une autre date
+                              </span>
+                            )}
+                            {m.deja_envoyee && (
+                              <span
+                                className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
+                                title={`Envoyée le ${new Date(m.envoyee_le).toLocaleDateString("fr-FR")}${m.envoyee_a ? ` à ${m.envoyee_a}` : ""}`}
+                              >
+                                reçue
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                  <input
+                    type="email"
+                    value={adresse}
+                    onChange={(e) => setAdresse(e.target.value)}
+                    placeholder="Adresse du destinataire"
+                    className="input min-w-0 flex-1 text-sm sm:max-w-xs"
+                  />
+                  {/* Plusieurs fiches peuvent porter plusieurs adresses : on
+                      laisse choisir plutôt que d'en retenir une en silence. */}
+                  {p.adresses.length > 1 && (
+                    <select
+                      value={adresse}
+                      onChange={(e) => setAdresse(e.target.value)}
+                      className="select text-xs sm:w-56"
+                    >
+                      {p.adresses.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => envoyer(p)}
+                    disabled={envoi || coches === 0 || !adresse.trim()}
+                    className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60"
+                  >
+                    {envoi ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    Envoyer {coches} attestation{coches > 1 ? "s" : ""} en un mail
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AttestationsTab({ activities, onEnvoye }) {
   const toast = useToast();
   const [ouverte, setOuverte] = useState(null);   // id de l'activité dépliée
@@ -1798,7 +2121,7 @@ export default function Campagnes() {
       </div>
 
       {tab === "templates" ? <TemplatesTab /> : tab === "attestations" ? (
-        <AttestationsTab activities={activities} onEnvoye={fetchActivities} />
+        <Attestations activities={activities} onEnvoye={fetchActivities} />
       ) : (
         <>
           {/* Modal éditeur campagne */}
