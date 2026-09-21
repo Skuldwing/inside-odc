@@ -23,7 +23,6 @@ export default function Layout() {
     ["/activities", "Activités"],
     ["/dashboard", "Tableau de bord"],
     ["/participants", "Participants"],
-    ["/assiduite", "Assiduité"],
     ["/profil", "Profil"],
     ["/partenaires", "Partenaires"],
     ["/dispositifs", "Dispositifs"],

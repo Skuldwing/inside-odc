@@ -36,7 +36,7 @@ const PAGES = [
   { label: "Tableau de bord", url: "/dashboard", keywords: "dashboard accueil kpi" },
   { label: "Activités", url: "/activities", keywords: "activites formations sessions" },
   { label: "Participants", url: "/participants", keywords: "beneficiaires apprenants" },
-  { label: "Assiduité", url: "/assiduite", keywords: "classement modules parcours fidelite suivi" },
+  { label: "Assiduité", url: "/participants?vue=assiduite", keywords: "classement modules parcours fidelite suivi" },
   { label: "Partenaires", url: "/partenaires", admin: true, keywords: "crm structures" },
   { label: "Dispositifs", url: "/dispositifs", admin: true, keywords: "programmes" },
   {

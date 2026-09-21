@@ -1,11 +1,12 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check } from "lucide-react";
+import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
 import { EmptyState, DensityToggle, useDensity, useToast } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
+import Assiduite from "./Assiduite";
 
 /* La date arrivait telle que la rend pg — « 2026-09-08T00:00:00.000Z » —
    c'est-a-dire un horodatage brut, illisible dans un tableau. */
@@ -194,6 +195,11 @@ export default function Participants() {
   const [exporting, setExporting] = useState(false);
   const [searchParams] = useSearchParams();
 
+  /* L'onglet vit dans l'adresse : un lien vers l'assiduité doit l'ouvrir
+     directement, et l'ancienne adresse /assiduite y renvoie. */
+  const [vue, setVue] = useState(searchParams.get("vue") === "assiduite" ? "assiduite" : "liste");
+  const [exportAssiduite, setExportAssiduite] = useState(false);
+
   const [search, setSearch]           = useState(searchParams.get("q") || "");
   const [genderFilter, setGenderFilter] = useState("");
   const [page, setPage]               = useState(1);
@@ -363,6 +369,27 @@ export default function Participants() {
      affichee : au-dela de 100 lignes le fichier etait silencieusement
      incomplet. Le serveur le produit desormais sur l'ensemble des lignes
      correspondant aux filtres en cours. */
+  /* Le bouton d'export de l'en-tête suit l'onglet : sur « Assiduité », il
+     produit le classement, pas la liste des lignes de présence. */
+  const exportAssiduiteCsv = async () => {
+    setExportAssiduite(true);
+    try {
+      const res = await api.get("/participants/assiduite/export.csv", { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "text/csv;charset=utf-8;" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `assiduite-odc-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch {
+      toast.error("L'export a échoué.");
+    } finally {
+      setExportAssiduite(false);
+    }
+  };
+
   const exportCsv = async () => {
     setExporting(true);
     try {
@@ -550,20 +577,55 @@ export default function Participants() {
             <p className="mt-1 text-sm text-slate-500">Suivi complet des profils issus des activités.</p>
           </div>
           {!isViewer && (
-            <button onClick={exportCsv} className="btn-primary" disabled={exporting || total === 0}>
-              {exporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <Download className="w-4 h-4" aria-hidden="true" />
-              )}
-              {exporting
-                ? "Export en cours…"
-                : `Exporter CSV${total ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
-            </button>
+            vue === "assiduite" ? (
+              <button onClick={exportAssiduiteCsv} className="btn-primary" disabled={exportAssiduite}>
+                {exportAssiduite ? (
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="w-4 h-4" aria-hidden="true" />
+                )}
+                {exportAssiduite ? "Export en cours…" : "Exporter l'assiduité"}
+              </button>
+            ) : (
+              <button onClick={exportCsv} className="btn-primary" disabled={exporting || total === 0}>
+                {exporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Download className="w-4 h-4" aria-hidden="true" />
+                )}
+                {exporting
+                  ? "Export en cours…"
+                  : `Exporter CSV${total ? ` (${total.toLocaleString("fr-FR")})` : ""}`}
+              </button>
+            )
           )}
+        </div>
+
+        {/* La même matière, vue par ligne de présence ou par personne. */}
+        <div className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white p-1">
+          {[
+            ["liste", "Liste", List],
+            ["assiduite", "Assiduité", TrendingUp],
+          ].map(([cle, libelle, Icone]) => (
+            <button
+              key={cle}
+              type="button"
+              onClick={() => setVue(cle)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                vue === cle ? "bg-orange-500 text-white" : "text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <Icone className="h-3.5 w-3.5" aria-hidden="true" />
+              {libelle}
+            </button>
+          ))}
         </div>
       </section>
 
+      {vue === "assiduite" && <Assiduite />}
+
+      {vue === "liste" && (
+      <>
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard label="Total filtrés"  value={total} />
         <StatCard label="Hommes"         value={stats.male} />
@@ -712,6 +774,8 @@ export default function Participants() {
           </div>
         )}
       </section>
+      </>
+      )}
     </div>
   );
 }
