@@ -1165,7 +1165,7 @@ function AttestationsTab({ activities, onEnvoye }) {
      donc là que se relisent les orthographes avant l'envoi. */
   const [participants, setParticipants] = useState(null);
   const [chargeListe, setChargeListe] = useState(false);
-  const [edite, setEdite] = useState(null);        // { id, nom, prenom }
+  const [edite, setEdite] = useState(null);        // { id, nom, prenom, email, dejaRecue, renvoyer }
   const [enregistre, setEnregistre] = useState(false);
 
   const chargerParticipants = useCallback(async (activityId) => {
@@ -1216,18 +1216,32 @@ function AttestationsTab({ activities, onEnvoye }) {
     if (faits < aCorriger.length) toast.error(`${aCorriger.length - faits} correction(s) ont échoué.`);
   };
 
-  const enregistrerIdentite = async () => {
+  const enregistrerIdentite = async (activityId) => {
     if (!edite) return;
     const nom = edite.nom.trim();
     const prenom = edite.prenom.trim();
+    const email = (edite.email || "").trim();
     if (!nom || !prenom) {
       toast.error("Le nom et le prénom sont tous deux requis.");
       return;
     }
     setEnregistre(true);
     try {
-      const res = await api.patch(`/participants/${edite.id}`, { nom, prenom });
-      setParticipants((l) => l.map((p) => (p.id === res.data.id ? { ...p, ...res.data } : p)));
+      const res = await api.patch(`/participants/${edite.id}`, { nom, prenom, email });
+      let ligne = { ...res.data };
+
+      /* L'attestation partie à l'ancienne adresse n'est jamais arrivée. Sans
+         effacer la trace, la personne resterait « reçue » pour toujours et
+         ne serait jamais resservie — le cas où il faut justement renvoyer. */
+      if (edite.renvoyer && edite.dejaRecue) {
+        await api.delete(`/activities/${activityId}/attestations-envoyees/${edite.id}`);
+        ligne = { ...ligne, attestation_envoyee_le: null, attestation_module: null };
+        toast.success("Adresse corrigée. L'attestation repartira au prochain envoi.");
+      } else {
+        toast.success("Correction enregistrée.");
+      }
+
+      setParticipants((l) => l.map((p) => (p.id === ligne.id ? { ...p, ...ligne } : p)));
       setEdite(null);
     } catch (err) {
       toast.error(err?.response?.data?.error || "La correction n'a pas été enregistrée.");
@@ -1394,30 +1408,64 @@ function AttestationsTab({ activities, onEnvoye }) {
                       {participants.map((p) => (
                         <li key={p.id} className="px-3 py-2 text-xs">
                           {edite?.id === p.id ? (
-                            <div className="flex flex-wrap items-center gap-2">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  value={edite.prenom}
+                                  onChange={(e) => setEdite({ ...edite, prenom: e.target.value })}
+                                  placeholder="Prénom"
+                                  className="input min-w-0 flex-1 text-xs"
+                                />
+                                <input
+                                  value={edite.nom}
+                                  onChange={(e) => setEdite({ ...edite, nom: e.target.value })}
+                                  placeholder="Nom"
+                                  className="input min-w-0 flex-1 text-xs"
+                                />
+                              </div>
+                              {/* L'adresse se corrige ici aussi : une faute de
+                                  saisie s'y voit au moment où l'on relit la
+                                  liste, pas trois écrans plus loin. */}
                               <input
-                                value={edite.prenom}
-                                onChange={(e) => setEdite({ ...edite, prenom: e.target.value })}
-                                placeholder="Prénom"
-                                className="input min-w-0 flex-1 text-xs"
+                                type="email"
+                                value={edite.email}
+                                onChange={(e) => setEdite({ ...edite, email: e.target.value })}
+                                placeholder="Adresse email (vide si inconnue)"
+                                className="input w-full text-xs"
                               />
-                              <input
-                                value={edite.nom}
-                                onChange={(e) => setEdite({ ...edite, nom: e.target.value })}
-                                placeholder="Nom"
-                                className="input min-w-0 flex-1 text-xs"
-                              />
-                              <button
-                                type="button"
-                                onClick={enregistrerIdentite}
-                                disabled={enregistre}
-                                className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-60"
-                              >
-                                {enregistre ? "…" : "Enregistrer"}
-                              </button>
-                              <button type="button" onClick={() => setEdite(null)} className="text-xs text-slate-500 hover:text-slate-700">
-                                Annuler
-                              </button>
+
+                              {/* Une attestation partie à l'ancienne adresse
+                                  n'est jamais arrivée. Sans ce choix, la
+                                  personne resterait « reçue » pour toujours. */}
+                              {edite.dejaRecue && edite.email.trim() !== (p.email || "") && (
+                                <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+                                  <input
+                                    type="checkbox"
+                                    checked={!!edite.renvoyer}
+                                    onChange={(e) => setEdite({ ...edite, renvoyer: e.target.checked })}
+                                    className="mt-0.5 h-3 w-3 flex-shrink-0"
+                                  />
+                                  <span>
+                                    Son attestation est partie à l&apos;ancienne adresse : elle n&apos;est
+                                    donc pas arrivée. La remettre dans les restants pour qu&apos;elle
+                                    reparte au prochain envoi.
+                                  </span>
+                                </label>
+                              )}
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => enregistrerIdentite(a.id)}
+                                  disabled={enregistre}
+                                  className="rounded-lg bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-60"
+                                >
+                                  {enregistre ? "…" : "Enregistrer"}
+                                </button>
+                                <button type="button" onClick={() => setEdite(null)} className="text-xs text-slate-500 hover:text-slate-700">
+                                  Annuler
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <div className={`space-y-1 ${p.attestation_envoyee_le ? "opacity-50" : ""}`}>
@@ -1442,9 +1490,16 @@ function AttestationsTab({ activities, onEnvoye }) {
                                 <span className="hidden min-w-0 flex-1 truncate text-slate-400 sm:block">{p.email || ""}</span>
                                 <button
                                   type="button"
-                                  onClick={() => setEdite({ id: p.id, nom: p.nom, prenom: p.prenom })}
+                                  onClick={() =>
+                                    setEdite({
+                                      id: p.id, nom: p.nom, prenom: p.prenom,
+                                      email: p.email || "",
+                                      dejaRecue: Boolean(p.attestation_envoyee_le),
+                                      renvoyer: false,
+                                    })
+                                  }
                                   className="flex-shrink-0 text-slate-400 hover:text-orange-600"
-                                  title="Corriger le nom"
+                                  title="Corriger le nom ou l'adresse"
                                 >
                                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
                                 </button>
@@ -1457,7 +1512,13 @@ function AttestationsTab({ activities, onEnvoye }) {
                                 <button
                                   type="button"
                                   onClick={() =>
-                                    setEdite({ id: p.id, nom: p.nom, prenom: prenomSansNomRepete(p.prenom, p.nom) })
+                                    setEdite({
+                                      id: p.id, nom: p.nom,
+                                      prenom: prenomSansNomRepete(p.prenom, p.nom),
+                                      email: p.email || "",
+                                      dejaRecue: Boolean(p.attestation_envoyee_le),
+                                      renvoyer: false,
+                                    })
                                   }
                                   className="flex items-center gap-1.5 text-[11px] text-amber-700 hover:text-amber-900"
                                 >
@@ -1474,8 +1535,8 @@ function AttestationsTab({ activities, onEnvoye }) {
                   )}
 
                   <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
-                    Corriger une orthographe la rectifie partout : la fiche du bénéficiaire est
-                    la même dans toutes ses activités.
+                    Corriger un nom ou une adresse la rectifie partout : la fiche du
+                    bénéficiaire est la même dans toutes ses activités.
                   </p>
                 </div>
 
