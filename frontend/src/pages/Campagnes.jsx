@@ -1315,7 +1315,8 @@ function ParParticipant() {
     <div className="space-y-3">
       <p className="text-sm text-slate-500">
         Une personne, tous ses modules, un seul message. Les fiches d&apos;une même personne
-        sont réunies par son adresse, son téléphone ou son nom.
+        sont réunies par son adresse, son téléphone ou son nom. Les attestations déjà envoyées
+        — y compris par activité — sont marquées « reçue » et ne sont pas proposées.
       </p>
 
       {data.avec_repetition > 0 && (
@@ -1377,6 +1378,13 @@ function ParParticipant() {
                   {p.adresses[0] || <span className="text-amber-600">sans adresse email</span>}
                   {" · "}
                   {p.total_modules} module{p.total_modules > 1 ? "s" : ""} suivi{p.total_modules > 1 ? "s" : ""}
+                  {/* Ce qui a déjà été servi, quelle que soit la méthode : les
+                      envois faits par activité comptent ici aussi. */}
+                  {p.modules_recus > 0 && (
+                    <span className="text-emerald-700">
+                      {" · "}{p.modules_recus} déjà reçue{p.modules_recus > 1 ? "s" : ""}
+                    </span>
+                  )}
                 </span>
               </span>
               <span
@@ -1424,12 +1432,14 @@ function ParParticipant() {
                                 déjà suivi à une autre date
                               </span>
                             )}
+                            {/* La date et l'adresse se lisent sur la ligne, pas
+                                dans une infobulle : c'est ce qui dit qu'il est
+                                inutile de cocher, et une infobulle ne se
+                                survole pas quand on parcourt une liste. */}
                             {m.deja_envoyee && (
-                              <span
-                                className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700"
-                                title={`Envoyée le ${new Date(m.envoyee_le).toLocaleDateString("fr-FR")}${m.envoyee_a ? ` à ${m.envoyee_a}` : ""}`}
-                              >
-                                reçue
+                              <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                                reçue le {new Date(m.envoyee_le).toLocaleDateString("fr-FR")}
+                                {m.envoyee_a ? ` — ${m.envoyee_a}` : ""}
                               </span>
                             )}
                           </span>

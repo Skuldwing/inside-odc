@@ -100,7 +100,12 @@ async function etatDesPersonnes(req) {
       const c = cleTitre(m.titre);
       const premiereDuTitre = !vus.has(c);
       vus.add(c);
-      const trace = deja.get(`${m.id}:${m.fiche_id}`) || null;
+      /* Une personne peut figurer sur une activite par plusieurs fiches. Elle
+         a recu son attestation des que l'une d'elles porte la trace : ne
+         regarder que la fiche d'affichage la ferait resservir. */
+      const trace = (m.fiche_ids || [m.fiche_id])
+        .map((id) => deja.get(`${m.id}:${id}`))
+        .find(Boolean) || null;
       return {
         ...m,
         deja_envoyee: Boolean(trace),
