@@ -192,10 +192,17 @@ function classerParAssiduite(lignes) {
     const principale = [...membres].sort((a, b) => renseignes(b) - renseignes(a) || a.id - b.id)[0];
 
     /* Une personne ne compte qu'une fois par activite, meme si deux de ses
-       fiches y figurent. */
+       fiches y figurent. On retient alors toutes ces fiches : garder la
+       premiere rencontree suffisait a compter, pas a relire ce qui a ete
+       ecrit sur l'une d'elles — un envoi trace sur la seconde serait invisible
+       et la personne resservie. */
     const parActivite = new Map();
     for (const f of membres) {
-      for (const a of f.activites) if (!parActivite.has(a.id)) parActivite.set(a.id, a);
+      for (const a of f.activites) {
+        const connue = parActivite.get(a.id);
+        if (connue) connue.fiche_ids.push(a.fiche_id);
+        else parActivite.set(a.id, { ...a, fiche_ids: [a.fiche_id] });
+      }
     }
     const modules = [...parActivite.values()].sort((a, b) =>
       String(b.date || "").localeCompare(String(a.date || ""))
