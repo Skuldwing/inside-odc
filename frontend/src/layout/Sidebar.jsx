@@ -8,7 +8,6 @@ import {
   UserCog,
   MessageSquare,
   FileText,
-  Bot,
   Award,
   ShieldCheck,
   ShieldAlert,
@@ -55,14 +54,6 @@ const GROUPES = [
         path: "/participants",
         roles: ["admin", "partner", "coach", "viewer"],
         tourId: "nav-participants",
-      },
-      /* L'assistant se lit apres les pages qu'il commente, pas avant : il etait
-         place en deuxieme position, entre le tableau de bord et les activites. */
-      {
-        name: "Pobarr",
-        icon: Bot,
-        path: "/assistant-ia",
-        roles: ["admin"],
       },
     ],
   },
