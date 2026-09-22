@@ -57,22 +57,21 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
     membres.some((f) => !vide(f[champ]))
   );
 
-  /* Ce que portera la fiche après réunion : la valeur de la fiche conservée,
-     ou, à défaut, la première trouvée sur les autres. C'est exactement ce que
-     fait la fusion côté serveur. */
-  const resultat = (champ) => {
-    if (!vide(g.garder[champ])) return String(g.garder[champ]).trim();
-    const trouve = g.absorber.find((f) => !vide(f[champ]));
-    return trouve ? String(trouve[champ]).trim() : null;
+  /* La valeur qui remplira les cases vides : la seule que le groupe connaisse.
+     Si deux fiches portent des valeurs différentes, on ne tranche pas — chacune
+     garde la sienne. Un désaccord se regarde, il ne se résout pas par une
+     règle. */
+  const valeurRetenue = (champ) => {
+    const connues = new Map();
+    for (const f of membres) {
+      const n = normaliser(champ, f[champ]);
+      if (n !== null && !connues.has(n)) connues.set(n, String(f[champ]).trim());
+    }
+    return connues.size === 1 ? [...connues.values()][0] : null;
   };
 
-  /* Une valeur est écartée si elle diffère de celle qui sera retenue. C'est
-     elle qu'il faut voir barrée : c'est la seule chose que l'opération perd. */
-  const perdue = (champ, valeur) => {
-    if (vide(valeur)) return false;
-    const garde = resultat(champ);
-    return garde !== null && normaliser(champ, valeur) !== normaliser(champ, garde);
-  };
+  /* Cette case va se remplir : elle est vide et le groupe connaît la valeur. */
+  const seraRemplie = (champ, valeur) => vide(valeur) && valeurRetenue(champ) !== null;
 
   const activites = (f) =>
     (f.activites || []).map((a) => a.titre + (a.date ? ` (${formatDate(a.date)})` : "")).join(" · ");
@@ -92,7 +91,7 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
               {g.garder.prenom} {g.garder.nom}
             </span>
             <span className="text-xs text-slate-500">
-              {membres.length} fiches → 1
+              {membres.length} fiches — conservées toutes les deux
             </span>
             {/* L'alerte la plus utile du panneau : elle désigne précisément
                 les lignes où le rapprochement par le nom peut se tromper. */}
@@ -123,20 +122,21 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
                   {membres.map((f, i) => (
                     <tr key={f.id} className="border-t border-slate-100">
                       <td className="py-1 pr-3 whitespace-nowrap text-slate-500">
-                        {i === 0 ? (
-                          <span className="font-medium text-sky-700">conservée</span>
-                        ) : (
-                          "absorbée"
-                        )}
+                        fiche {i + 1}
                       </td>
                       {colonnes.map(([champ]) => (
                         <td key={champ} className="py-1 pr-3 break-all">
+                          {/* Rien n'est barré : aucune valeur ne disparaît.
+                              Ce qui est vide et que le groupe connaît se
+                              remplira — on le montre en vert, à sa place. */}
                           {vide(f[champ]) ? (
-                            <span className="text-slate-300">—</span>
-                          ) : perdue(champ, f[champ]) ? (
-                            <span className="text-amber-700 line-through decoration-amber-400">
-                              {String(f[champ]).trim()}
-                            </span>
+                            seraRemplie(champ, f[champ]) ? (
+                              <span className="font-medium text-emerald-700">
+                                + {valeurRetenue(champ)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )
                           ) : (
                             <span className="text-slate-700">{String(f[champ]).trim()}</span>
                           )}
@@ -144,22 +144,12 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
                       ))}
                     </tr>
                   ))}
-                  <tr className="border-t border-slate-200 bg-emerald-50/60">
-                    <td className="py-1 pr-3 whitespace-nowrap font-medium text-emerald-800">
-                      après réunion
-                    </td>
-                    {colonnes.map(([champ]) => (
-                      <td key={champ} className="py-1 pr-3 break-all font-medium text-emerald-800">
-                        {resultat(champ) ?? <span className="text-slate-300">—</span>}
-                      </td>
-                    ))}
-                  </tr>
                 </tbody>
               </table>
             </span>
           ) : (
             <span className="mt-1 block text-xs text-slate-500">
-              Ces fiches ne portent aucun renseignement : les doublons disparaissent simplement.
+              Ces fiches ne portent aucun renseignement : il n&apos;y a rien à compléter.
             </span>
           )}
 
@@ -169,7 +159,7 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
           <span className="mt-2 block space-y-0.5 text-[11px] text-slate-500">
             {membres.map((f, i) => (
               <span key={f.id} className="block">
-                <span className="text-slate-400">{i === 0 ? "conservée" : "absorbée"} :</span>{" "}
+                <span className="text-slate-400">fiche {i + 1} :</span>{" "}
                 {f.activites_total ? (
                   <>
                     {activites(f)}
@@ -185,6 +175,154 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
         </span>
       </label>
     </li>
+  );
+}
+
+
+/**
+ * Fiches supprimées par l'ancienne réunion.
+ *
+ * Cette opération supprimait la fiche absorbée. Quand deux fiches d'une même
+ * personne figuraient sur la même activité, son effectif perdait une unité —
+ * et si le rapprochement était faux, un vrai bénéficiaire disparaissait d'une
+ * liste de présence.
+ *
+ * Le journal d'audit avait conservé chaque fiche et ses inscriptions : elles
+ * peuvent être remises en place. Rien n'est restauré d'office — certaines
+ * réunions étaient justes, et recréer une vraie ligne en double regonflerait
+ * un effectif à tort. On montre, l'utilisateur choisit.
+ */
+function FichesARestaurer() {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [ouvert, setOuvert] = useState(false);
+  const [choisies, setChoisies] = useState(() => new Set());
+  const [enCours, setEnCours] = useState(false);
+
+  const charger = useCallback(async () => {
+    try {
+      const res = await api.get("/participants/fiches-absorbees");
+      setData(res.data);
+    } catch {
+      setData(null);   /* silencieux : c'est une réparation, pas la page */
+    }
+  }, []);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  const aRestaurer = (data?.lignes || []).filter((l) => !l.restauree);
+  if (!aRestaurer.length) return null;
+
+  const basculer = (j) =>
+    setChoisies((prec) => {
+      const suivant = new Set(prec);
+      if (suivant.has(j)) suivant.delete(j); else suivant.add(j);
+      return suivant;
+    });
+
+  const restaurer = async () => {
+    if (!choisies.size) return;
+    setEnCours(true);
+    try {
+      const res = await api.post("/participants/fiches-absorbees/restaurer", {
+        journaux: [...choisies],
+      });
+      toast.success(
+        `${res.data.restaurees} fiche${res.data.restaurees > 1 ? "s" : ""} remise${res.data.restaurees > 1 ? "s" : ""} en place, ` +
+        `${res.data.inscriptions} inscription${res.data.inscriptions > 1 ? "s" : ""} rétablie${res.data.inscriptions > 1 ? "s" : ""}.`
+      );
+      setChoisies(new Set());
+      await charger();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La restauration a échoué.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <section className="card-solid overflow-hidden border border-red-300">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-600" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-800">
+            {aRestaurer.length} fiche{aRestaurer.length > 1 ? "s" : ""} supprimée
+            {aRestaurer.length > 1 ? "s" : ""} par une ancienne réunion
+          </span>
+          <span className="block text-xs text-slate-500">
+            Cette opération supprimait la fiche absorbée : l&apos;effectif de certaines activités
+            a pu baisser. Elles peuvent être remises en place.
+          </span>
+        </span>
+        <span className="text-xs text-slate-500">{ouvert ? "Masquer" : "Voir la liste"}</span>
+      </button>
+
+      {ouvert && (
+        <div className="border-t border-red-200">
+          <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+            {aRestaurer.map((l) => (
+              <li key={l.journal} className="px-4 py-2.5 text-xs">
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={choisies.has(l.journal)}
+                    onChange={() => basculer(l.journal)}
+                    className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-red-600"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-slate-800">
+                      {l.fiche.prenom} {l.fiche.nom}
+                      <span className="ml-2 font-normal text-slate-400">
+                        supprimée le {new Date(l.supprimee_le).toLocaleDateString("fr-FR")}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-slate-500">
+                      {[l.fiche.email, l.fiche.telephone, l.fiche.structure]
+                        .filter(Boolean).join(" · ") || "aucune coordonnée"}
+                    </span>
+                    {/* Ce qui décide : les listes de présence où sa ligne
+                        manque aujourd'hui. */}
+                    <span className="mt-1 block text-[11px] text-slate-500">
+                      {l.activites.length === 0
+                        ? "n'était inscrite à aucune activité"
+                        : `inscrite à : ${l.activites.map((a) =>
+                            a.existe ? `${a.titre}${a.date ? ` (${formatDate(a.date)})` : ""}`
+                                     : `${a.titre} — supprimée depuis`).join(" · ")}`}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
+            <p className="max-w-xl text-xs text-slate-500">
+              La fiche est recréée avec ses inscriptions : les effectifs concernés remontent.
+              Elle reçoit un nouvel identifiant — l&apos;ancien est perdu — mais les listes de
+              présence retrouvent leur ligne.{" "}
+              <strong className="text-slate-600">
+                Ne restaurez que celles qui manquent vraiment
+              </strong>{" "}
+              : certaines réunions étaient justes, et remettre une ligne réellement en double
+              regonflerait un effectif à tort.
+            </p>
+            <button
+              type="button"
+              onClick={restaurer}
+              disabled={enCours || choisies.size === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {enCours ? "Restauration…" : `Remettre en place ${choisies.size} fiche${choisies.size > 1 ? "s" : ""}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -291,18 +429,22 @@ export default function Participants() {
     }
   }, []);
 
-  const fusionnerFiches = async () => {
+  const completerFiches = async () => {
     const ids = idsRetenus;
     if (!ids.length) return;
     setFusion(true);
     try {
-      const res = await api.post("/participants/fiches-doublons/fusionner", { ids });
-      toast.success(`${res.data.fusionnees} fiche${res.data.fusionnees > 1 ? "s" : ""} réunie${res.data.fusionnees > 1 ? "s" : ""}.`);
+      const res = await api.post("/participants/fiches-doublons/completer", { ids });
+      toast.success(
+        res.data.champs_remplis
+          ? `${res.data.champs_remplis} information${res.data.champs_remplis > 1 ? "s" : ""} complétée${res.data.champs_remplis > 1 ? "s" : ""} sur ${res.data.fiches_completees} fiche${res.data.fiches_completees > 1 ? "s" : ""}.`
+          : "Rien à compléter : ces fiches portent déjà la même information."
+      );
       setFichesOuvertes(false);
       await chercherFiches();
       fetchPage(debouncedSearch.current, genderFilter, page);
     } catch (err) {
-      toast.error(err?.response?.data?.error || "La réunion des fiches a échoué.");
+      toast.error(err?.response?.data?.error || "La complétion a échoué.");
     } finally {
       setFusion(false);
     }
@@ -490,6 +632,8 @@ export default function Participants() {
         </section>
       )}
 
+      <FichesARestaurer />
+
       {/* Une personne suit plusieurs formations et figure sur autant de listes,
           qui ne portent pas les mêmes colonnes. Les anciens imports créaient
           une fiche par liste au lieu de compléter la sienne : son information
@@ -539,27 +683,25 @@ export default function Participants() {
               </ul>
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
                 <p className="max-w-xl text-xs text-slate-500">
-                  Chaque personne garde une seule fiche, qui reçoit tout ce que les autres
-                  portaient et reste inscrite à chacune de ses formations — aucune participation
-                  n&apos;est perdue. L&apos;opération est définitive ; le journal d&apos;audit
-                  conserve le détail de chaque fiche absorbée.
-                  {" "}
-                  {" "}
                   <strong className="text-slate-600">
-                    Le rapprochement se fait sur le nom : il ne distingue pas deux homonymes.
-                  </strong>
-                  {" "}Les lignes qui se contredisent, et celles où deux fiches figurent sur la
-                  même formation, partent décochées — regardez leurs formations avant de les
-                  cocher.
+                    Aucune fiche n&apos;est supprimée et aucune inscription n&apos;est déplacée.
+                  </strong>{" "}
+                  Les cases vides de chaque fiche se remplissent avec ce que les autres portent,
+                  pour que l&apos;information soit complète sur toutes les listes de présence.
+                  Les effectifs de vos activités ne peuvent pas bouger.
+                  {" "}
+                  {" "}Le rapprochement se fait sur le nom : il ne distingue pas deux homonymes.
+                  Les lignes qui se contredisent, et celles où deux fiches figurent sur la même
+                  formation, partent décochées.
                 </p>
                 <button
                   type="button"
-                  onClick={fusionnerFiches}
+                  onClick={completerFiches}
                   disabled={fusion || idsRetenus.length === 0}
                   className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-60"
                 >
                   {fusion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  {fusion ? "Réunion…" : `Réunir ${idsRetenus.length} fiche${idsRetenus.length > 1 ? "s" : ""}`}
+                  {fusion ? "Complétion…" : `Compléter ${idsRetenus.length} fiche${idsRetenus.length > 1 ? "s" : ""}`}
                 </button>
               </div>
             </div>

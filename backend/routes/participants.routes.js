@@ -545,17 +545,35 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
   }
 });
 
-/* La fusion deplace les presences puis supprime la fiche vide. Elle est
-   irreversible : on reverifie donc chaque cas au moment de l'appliquer, la
-   base ayant pu changer depuis l'affichage de la liste. */
-router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
+/* ===== COMPLETER LES FICHES D'UNE MEME PERSONNE =====
+ *
+ * Une version precedente reunissait les fiches : elle transferait les
+ * presences puis supprimait la fiche absorbee. C'etait une erreur de
+ * conception, et elle s'est vue sur le terrain — le nombre de beneficiaires de
+ * certaines activites a baisse.
+ *
+ * Le mecanisme : quand deux fiches d'une meme personne figuraient sur la meme
+ * activite, la fusion n'en laissait qu'une ligne. Le compte de cette activite
+ * perdait une unite. Et si le rapprochement etait faux — deux homonymes — un
+ * vrai beneficiaire disparaissait d'une liste de presence.
+ *
+ * Le but n'a jamais ete de supprimer qui que ce soit. Il etait de completer :
+ * une personne laisse son adresse sur une liste et son telephone sur une
+ * autre ; chaque liste doit porter l'information complete.
+ *
+ * On ne supprime donc plus rien, et on ne deplace aucune presence. On remplit
+ * les cases vides de CHAQUE fiche du groupe avec ce que les autres portent.
+ * Les listes de presence gardent exactement les memes lignes ; seules les
+ * cases vides se remplissent. Les comptes ne peuvent pas bouger.
+ */
+router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
   const client = await pool.connect();
   let ouverte = false;
   try {
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
 
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
-    if (!ids.length) return res.status(400).json({ error: "Aucune fiche à fusionner." });
+    if (!ids.length) return res.status(400).json({ error: "Aucun groupe à compléter." });
     if (ids.length > 1000) return res.status(400).json({ error: "Trop de fiches en une fois." });
 
     const { baseFrom, params } = buildFilters(req);
@@ -565,179 +583,246 @@ router.post("/fiches-doublons/fusionner", authMiddleware, async (req, res) => {
       params
     );
 
-    /* Le groupe se recalcule ici, sur l'etat courant : l'appelant designe les
-       fiches a absorber, jamais celle a conserver. Une fiche qui a recu une
-       adresse entre-temps n'est plus un doublon et sort d'elle-meme. */
-    const aAbsorber = new Map(); // id a supprimer → id a conserver
-    for (const groupe of analyserGroupes(portee.rows)) {
-      for (const fiche of groupe.absorber) {
-        if (ids.includes(fiche.id)) aAbsorber.set(fiche.id, { garder: groupe.garder, fiche });
-      }
-    }
+    /* Les groupes se recalculent sur l'etat courant. L'appelant designe les
+       fiches du groupe ; on complete le groupe entier, pas une fiche isolee. */
+    const demandes = new Set(ids);
+    const groupesRetenus = analyserGroupes(portee.rows).filter((g) =>
+      g.absorber.some((f) => demandes.has(f.id)) || demandes.has(g.garder.id)
+    );
 
     await client.query("BEGIN");
     ouverte = true;
 
-    let fusionnees = 0;
-    for (const [id, { garder, fiche }] of aAbsorber) {
-      /* Toute information portee par la fiche absorbee et absente de celle
-         qu'on conserve lui est reprise — y compris l'email et le telephone,
-         qui sont justement ce qu'une liste apporte quand une autre ne l'avait
-         pas. COALESCE ne remplit que ce qui manque : rien de renseigne n'est
-         ecrase, et un desaccord a deja ete montre a l'utilisateur. */
-      await client.query(
-        `UPDATE participants SET
-           email     = COALESCE(email, $2),
-           telephone = COALESCE(telephone, $3),
-           genre     = COALESCE(genre, $4),
-           age_range = COALESCE(age_range, $5),
-           statut    = COALESCE(statut, $6),
-           structure = COALESCE(structure, $7)
-         WHERE id = $1`,
-        [garder.id, fiche.email || null, fiche.telephone || null,
-         fiche.genre || null, fiche.age_range || null, fiche.statut || null, fiche.structure || null]
-      );
+    let fichesCompletees = 0;
+    let champsRemplis = 0;
+    const detail = [];
 
-      await client.query(
-        `INSERT INTO activity_participants (activity_id, participant_id)
-         SELECT activity_id, $2 FROM activity_participants WHERE participant_id = $1
-         ON CONFLICT DO NOTHING`,
-        [id, garder.id]
-      );
+    for (const groupe of groupesRetenus) {
+      const membres = [groupe.garder, ...groupe.absorber];
 
-      /* Les activites de la fiche supprimee sont relevees avant de la
-         supprimer : la fusion est definitive, et le journal d'audit est le
-         seul endroit ou l'on pourra reconstituer ce qui a ete absorbe si un
-         rapprochement se revele faux — deux homonymes, par exemple. */
-      const { rows: activites } = await client.query(
-        "SELECT activity_id FROM activity_participants WHERE participant_id = $1",
-        [id]
-      );
+      /* La valeur retenue pour chaque champ : la seule connue du groupe. S'il
+         y en a plusieurs qui different, on ne tranche pas — un desaccord se
+         regarde, il ne se resout pas par une regle. La ligne est de toute
+         facon decochee par defaut dans l'interface. */
+      const valeurs = {};
+      for (const champ of CHAMPS_FICHE) {
+        const connues = new Map();
+        for (const f of membres) {
+          const n = valeurNormalisee(champ, f[champ]);
+          if (n !== null && !connues.has(n)) connues.set(n, String(f[champ]).trim());
+        }
+        if (connues.size === 1) valeurs[champ] = [...connues.values()][0];
+      }
 
-      await client.query("DELETE FROM participants WHERE id = $1", [id]);
-      logAudit(req, "DELETE", "participants", id, `${fiche.prenom} ${fiche.nom}`, {
-        motif: "fiche de la même personne, réunie",
-        fusionnee_avec: garder.id,
-        fiche_absorbee: {
-          nom: fiche.nom,
-          prenom: fiche.prenom,
-          email: fiche.email || null,
-          telephone: fiche.telephone || null,
-          genre: fiche.genre || null,
-          age_range: fiche.age_range || null,
-          statut: fiche.statut || null,
-          structure: fiche.structure || null,
-          activites: activites.map((a) => a.activity_id),
-        },
-      });
-      fusionnees += 1;
+      const aEcrire = Object.keys(valeurs);
+      if (!aEcrire.length) continue;
+
+      for (const f of membres) {
+        /* Seules les cases vides se remplissent : COALESCE n'ecrase rien de
+           renseigne. Une fiche deja complete n'est pas touchee. */
+        const manquants = aEcrire.filter((c) => valeurNormalisee(c, f[c]) === null);
+        if (!manquants.length) continue;
+
+        await client.query(
+          `UPDATE participants SET ${manquants.map((c, i) => `${c} = COALESCE(${c}, $${i + 2})`).join(", ")}
+            WHERE id = $1`,
+          [f.id, ...manquants.map((c) => valeurs[c])]
+        );
+        fichesCompletees += 1;
+        champsRemplis += manquants.length;
+        detail.push({ fiche: f.id, nom: `${f.prenom} ${f.nom}`, champs: manquants });
+      }
     }
 
     await client.query("COMMIT");
     ouverte = false;
 
-    res.json({ fusionnees, ignorees: ids.length - fusionnees });
+    if (detail.length) {
+      logAudit(req, "UPDATE", "participants", null,
+        `${fichesCompletees} fiche(s) complétée(s)`, { champs_remplis: champsRemplis, detail });
+    }
+
+    res.json({
+      fiches_completees: fichesCompletees,
+      champs_remplis: champsRemplis,
+      groupes: groupesRetenus.length,
+    });
   } catch (err) {
-    if (ouverte) await client.query("ROLLBACK");
-    console.error("[FICHES DOUBLONS FUSION]", err);
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[FICHES DOUBLONS COMPLETION]", err);
     res.status(500).json({ error: "Erreur serveur" });
   } finally {
     client.release();
   }
 });
 
-/* ===== CORRIGER UNE IDENTITE =====
-   Les noms viennent de feuilles de presence remplies a la main puis importees :
-   les coquilles sont la regle, pas l'exception. Tant qu'elles restaient dans
-   une liste, elles etaient sans gravite ; imprimees sur une attestation
-   nominative remise a la personne, elles ne le sont plus.
-   Volontairement limite au nom et au prenom : cette route sert a corriger une
-   orthographe, pas a reattribuer une fiche a quelqu'un d'autre. L'email, lui,
-   identifie le destinataire et ne se modifie pas d'un champ texte glisse dans
-   un ecran d'envoi. */
-router.patch("/:id", authMiddleware, async (req, res) => {
+/* ===== FICHES SUPPRIMEES PAR L'ANCIENNE REUNION =====
+ *
+ * L'ancienne version supprimait la fiche absorbee. Le journal d'audit a
+ * conserve ce qu'elle portait et les activites auxquelles elle etait inscrite
+ * — c'est ce qui rend la remise en place possible.
+ *
+ * On ne restaure rien d'office : certaines reunions etaient justes, et
+ * recreer une vraie ligne en double regonflerait un compte a tort. On montre
+ * ce qui a ete supprime, avec ses activites, et l'utilisateur choisit.
+ */
+router.get("/fiches-absorbees", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
-    const avant = await pool.query(
-      "SELECT nom, prenom, email FROM participants WHERE id = $1",
-      [req.params.id]
-    );
-    if (!avant.rows.length) return res.status(404).json({ error: "Participant introuvable" });
-
-    /* Modification partielle : un appel qui ne porte que l'adresse ne doit pas
-       exiger de renvoyer le nom, et surtout ne doit pas l'ecraser. */
-    const champs = {};
-
-    if (req.body?.nom !== undefined || req.body?.prenom !== undefined) {
-      const nom = String(req.body?.nom ?? avant.rows[0].nom ?? "").trim();
-      const prenom = String(req.body?.prenom ?? avant.rows[0].prenom ?? "").trim();
-
-      /* Les deux colonnes sont NOT NULL : une chaine vide ferait echouer la
-         requete avec un message que personne ne saurait lire. */
-      if (!nom || !prenom) {
-        return res.status(400).json({ error: "Le nom et le prénom sont tous deux requis." });
-      }
-      if (nom.length > 120 || prenom.length > 120) {
-        return res.status(400).json({ error: "Nom ou prénom trop long." });
-      }
-      champs.nom = nom;
-      champs.prenom = prenom;
-    }
-
-    if (req.body?.email !== undefined) {
-      const email = String(req.body.email ?? "").trim().toLowerCase();
-      if (email) {
-        if (email.length > 190) {
-          return res.status(400).json({ error: "Adresse email trop longue." });
-        }
-        /* Le meme controle qu'a l'envoi, mais joue ici : une adresse dont le
-           domaine n'existe pas se corrige tant qu'on a la personne en tete.
-           Decouverte au moment de l'envoi, elle a deja compte comme un rebond
-           contre la reputation du compte d'expedition. */
-        const nomComplet = `${champs.prenom ?? avant.rows[0].prenom} ${champs.nom ?? avant.rows[0].nom}`;
-        const { rejetes } = await trierAdresses([{ email, nom: nomComplet }]);
-        if (rejetes.length) {
-          return res.status(400).json({
-            error: `Cette adresse ne peut pas recevoir de courrier : ${rejetes[0].explication}.`,
-            champ: "email",
-          });
-        }
-      }
-      /* Une adresse vide est acceptee : mieux vaut aucune adresse qu'une
-         fausse, qui rebondit et ne sert personne. */
-      champs.email = email || null;
-    }
-
-    if (!Object.keys(champs).length) {
-      return res.status(400).json({ error: "Rien à modifier." });
-    }
-
-    const colonnes = Object.keys(champs);
     const r = await pool.query(
-      `UPDATE participants SET ${colonnes.map((c, i) => `${c} = $${i + 1}`).join(", ")}
-        WHERE id = $${colonnes.length + 1}
-        RETURNING id, nom, prenom, email`,
-      [...colonnes.map((c) => champs[c]), req.params.id]
+      `SELECT id, resource_id, resource_label, details, created_at
+         FROM audit_logs
+        WHERE resource = 'participants' AND action = 'DELETE'
+          AND details->>'fusionnee_avec' IS NOT NULL
+        ORDER BY created_at DESC
+        LIMIT 500`
     );
 
-    /* Une correction se retrouve dans toutes les activites de la personne :
-       la trace dit qui a change quoi, et depuis quelle valeur. */
-    logAudit(req, "UPDATE", "participants", r.rows[0].id, `${r.rows[0].prenom} ${r.rows[0].nom}`, {
-      avant: {
-        nom: `${avant.rows[0].prenom} ${avant.rows[0].nom}`,
-        email: avant.rows[0].email || null,
-      },
-      apres: {
-        nom: `${r.rows[0].prenom} ${r.rows[0].nom}`,
-        email: r.rows[0].email || null,
-      },
-    });
+    /* Une fiche deja remise en place ne doit plus etre proposee. On la
+       reconnait a une trace de restauration portant le meme journal. */
+    const { rows: faites } = await pool.query(
+      `SELECT details->>'depuis_journal' AS journal
+         FROM audit_logs
+        WHERE resource = 'participants' AND action = 'CREATE'
+          AND details->>'depuis_journal' IS NOT NULL`
+    );
+    const restaurees = new Set(faites.map((f) => Number(f.journal)));
 
-    res.json(r.rows[0]);
+    const lignes = [];
+    for (const l of r.rows) {
+      const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
+      const f = d.fiche_absorbee;
+      if (!f) continue;
+      lignes.push({
+        journal: l.id,
+        supprimee_le: l.created_at,
+        ancien_id: l.resource_id,
+        fusionnee_avec: d.fusionnee_avec ?? null,
+        restauree: restaurees.has(l.id),
+        fiche: {
+          nom: f.nom || "", prenom: f.prenom || "",
+          email: f.email || null, telephone: f.telephone || null,
+          genre: f.genre || null, age_range: f.age_range || null,
+          statut: f.statut || null, structure: f.structure || null,
+        },
+        activites: Array.isArray(f.activites) ? f.activites : [],
+      });
+    }
+
+    /* Le titre des activites, pour que la decision se prenne sur un nom de
+       formation et pas sur un numero. */
+    const ids = [...new Set(lignes.flatMap((l) => l.activites))];
+    let titres = new Map();
+    if (ids.length) {
+      const t = await pool.query(
+        "SELECT id, title, to_char(activity_date,'YYYY-MM-DD') AS date FROM activities WHERE id = ANY($1::int[])",
+        [ids]
+      );
+      titres = new Map(t.rows.map((x) => [x.id, x]));
+    }
+    for (const l of lignes) {
+      l.activites = l.activites.map((id) => ({
+        id,
+        titre: titres.get(id)?.title || `Activité ${id}`,
+        date: titres.get(id)?.date || null,
+        existe: titres.has(id),
+      }));
+    }
+
+    res.json({
+      total: lignes.length,
+      a_restaurer: lignes.filter((l) => !l.restauree).length,
+      lignes,
+    });
   } catch (err) {
-    console.error("[PARTICIPANT PATCH]", err);
+    console.error("[FICHES ABSORBEES]", err);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Remettre en place les fiches choisies, avec leurs inscriptions. La nouvelle
+   fiche porte un autre identifiant — l'ancien est perdu — mais les listes de
+   presence retrouvent leur ligne, et c'est ce qui compte pour les comptes. */
+router.post("/fiches-absorbees/restaurer", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const journaux = Array.isArray(req.body?.journaux)
+      ? req.body.journaux.map(Number).filter(Number.isInteger) : [];
+    if (!journaux.length) return res.status(400).json({ error: "Aucune fiche à restaurer." });
+
+    const r = await client.query(
+      `SELECT id, details FROM audit_logs
+        WHERE id = ANY($1::int[]) AND resource = 'participants' AND action = 'DELETE'`,
+      [journaux]
+    );
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let restaurees = 0;
+    let inscriptions = 0;
+    let dejaFaites = 0;
+    for (const l of r.rows) {
+      const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
+      const f = d.fiche_absorbee;
+      if (!f) continue;
+
+      /* Deja remise en place ? On le verifie ici, dans la transaction, et pas
+         seulement a l'affichage : un double clic, un rechargement, un appel
+         repete recreerait sinon une seconde fiche — c'est-a-dire le defaut
+         que cet ecran repare. */
+      const { rows: faite } = await client.query(
+        `SELECT 1 FROM audit_logs
+          WHERE resource = 'participants' AND action = 'CREATE'
+            AND details->>'depuis_journal' = $1 LIMIT 1`,
+        [String(l.id)]
+      );
+      if (faite.length) { dejaFaites += 1; continue; }
+
+      const { rows } = await client.query(
+        `INSERT INTO participants (nom, prenom, email, telephone, genre, age_range, statut, structure)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+        [f.nom || "", f.prenom || "", f.email || null, f.telephone || null,
+         f.genre || null, f.age_range || null, f.statut || null, f.structure || null]
+      );
+      const nouvelId = rows[0].id;
+
+      for (const activityId of (Array.isArray(f.activites) ? f.activites : [])) {
+        /* Une activite supprimee depuis ne peut pas recevoir l'inscription :
+           on la passe plutot que de faire echouer la restauration entiere. */
+        const ins = await client.query(
+          `INSERT INTO activity_participants (activity_id, participant_id)
+           SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM activities WHERE id = $1)
+           ON CONFLICT DO NOTHING`,
+          [activityId, nouvelId]
+        );
+        inscriptions += ins.rowCount;
+      }
+
+      /* La trace est attendue : c'est elle qui empeche la restauration
+         suivante. Repondre avant qu'elle soit ecrite laisserait une fenetre
+         ou la fiche serait de nouveau proposee. */
+      await logAudit(req, "CREATE", "participants", nouvelId, `${f.prenom} ${f.nom}`, {
+        motif: "fiche remise en place après une réunion",
+        depuis_journal: l.id,
+        ancien_id: d.fusionnee_avec ? String(d.fusionnee_avec) : null,
+      });
+      restaurees += 1;
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+    res.json({ restaurees, inscriptions, deja_faites: dejaFaites });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[RESTAURATION FICHES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
   }
 });
 
