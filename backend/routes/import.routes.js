@@ -677,6 +677,13 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
         aCompleter.push({ id: premier.resolvedId, maj: ajoutes });
       }
       items[i].memeQue = jumelle.indice;
+      /* La ligne reunie portait une autre adresse. C'est la premiere qui est
+         conservee — le fichier ne dit pas laquelle est la bonne — mais la
+         seconde ne doit pas disparaitre sans un mot : c'est peut-etre celle a
+         laquelle la personne attend son attestation. */
+      if (it.email && premier.email && it.email !== premier.email) {
+        signaler(it, "email", it.email, "adresse_differente", premier);
+      }
       doublonsReunis.push({
         nom: it.nom, prenom: it.prenom,
         email: it.email || null, telephone: it.telephone || null,
