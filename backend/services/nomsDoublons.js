@@ -147,6 +147,65 @@ function nomsCompatibles(a, b) {
   return true;
 }
 
+/* Distance d'edition, bornee : on ne cherche qu'a savoir si deux mots sont a
+   une faute l'un de l'autre, pas de combien ils different. */
+function distanceMots(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return 99;
+  let ligne = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const suivante = [i];
+    for (let j = 1; j <= b.length; j++) {
+      suivante[j] = a[i - 1] === b[j - 1]
+        ? ligne[j - 1]
+        : 1 + Math.min(ligne[j], ligne[j - 1], suivante[j - 1]);
+    }
+    ligne = suivante;
+  }
+  return ligne[b.length];
+}
+
+/* Deux ecritures d'un meme mot a une faute pres. Les mots courts en sont
+   exclus : « Awa » et « Ada » sont a une lettre l'un de l'autre et sont deux
+   prenoms differents. */
+const LONGUEUR_MINIMALE_FAUTE = 5;
+function motProche(a, b) {
+  if (a === b) return true;
+  if (a.length < LONGUEUR_MINIMALE_FAUTE || b.length < LONGUEUR_MINIMALE_FAUTE) return false;
+  return distanceMots(a, b) <= 1;
+}
+
+/**
+ * Deux ecritures d'un nom dont une seule porte une faute de frappe.
+ *
+ * « Fatou Ndiaye » et « Fatou Ndiay » : autant de mots, tous identiques sauf
+ * un, et celui-la est a une lettre pres. Exiger que tout le reste soit exact
+ * est ce qui separe la faute de frappe de deux personnes differentes — deux
+ * freres « Awa Sow » et « Moussa Sow » partagent un mot, mais l'autre n'est pas
+ * une variante du premier.
+ *
+ * Comme la compatibilite, cela ne suffit jamais seul : il faut la meme adresse
+ * ou le meme numero a cote.
+ */
+function nomsProches(x, y) {
+  const a = [...motsDuNom(x?.nom, x?.prenom)];
+  const b = [...motsDuNom(y?.nom, y?.prenom)];
+  if (!a.length || a.length !== b.length) return false;
+
+  /* Les mots identiques d'abord : sinon un rapprochement approximatif pourrait
+     consommer le mot qu'un autre avait en commun. */
+  const restantsA = [];
+  const restantsB = [...b];
+  for (const mot of a) {
+    const i = restantsB.indexOf(mot);
+    if (i >= 0) restantsB.splice(i, 1);
+    else restantsA.push(mot);
+  }
+
+  /* Une seule faute tolereee : au-dela, ce sont deux noms differents. */
+  if (restantsA.length !== 1 || restantsB.length !== 1) return false;
+  return motProche(restantsA[0], restantsB[0]);
+}
+
 function memePersonne(a, b) {
   const ca = clePersonne(a?.nom, a?.prenom);
   const cb = clePersonne(b?.nom, b?.prenom);
@@ -162,5 +221,6 @@ module.exports = {
   clePersonne,
   cleApprochee,
   nomsCompatibles,
+  nomsProches,
   memePersonne,
 };

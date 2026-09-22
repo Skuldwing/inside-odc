@@ -1053,9 +1053,12 @@ export default function Participants() {
                   pour que l&apos;information soit complète sur toutes les listes de présence.
                   Les effectifs de vos activités ne peuvent pas bouger.
                   {" "}
-                  {" "}Le rapprochement se fait sur le nom : il ne distingue pas deux homonymes.
-                  Les lignes qui se contredisent, et celles où deux fiches figurent sur la même
-                  formation, partent décochées.
+                  {" "}Le rapprochement se fait sur l&apos;identité, et sur l&apos;adresse ou le
+                  numéro quand le nom est écrit différemment d&apos;une fiche à l&apos;autre. Un
+                  contact partagé ne suffit jamais seul : deux frères qui utilisent la même
+                  adresse restent deux personnes. Les lignes reconnues par le contact, celles
+                  qui se contredisent et celles où deux fiches figurent sur la même formation
+                  partent décochées.
                 </p>
                 <button
                   type="button"

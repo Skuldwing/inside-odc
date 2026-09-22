@@ -3,7 +3,8 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const {
-  prenomSansNomRepete, repetitionsDans, clePersonne, cleApprochee, nomsCompatibles,
+  prenomSansNomRepete, repetitionsDans, clePersonne, cleApprochee,
+  nomsCompatibles, nomsProches,
 } = require("../services/nomsDoublons");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { trierAdresses } = require("../services/adressesValides");
@@ -382,13 +383,22 @@ const LIBELLES_CHAMPS = {
   structure: "structure",
 };
 
+/* Un numero s'ecrit « 77 123 45 67 », « +221771234567 » ou « 00221 77 123 45 67 »
+   selon la feuille : c'est le meme telephone. */
+const telCompare = (v) => String(v || "").replace(/\D+/g, "").replace(/^(?:00221|221)/, "");
+const mailCompare = (v) => String(v || "").trim().toLowerCase();
+
 /* Deux ecritures d'une meme valeur ne sont pas un desaccord : « UCAD » et
    « ucad » designent la meme structure, « Foo@X.com » et « foo@x.com » la meme
-   boite. On compare donc des formes normalisees. */
+   boite. On compare donc des formes normalisees.
+
+   Le telephone passe par la meme comparaison que le rapprochement : n'en oter
+   que les espaces faisait passer « 77 123 45 67 » et « +221771234567 » pour un
+   desaccord — sur un groupe que ce numero-la venait precisement de reunir. */
 function valeurNormalisee(champ, valeur) {
   if (valeur === null || valeur === undefined || String(valeur).trim() === "") return null;
-  const v = String(valeur).trim();
-  return champ === "telephone" ? v.replace(/\s+/g, "") : v.toLowerCase();
+  if (champ === "telephone") return telCompare(valeur) || null;
+  return String(valeur).trim().toLowerCase();
 }
 
 function renseignes(fiche) {
@@ -418,11 +428,6 @@ function unir(parents, a, b) {
   if (ra !== rb) parents.set(ra, rb);
 }
 
-/* Un numero s'ecrit « 77 123 45 67 », « +221771234567 » ou « 00221 77 123 45 67 »
-   selon la feuille : c'est le meme telephone. */
-const telCompare = (v) => String(v || "").replace(/\D+/g, "").replace(/^(?:00221|221)/, "");
-const mailCompare = (v) => String(v || "").trim().toLowerCase();
-
 /* Deux fiches que rien ne separe : elles ne portent pas deux adresses
    differentes, ni deux numeros differents. Une information absente ne separe
    personne — c'est le cas courant sur les listes a moitie remplies. */
@@ -442,7 +447,10 @@ function rienNeSepare(a, b) {
  * seule fiche. Le nom seul ne suffit pas non plus — c'est precisement ce qu'on
  * corrige ici. Les deux ensemble, si : la meme adresse et un nom qui dit la
  * meme chose en plus court ou en plus long (« Awa Diop » et « Awa Marie Diop »,
- * « Diop » sans prenom et « Awa Diop ») designent bien la meme personne.
+ * « Diop » sans prenom et « Awa Diop ») designent bien la meme personne. Il en
+ * va de meme d'un nom mal orthographie sur l'une des listes (« Fatou Ndiaye »
+ * et « Fatou Ndiay ») : avec la meme adresse a cote, c'est une faute de frappe,
+ * pas une seconde personne.
  */
 function unirParContact(parents, fiches) {
   const parContact = new Map();
@@ -456,7 +464,8 @@ function unirParContact(parents, fiches) {
   for (const memeContact of parContact.values()) {
     for (let i = 0; i < memeContact.length; i++) {
       for (let j = i + 1; j < memeContact.length; j++) {
-        if (nomsCompatibles(memeContact[i], memeContact[j])) {
+        if (nomsCompatibles(memeContact[i], memeContact[j])
+            || nomsProches(memeContact[i], memeContact[j])) {
           unir(parents, memeContact[i].id, memeContact[j].id);
         }
       }
