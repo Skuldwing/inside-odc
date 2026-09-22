@@ -299,6 +299,13 @@ function FichesARestaurer() {
             ))}
           </ul>
 
+          {data?.tronquee && (
+            <p className="border-t border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              {data.total_journal} suppressions au journal, les 1000 plus récentes sont affichées.
+              Restaurez celles-ci, rechargez la page : la suite apparaîtra.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
             <p className="max-w-xl text-xs text-slate-500">
               La fiche est recréée avec ses inscriptions : les effectifs concernés remontent.
