@@ -20,7 +20,6 @@ const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
 const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
-const AiAssistant = lazy(() => import("./pages/AiAssistant"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
 const FormulaireEditor = lazy(() => import("./pages/FormulaireEditor"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
@@ -200,16 +199,6 @@ export default function App() {
         />
 
         {/* ===== ADMIN ONLY ===== */}
-        <Route
-          path="assistant-ia"
-          element={
-            <AdminRoute>
-              <Suspense fallback={<PageLoader />}>
-                <AiAssistant />
-              </Suspense>
-            </AdminRoute>
-          }
-        />
         <Route
           path="campagnes"
           element={

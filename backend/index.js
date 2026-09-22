@@ -18,7 +18,6 @@ const dashboardRoutes = require("./routes/dashboard.routes");
 const socialKpisRoutes = require("./routes/socialKpis.routes");
 const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const socialReportRoutes = require("./routes/socialReport.routes");
-const aiRoutes = require("./routes/ai.routes");
 const formsRoutes = require("./routes/forms.routes");
 const checkinRoutes = require("./routes/checkin.routes");
 const voteRoutes = require("./routes/vote.routes");
@@ -168,7 +167,6 @@ app.use("/dashboard", dashboardRoutes);
 app.use("/social-kpis", socialKpisRoutes);
 app.use("/social-dashboard", socialDashboardRoutes);
 app.use("/social-dashboard", socialReportRoutes);
-app.use("/ai", aiRoutes);
 app.use("/forms", formsRoutes);
 app.use("/checkin", checkinRoutes);
 app.use("/vote", voteRoutes);
@@ -435,17 +433,6 @@ pool.query(`
     END;
   END$$;
 `).then(() => console.log("Migration OK: social_media_kpis youtube")).catch(e => console.warn("Migration social youtube:", e.message));
-
-/* Migration : mémoire Pobarr */
-pool.query(`
-  CREATE TABLE IF NOT EXISTS ai_insights (
-    id         SERIAL PRIMARY KEY,
-    user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    content    TEXT NOT NULL,
-    category   VARCHAR(50) DEFAULT 'observation',
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )
-`).then(() => console.log("Migration OK: ai_insights")).catch(e => console.warn("Migration ai_insights:", e.message));
 
 pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS notifications_last_seen_at TIMESTAMPTZ`)
   .then(() => console.log("Migration OK: users.notifications_last_seen_at"))
