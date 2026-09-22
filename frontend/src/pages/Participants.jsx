@@ -93,6 +93,16 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
             <span className="text-xs text-slate-500">
               {membres.length} fiches — conservées toutes les deux
             </span>
+            {/* Reconnu par l'adresse ou le numéro : c'est ce que la détection
+                par le nom seul manquait. On dit sur quoi, sinon deux noms
+                différents dans un même groupe n'ont pas d'explication. */}
+            {g.noms_differents && (
+              <span className="rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-800">
+                {g.partage?.length
+                  ? `reconnues par ${g.partage.map((p) => `le même ${p.libelle}`).join(" et ")}`
+                  : "noms écrits différemment"}
+              </span>
+            )}
             {/* L'alerte la plus utile du panneau : elle désigne précisément
                 les lignes où le rapprochement par le nom peut se tromper. */}
             {g.activite_partagee && (
@@ -107,12 +117,20 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
             )}
           </span>
 
-          {colonnes.length > 0 ? (
-            <span className="mt-2 block overflow-x-auto">
+          {/* Le tableau s'affiche toujours : même sans aucun renseignement, il
+              montre comment le nom est écrit sur chaque fiche — ce qui est la
+              première chose à regarder quand c'est l'adresse ou le numéro qui
+              les a rapprochées. */}
+          <span className="mt-2 block overflow-x-auto">
               <table className="w-full min-w-[30rem] text-left text-xs">
                 <thead>
                   <tr className="text-slate-500">
                     <th className="pb-1 pr-3 font-medium">Fiche</th>
+                    {/* Le nom de chaque fiche, désormais indispensable : un
+                        groupe reconnu par l'adresse ou le numéro peut porter
+                        deux écritures différentes du nom, et c'est justement ce
+                        qu'il faut voir pour décider. */}
+                    <th className="pb-1 pr-3 font-medium">Nom écrit</th>
                     {colonnes.map(([champ, libelle]) => (
                       <th key={champ} className="pb-1 pr-3 font-medium">{libelle}</th>
                     ))}
@@ -123,6 +141,11 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
                     <tr key={f.id} className="border-t border-slate-100">
                       <td className="py-1 pr-3 whitespace-nowrap text-slate-500">
                         fiche {i + 1}
+                      </td>
+                      <td className="py-1 pr-3 text-slate-700">
+                        {[f.prenom, f.nom].filter(Boolean).join(" ").trim() || (
+                          <span className="text-slate-300">sans nom</span>
+                        )}
                       </td>
                       {colonnes.map(([champ]) => (
                         <td key={champ} className="py-1 pr-3 break-all">
@@ -146,8 +169,8 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
                   ))}
                 </tbody>
               </table>
-            </span>
-          ) : (
+          </span>
+          {colonnes.length === 0 && (
             <span className="mt-1 block text-xs text-slate-500">
               Ces fiches ne portent aucun renseignement : il n&apos;y a rien à compléter.
             </span>
@@ -728,13 +751,15 @@ export default function Participants() {
       const res = await api.get("/participants/fiches-doublons");
       setFiches(res.data);
       /* Partent décochés : les groupes dont les fiches se contredisent — garder
-         une adresse plutôt qu'une autre ne se décide pas tout seul — et ceux où
+         une adresse plutôt qu'une autre ne se décide pas tout seul —, ceux où
          deux fiches figurent sur la même formation, qui ne s'expliquent pas par
-         une personne revenue et sont le cas le plus probable d'homonymes. */
+         une personne revenue et sont le cas le plus probable d'homonymes, et
+         ceux reconnus par l'adresse ou le numéro dont les noms sont écrits
+         différemment : le rapprochement est solide, mais il se regarde. */
       setEcartes(
         new Set(
           (res.data?.groupes || [])
-            .filter((g) => g.conflits?.length > 0 || g.activite_partagee)
+            .filter((g) => g.conflits?.length > 0 || g.activite_partagee || g.noms_differents)
             .map((g) => g.garder.id)
         )
       );
@@ -985,6 +1010,15 @@ export default function Participants() {
                   <>
                     {fiches.a_completer} fiche{fiches.a_completer > 1 ? "s" : ""} se
                     complèterai{fiches.a_completer > 1 ? "ent" : "t"} avec ce que portent les autres
+                  </>
+                )}
+                {/* Ce que la détection par le nom seul manquait : on le dit,
+                    parce que c'est la nouveauté du panneau. */}
+                {fiches.reconnus_par_contact > 0 && (
+                  <>
+                    {fiches.a_completer > 0 && " · "}
+                    {fiches.reconnus_par_contact} reconnue
+                    {fiches.reconnus_par_contact > 1 ? "s" : ""} par l&apos;adresse ou le numéro
                   </>
                 )}
                 {fiches.a_completer > 0 && fiches.a_regarder > 0 && " · "}

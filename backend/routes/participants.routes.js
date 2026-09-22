@@ -395,13 +395,106 @@ function renseignes(fiche) {
   return CHAMPS_FICHE.filter((c) => valeurNormalisee(c, fiche[c]) !== null).length;
 }
 
+/* ===== OUTILS DE RAPPROCHEMENT =====
+ * Partages par les deux detections : les fiches d'une meme personne, et les
+ * inscriptions en double sur une meme activite.
+ */
+
+/* Ensembles disjoints : chaque fiche commence seule, les rapprochements les
+   reunissent. C'est ce qui permet a trois ecritures d'une meme personne de ne
+   former qu'un groupe, meme si aucune paire ne se ressemble directement — la
+   premiere se reconnait a son adresse, la troisieme a son numero. */
+function racine(parents, x) {
+  while (parents.get(x) !== x) {
+    parents.set(x, parents.get(parents.get(x)));
+    x = parents.get(x);
+  }
+  return x;
+}
+
+function unir(parents, a, b) {
+  const ra = racine(parents, a);
+  const rb = racine(parents, b);
+  if (ra !== rb) parents.set(ra, rb);
+}
+
+/* Un numero s'ecrit « 77 123 45 67 », « +221771234567 » ou « 00221 77 123 45 67 »
+   selon la feuille : c'est le meme telephone. */
+const telCompare = (v) => String(v || "").replace(/\D+/g, "").replace(/^(?:00221|221)/, "");
+const mailCompare = (v) => String(v || "").trim().toLowerCase();
+
+/* Deux fiches que rien ne separe : elles ne portent pas deux adresses
+   differentes, ni deux numeros differents. Une information absente ne separe
+   personne — c'est le cas courant sur les listes a moitie remplies. */
+function rienNeSepare(a, b) {
+  const ma = mailCompare(a.email), mb = mailCompare(b.email);
+  if (ma && mb && ma !== mb) return false;
+  const ta = telCompare(a.telephone), tb = telCompare(b.telephone);
+  if (ta && tb && ta !== tb) return false;
+  return true;
+}
+
+/**
+ * Reunit les fiches qui portent le meme contact et un nom compatible.
+ *
+ * Le contact seul ne designe pas une personne : une adresse de famille et un
+ * telephone partage sont courants, et deux freres ne doivent pas devenir une
+ * seule fiche. Le nom seul ne suffit pas non plus — c'est precisement ce qu'on
+ * corrige ici. Les deux ensemble, si : la meme adresse et un nom qui dit la
+ * meme chose en plus court ou en plus long (« Awa Diop » et « Awa Marie Diop »,
+ * « Diop » sans prenom et « Awa Diop ») designent bien la meme personne.
+ */
+function unirParContact(parents, fiches) {
+  const parContact = new Map();
+  for (const f of fiches) {
+    for (const contact of [mailCompare(f.email), telCompare(f.telephone)]) {
+      if (!contact) continue;
+      if (!parContact.has(contact)) parContact.set(contact, []);
+      parContact.get(contact).push(f);
+    }
+  }
+  for (const memeContact of parContact.values()) {
+    for (let i = 0; i < memeContact.length; i++) {
+      for (let j = i + 1; j < memeContact.length; j++) {
+        if (nomsCompatibles(memeContact[i], memeContact[j])) {
+          unir(parents, memeContact[i].id, memeContact[j].id);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Les fiches d'une meme personne.
+ *
+ * Le rapprochement se faisait sur le seul nom, et seulement quand le nom ET le
+ * prenom etaient renseignes. Trois personnes echappaient donc a la detection :
+ * celle dont le prenom compose n'est ecrit en entier qu'une fois sur deux,
+ * celle dont une fiche n'a pas de prenom, celle dont le nom est mal orthographie
+ * sur l'une des listes. Leur adresse ou leur numero, eux, sont les memes.
+ *
+ * Deux rapprochements donc : l'identite, et le contact avec un nom compatible.
+ * Le second reunit ce que le premier manquait sans confondre deux personnes qui
+ * partagent une boite ou un telephone de famille.
+ */
 function analyserGroupes(fiches) {
-  const parCle = new Map();
+  const parents = new Map(fiches.map((f) => [f.id, f.id]));
+
+  const premiereDeLaCle = new Map();
   for (const f of fiches) {
     const cle = clePersonne(f.nom, f.prenom);
     if (!cle) continue;
-    if (!parCle.has(cle)) parCle.set(cle, []);
-    parCle.get(cle).push(f);
+    if (premiereDeLaCle.has(cle)) unir(parents, premiereDeLaCle.get(cle), f.id);
+    else premiereDeLaCle.set(cle, f.id);
+  }
+
+  unirParContact(parents, fiches);
+
+  const parCle = new Map();
+  for (const f of fiches) {
+    const r = racine(parents, f.id);
+    if (!parCle.has(r)) parCle.set(r, []);
+    parCle.get(r).push(f);
   }
 
   const resultat = [];
@@ -444,7 +537,29 @@ function analyserGroupes(fiches) {
       }
     }
 
-    resultat.push({ garder, absorber, apport, conflits });
+    /* Le groupe ne s'est pas forme sur une identite unique : c'est le contact
+       qui l'a reuni, et les noms sont ecrits differemment d'une fiche a
+       l'autre. Le rapprochement reste solide — meme adresse ou meme numero, et
+       un nom qui dit la meme chose en plus court ou en plus long — mais il se
+       regarde avant d'etre valide, comme les desaccords. */
+    const cles = new Set(membres.map((f) => clePersonne(f.nom, f.prenom)));
+    const noms_differents = cles.size > 1 || cles.has(null);
+
+    /* Sur quoi il a ete reconnu, pour que l'ecran le dise plutot que de laisser
+       deviner pourquoi deux noms differents sont dans le meme groupe. */
+    const partage = [];
+    for (const [champ, comparer] of [["email", mailCompare], ["telephone", telCompare]]) {
+      const vus = new Map();
+      for (const f of membres) {
+        const v = comparer(f[champ]);
+        if (v && !vus.has(v)) vus.set(v, String(f[champ]).trim());
+      }
+      if (vus.size === 1 && membres.filter((f) => comparer(f[champ])).length > 1) {
+        partage.push({ champ, libelle: LIBELLES_CHAMPS[champ], valeur: [...vus.values()][0] });
+      }
+    }
+
+    resultat.push({ garder, absorber, apport, conflits, noms_differents, partage });
   }
 
   /* Les groupes qui apportent quelque chose d'abord : ce sont ceux qui
@@ -531,15 +646,22 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
       personnes: groupes.length,
       a_completer: groupes.filter((g) => g.apport.length > 0).length,
       avec_conflit: groupes.filter((g) => g.conflits.length > 0).length,
+      /* Les groupes reconnus par l'adresse ou le numero, dont les noms sont
+         ecrits differemment d'une fiche a l'autre : ce sont ceux que la
+         detection par le nom seul manquait, et ceux qu'il faut regarder de
+         plus pres avant de les valider. */
+      reconnus_par_contact: groupes.filter((g) => g.noms_differents).length,
       /* Les groupes ou deux fiches figurent sur la meme formation : ceux-la
          ne s'expliquent pas par une personne revenue. */
       avec_activite_partagee: groupes.filter((g) => g.activite_partagee).length,
       /* Ce que le bandeau annonce : les groupes qui partent decoches, quelle
-         que soit la raison. Additionner les deux compteurs precedents
-         surestimerait un groupe qui cumule les deux motifs ; en prendre le
-         plus grand le sous-estimerait des qu'ils portent sur des groupes
-         differents — ce qui est le cas courant. */
-      a_regarder: groupes.filter((g) => g.conflits.length > 0 || g.activite_partagee).length,
+         que soit la raison. Additionner les compteurs precedents surestimerait
+         un groupe qui cumule plusieurs motifs ; en prendre le plus grand le
+         sous-estimerait des qu'ils portent sur des groupes differents — ce qui
+         est le cas courant. */
+      a_regarder: groupes.filter(
+        (g) => g.conflits.length > 0 || g.activite_partagee || g.noms_differents
+      ).length,
       groupes,
     });
   } catch (err) {
@@ -675,37 +797,6 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
  * reinserer le lien.
  */
 
-/* Ensembles disjoints : chaque fiche commence seule, les rapprochements les
-   reunissent. C'est ce qui permet a trois ecritures d'une meme personne de ne
-   former qu'un groupe, meme si aucune paire ne se ressemble directement. */
-function racine(parents, x) {
-  while (parents.get(x) !== x) {
-    parents.set(x, parents.get(parents.get(x)));
-    x = parents.get(x);
-  }
-  return x;
-}
-
-function unir(parents, a, b) {
-  const ra = racine(parents, a);
-  const rb = racine(parents, b);
-  if (ra !== rb) parents.set(ra, rb);
-}
-
-const telCompare = (v) => String(v || "").replace(/\D+/g, "").replace(/^(?:00221|221)/, "");
-const mailCompare = (v) => String(v || "").trim().toLowerCase();
-
-/* Deux fiches que rien ne separe : elles ne portent pas deux adresses
-   differentes, ni deux numeros differents. Une information absente ne separe
-   personne — c'est le cas courant sur les listes a moitie remplies. */
-function rienNeSepare(a, b) {
-  const ma = mailCompare(a.email), mb = mailCompare(b.email);
-  if (ma && mb && ma !== mb) return false;
-  const ta = telCompare(a.telephone), tb = telCompare(b.telephone);
-  if (ta && tb && ta !== tb) return false;
-  return true;
-}
-
 /**
  * Les groupes de fiches inscrites a une meme activite qui designent la meme
  * personne.
@@ -746,23 +837,7 @@ function doublonsSurActivite(lignes) {
     }
 
     /* Meme contact et nom compatible. */
-    const parContact = new Map();
-    for (const f of fiches) {
-      for (const contact of [mailCompare(f.email), telCompare(f.telephone)]) {
-        if (!contact) continue;
-        if (!parContact.has(contact)) parContact.set(contact, []);
-        parContact.get(contact).push(f);
-      }
-    }
-    for (const memeContact of parContact.values()) {
-      for (let i = 0; i < memeContact.length; i++) {
-        for (let j = i + 1; j < memeContact.length; j++) {
-          if (nomsCompatibles(memeContact[i], memeContact[j])) {
-            unir(parents, memeContact[i].id, memeContact[j].id);
-          }
-        }
-      }
-    }
+    unirParContact(parents, fiches);
 
     /* Identites incompletes : les memes mots, et rien qui les separe. */
     const parApprochee = new Map();
