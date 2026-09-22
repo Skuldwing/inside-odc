@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
-import { EmptyState, DensityToggle, useDensity, useToast } from "../components/ui";
+import { EmptyState, DensityToggle, useDensity, useToast, useConfirm } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 import Assiduite from "./Assiduite";
 
@@ -180,6 +180,279 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
 
 
 /**
+ * Deux fois la même personne sur une même activité.
+ *
+ * Ce ne sont pas deux fiches à réunir : ce sont deux inscriptions, sur la même
+ * liste de présence. L'activité compte un bénéficiaire de trop, et la personne
+ * recevra deux fois son attestation.
+ *
+ * Ce qui est retiré est le lien entre la fiche et cette activité-là — jamais la
+ * fiche. Les deux fiches restent, avec toutes leurs autres formations. C'est la
+ * différence avec l'ancienne « réunion », qui supprimait la fiche et faisait
+ * disparaître quelqu'un de listes où il avait vraiment été présent. Et le
+ * retrait se défait : remettre le lien, c'est tout.
+ */
+const MOTIFS_RAPPROCHEMENT = {
+  identite_identique: "même nom, même prénom",
+  nom_plus_complet: "même contact, et un prénom écrit en entier une fois sur deux",
+  identite_incomplete: "identité incomplète, rien qui les distingue",
+};
+
+function DoublonsActivite({ onChange }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [data, setData] = useState(null);
+  const [ouvert, setOuvert] = useState(false);
+  const [ecartes, setEcartes] = useState(() => new Set());
+  const [enCours, setEnCours] = useState(false);
+  const [retirees, setRetirees] = useState(null);
+
+  const charger = useCallback(async () => {
+    try {
+      const [vue, journal] = await Promise.all([
+        api.get("/participants/doublons-activite"),
+        api.get("/participants/inscriptions-retirees").catch(() => ({ data: null })),
+      ]);
+      setData(vue.data);
+      setRetirees(journal.data);
+      /* Les groupes qui demandent un coup d'œil partent décochés : un prénom
+         composé peut cacher deux personnes différentes. */
+      setEcartes(new Set((vue.data.groupes || []).filter((g) => !g.certain).map((g) => g.cle)));
+    } catch {
+      setData(null);   /* silencieux : c'est une réparation, pas la page */
+    }
+  }, []);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  const groupes = data?.groupes || [];
+  const aRetablir = (retirees?.lignes || []).filter((l) => !l.retablie);
+  if (!groupes.length && !aRetablir.length) return null;
+
+  const retenus = groupes.filter((g) => !ecartes.has(g.cle));
+  const inscriptionsRetenues = retenus.reduce((n, g) => n + g.retirer.length, 0);
+
+  const basculer = (cle) =>
+    setEcartes((prec) => {
+      const suivant = new Set(prec);
+      if (suivant.has(cle)) suivant.delete(cle); else suivant.add(cle);
+      return suivant;
+    });
+
+  const retirer = async (tout) => {
+    const combien = tout ? data.total : inscriptionsRetenues;
+    if (!combien) return;
+    const ok = await confirm({
+      title: `Ne compter qu'une fois ${combien > 1 ? `ces ${combien} inscriptions` : "cette inscription"} ?`,
+      body: "Aucune fiche n'est supprimée : seul le lien avec l'activité est retiré, et les fiches gardent toutes leurs autres formations. L'effectif des activités concernées baisse d'autant — c'est le but, il comptait la même personne deux fois. Une fiche qui n'a plus aucune activité disparaît de la liste des participants, qui n'affiche que les personnes rattachées à une activité : elle existe toujours, et revient dès qu'on remet l'inscription. Chaque retrait est inscrit au journal.",
+      confirmLabel: "Retirer les doublons",
+    });
+    if (!ok) return;
+    setEnCours(true);
+    try {
+      const res = await api.post(
+        "/participants/doublons-activite/retirer",
+        tout ? { tout: true } : { groupes: retenus.map((g) => g.cle) }
+      );
+      toast.success(
+        `${res.data.retirees} inscription${res.data.retirees > 1 ? "s" : ""} en double retirée${res.data.retirees > 1 ? "s" : ""} ` +
+        `sur ${res.data.activites} activité${res.data.activites > 1 ? "s" : ""}. Aucune fiche supprimée.`
+      );
+      /* La liste et les compteurs de la page datent d'avant : sans ce
+         rechargement, ils annonceraient encore les doublons qu'on vient de
+         retirer. */
+      await Promise.all([charger(), onChange?.()]);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Le retrait a échoué.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  const retablir = async () => {
+    setEnCours(true);
+    try {
+      const res = await api.post("/participants/inscriptions-retirees/retablir", {
+        journaux: aRetablir.map((l) => l.journal),
+      });
+      toast.success(
+        `${res.data.retablies} inscription${res.data.retablies > 1 ? "s" : ""} remise${res.data.retablies > 1 ? "s" : ""} en place.`
+      );
+      await Promise.all([charger(), onChange?.()]);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La remise en place a échoué.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <section className="card-solid overflow-hidden border border-orange-300">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <AlertTriangle className="h-5 w-5 flex-shrink-0 text-orange-600" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-800">
+            {data?.total > 0
+              ? `${data.total} inscription${data.total > 1 ? "s" : ""} en double sur ${data.activites} activité${data.activites > 1 ? "s" : ""}`
+              : "Inscriptions retirées"}
+          </span>
+          <span className="block text-xs text-slate-500">
+            {data?.total > 0 ? (
+              <>
+                La même personne compte deux fois sur la même liste de présence
+                {data.a_regarder > 0 && (
+                  <span className="text-amber-700">
+                    {" "}· {data.a_regarder} à regarder, décoché{data.a_regarder > 1 ? "s" : ""} par précaution
+                  </span>
+                )}
+              </>
+            ) : (
+              `${aRetablir.length} retrait${aRetablir.length > 1 ? "s" : ""} au journal, à remettre en place si besoin`
+            )}
+          </span>
+        </span>
+        <span className="text-xs text-slate-500">{ouvert ? "Masquer" : "Voir la liste"}</span>
+      </button>
+
+      {ouvert && (
+        <div className="border-t border-orange-200">
+          {groupes.length > 0 && (
+            <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+              {groupes.map((g) => (
+                <li key={g.cle} className={`px-4 py-3 text-xs ${ecartes.has(g.cle) ? "opacity-50" : ""}`}>
+                  <label className="flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={!ecartes.has(g.cle)}
+                      onChange={() => basculer(g.cle)}
+                      className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-orange-600"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold text-slate-800">
+                          {g.garder.prenom} {g.garder.nom}
+                        </span>
+                        <span className="text-slate-500">
+                          {g.activite.titre}
+                          {g.activite.date ? ` (${formatDate(g.activite.date)})` : ""}
+                        </span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                            g.certain
+                              ? "border-orange-300 bg-orange-50 text-orange-800"
+                              : "border-amber-300 bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {MOTIFS_RAPPROCHEMENT[g.motif] || g.motif}
+                        </span>
+                      </span>
+
+                      {/* Ce qui reste, et ce qui est retiré : la ligne conservée
+                          d'abord, pour qu'on voie tout de suite que personne ne
+                          disparaît de la liste. */}
+                      <span className="mt-1.5 block space-y-0.5">
+                        <span className="block text-emerald-700">
+                          reste inscrit : fiche {g.garder.id} —{" "}
+                          {[g.garder.email, g.garder.telephone].filter(Boolean).join(" · ") ||
+                            "aucune coordonnée"}
+                          {g.garder.total_activites > 1 && ` · ${g.garder.total_activites} formations`}
+                        </span>
+                        {g.retirer.map((f) => (
+                          <span key={f.id} className="block text-slate-500">
+                            retirée de cette activité : fiche {f.id}
+                            {(f.prenom || f.nom) && ` — ${[f.prenom, f.nom].filter(Boolean).join(" ")}`}
+                            {" — "}
+                            {[f.email, f.telephone].filter(Boolean).join(" · ") || "aucune coordonnée"}
+                            {f.total_activites > 1
+                              ? ` · la fiche reste sur ${f.total_activites - 1} autre${f.total_activites > 2 ? "s" : ""} formation${f.total_activites > 2 ? "s" : ""}`
+                              : " · la fiche est conservée"}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {data?.tronquee && (
+            <p className="border-t border-slate-200 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              Les 300 premiers groupes sont affichés. Traitez ceux-ci, rechargez la page : la
+              suite apparaîtra.
+            </p>
+          )}
+
+          {groupes.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
+              <p className="max-w-xl text-xs text-slate-500">
+                <strong className="text-slate-600">Aucune fiche n&apos;est supprimée.</strong> Seul
+                le lien avec l&apos;activité est retiré : les fiches gardent toutes leurs autres
+                formations. L&apos;effectif des activités concernées baisse — c&apos;est le but, il
+                comptait la même personne deux fois. Une fiche qui n&apos;a plus aucune activité
+                sort de la liste ci-dessous, qui n&apos;affiche que les personnes rattachées à une
+                activité : elle existe toujours et revient dès qu&apos;on remet l&apos;inscription.
+                Chaque retrait est inscrit au journal.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => retirer(true)}
+                  disabled={enCours}
+                  className="flex items-center gap-1.5 rounded-xl bg-orange-600 px-3 py-2 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-60"
+                >
+                  {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {enCours ? "Retrait…" : `Tout traiter (${data.total})`}
+                </button>
+                {inscriptionsRetenues > 0 && inscriptionsRetenues < data.total && (
+                  <button
+                    type="button"
+                    onClick={() => retirer(false)}
+                    disabled={enCours}
+                    className="rounded-xl border border-orange-300 px-3 py-2 text-xs font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-60"
+                  >
+                    {inscriptionsRetenues > 1
+                      ? `Seulement les ${inscriptionsRetenues} cochées`
+                      : "Seulement celle cochée"}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Le retour en arrière, au même endroit que l'action : c'est là qu'on
+              le cherche quand on s'aperçoit qu'un retrait était faux. */}
+          {aRetablir.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="max-w-xl text-xs text-slate-500">
+                {aRetablir.length} inscription{aRetablir.length > 1 ? "s" : ""} retirée
+                {aRetablir.length > 1 ? "s" : ""} par cet écran
+                {aRetablir.length > 1 ? " peuvent" : " peut"} être remise
+                {aRetablir.length > 1 ? "s" : ""} en place :{" "}
+                {aRetablir.slice(0, 4).map((l) => `${l.nom} (${l.activite})`).join(", ")}
+                {aRetablir.length > 4 && `, et ${aRetablir.length - 4} autre(s)`}.
+              </p>
+              <button
+                type="button"
+                onClick={retablir}
+                disabled={enCours}
+                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-60"
+              >
+                Tout remettre en place
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
  * Fiches supprimées par l'ancienne réunion.
  *
  * Cette opération supprimait la fiche absorbée. Quand deux fiches d'une même
@@ -192,8 +465,9 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
  * réunions étaient justes, et recréer une vraie ligne en double regonflerait
  * un effectif à tort. On montre, l'utilisateur choisit.
  */
-function FichesARestaurer() {
+function FichesARestaurer({ onChange }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [data, setData] = useState(null);
   const [ouvert, setOuvert] = useState(false);
   const [choisies, setChoisies] = useState(() => new Set());
@@ -220,24 +494,39 @@ function FichesARestaurer() {
       return suivant;
     });
 
-  const restaurer = async () => {
-    if (!choisies.size) return;
+  /* Cocher ligne à ligne est le bon geste quand on veut trier. Quand on veut
+     tout remettre — le cas le plus fréquent, puisque la réunion n'aurait jamais
+     dû supprimer quoi que ce soit — cocher cinquante cases est une corvée. Le
+     bouton fait les deux : sans sélection, il prend tout, après confirmation. */
+  const restaurer = async (journaux) => {
+    const liste = journaux ?? [...choisies];
+    if (!liste.length) return;
     setEnCours(true);
     try {
       const res = await api.post("/participants/fiches-absorbees/restaurer", {
-        journaux: [...choisies],
+        journaux: liste,
       });
       toast.success(
         `${res.data.restaurees} fiche${res.data.restaurees > 1 ? "s" : ""} remise${res.data.restaurees > 1 ? "s" : ""} en place, ` +
         `${res.data.inscriptions} inscription${res.data.inscriptions > 1 ? "s" : ""} rétablie${res.data.inscriptions > 1 ? "s" : ""}.`
       );
       setChoisies(new Set());
-      await charger();
+      await Promise.all([charger(), onChange?.()]);
     } catch (err) {
       toast.error(err?.response?.data?.error || "La restauration a échoué.");
     } finally {
       setEnCours(false);
     }
+  };
+
+  const toutRestaurer = async () => {
+    const ok = await confirm({
+      title: `Remettre en place les ${aRestaurer.length} fiches ?`,
+      body: `Chaque fiche est recréée avec ses inscriptions : les effectifs des activités concernées remontent d'autant. Si l'une de ces réunions était juste — deux fiches qui étaient bien la même personne sur la même formation —, elle regonflera un effectif à tort ; vous pourrez la supprimer depuis la liste de l'activité.`,
+      confirmLabel: "Tout remettre en place",
+    });
+    if (!ok) return;
+    await restaurer(aRestaurer.map((l) => l.journal));
   };
 
   return (
@@ -258,7 +547,9 @@ function FichesARestaurer() {
             a pu baisser. Elles peuvent être remises en place.
           </span>
         </span>
-        <span className="text-xs text-slate-500">{ouvert ? "Masquer" : "Voir la liste"}</span>
+        <span className="text-xs text-slate-500">
+          {ouvert ? "Masquer" : "Voir et tout remettre"}
+        </span>
       </button>
 
       {ouvert && (
@@ -310,22 +601,38 @@ function FichesARestaurer() {
             <p className="max-w-xl text-xs text-slate-500">
               La fiche est recréée avec ses inscriptions : les effectifs concernés remontent.
               Elle reçoit un nouvel identifiant — l&apos;ancien est perdu — mais les listes de
-              présence retrouvent leur ligne.{" "}
-              <strong className="text-slate-600">
-                Ne restaurez que celles qui manquent vraiment
-              </strong>{" "}
-              : certaines réunions étaient justes, et remettre une ligne réellement en double
-              regonflerait un effectif à tort.
+              présence retrouvent leur ligne. Ces fiches n&apos;auraient jamais dû être
+              supprimées :{" "}
+              <strong className="text-slate-600">tout remettre est le geste normal</strong>. Si
+              l&apos;une de ces réunions était juste, elle regonflera un effectif à tort — vous
+              pourrez retirer la ligne depuis la liste de l&apos;activité.
             </p>
-            <button
-              type="button"
-              onClick={restaurer}
-              disabled={enCours || choisies.size === 0}
-              className="flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
-            >
-              {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-              {enCours ? "Restauration…" : `Remettre en place ${choisies.size} fiche${choisies.size > 1 ? "s" : ""}`}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Le geste le plus courant : tout remettre. Il ne demande pas
+                  de cocher cinquante cases, seulement de confirmer. */}
+              <button
+                type="button"
+                onClick={toutRestaurer}
+                disabled={enCours}
+                className="flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                {enCours ? "Restauration…" : `Tout remettre en place (${aRestaurer.length})`}
+              </button>
+              {/* La sélection reste possible pour qui veut trier. */}
+              {choisies.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => restaurer()}
+                  disabled={enCours}
+                  className="rounded-xl border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                >
+                  {choisies.size > 1
+                    ? `Seulement les ${choisies.size} cochées`
+                    : "Seulement celle cochée"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -481,6 +788,16 @@ export default function Participants() {
       setLoading(false);
     }
   }, []);
+
+  /* Ce que les panneaux de réparation font bouger : la liste, ses compteurs, et
+     la détection des fiches multiples. Sans ce rappel, l'écran continuait
+     d'annoncer après coup les doublons qu'on venait de traiter. */
+  const rechargerListe = useCallback(async () => {
+    await Promise.all([
+      fetchPage(debouncedSearch.current, genderFilter, page),
+      chercherFiches(),
+    ]);
+  }, [fetchPage, chercherFiches, genderFilter, page]);
 
   /* Chargement initial */
   useEffect(() => {
@@ -639,7 +956,12 @@ export default function Participants() {
         </section>
       )}
 
-      <FichesARestaurer />
+      <FichesARestaurer onChange={rechargerListe} />
+
+      {/* Deux inscriptions pour une personne sur la même liste de présence :
+          l'effectif compte un bénéficiaire de trop, et elle recevrait deux fois
+          son attestation. Ce panneau retire le lien en trop, jamais la fiche. */}
+      <DoublonsActivite onChange={rechargerListe} />
 
       {/* Une personne suit plusieurs formations et figure sur autant de listes,
           qui ne portent pas les mêmes colonnes. Les anciens imports créaient
