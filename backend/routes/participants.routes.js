@@ -2,7 +2,10 @@ const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
-const { prenomSansNomRepete, repetitionsDans, clePersonne } = require("../services/nomsDoublons");
+const {
+  prenomSansNomRepete, repetitionsDans, clePersonne, cleApprochee, nomsCompatibles,
+} = require("../services/nomsDoublons");
+const { computeAndStoreReliability } = require("../services/reliability");
 const { trierAdresses } = require("../services/adressesValides");
 const { classerParAssiduite } = require("../services/assiduite");
 
@@ -650,6 +653,462 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
   } catch (err) {
     if (ouverte) await client.query("ROLLBACK").catch(() => {});
     console.error("[FICHES DOUBLONS COMPLETION]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+/* ===== DEUX FOIS LA MEME PERSONNE SUR UNE MEME ACTIVITE =====
+ *
+ * L'import ne fabrique plus ces doublons. Restent ceux d'avant : sur une meme
+ * liste de presence, la meme personne compte pour deux beneficiaires. Le
+ * chiffre de l'activite est faux, et elle recevra deux fois son attestation.
+ *
+ * Ce qu'on retire n'est PAS une fiche — c'est une inscription en trop : la
+ * ligne qui relie la fiche a cette activite-la. Les deux fiches restent, avec
+ * toutes leurs autres formations. C'est la difference avec l'ancienne
+ * « reunion », qui supprimait la fiche et faisait disparaitre une personne de
+ * listes ou elle avait vraiment ete presente.
+ *
+ * Le retrait est ecrit au journal, et se defait : remettre la ligne, c'est
+ * reinserer le lien.
+ */
+
+/* Ensembles disjoints : chaque fiche commence seule, les rapprochements les
+   reunissent. C'est ce qui permet a trois ecritures d'une meme personne de ne
+   former qu'un groupe, meme si aucune paire ne se ressemble directement. */
+function racine(parents, x) {
+  while (parents.get(x) !== x) {
+    parents.set(x, parents.get(parents.get(x)));
+    x = parents.get(x);
+  }
+  return x;
+}
+
+function unir(parents, a, b) {
+  const ra = racine(parents, a);
+  const rb = racine(parents, b);
+  if (ra !== rb) parents.set(ra, rb);
+}
+
+const telCompare = (v) => String(v || "").replace(/\D+/g, "").replace(/^(?:00221|221)/, "");
+const mailCompare = (v) => String(v || "").trim().toLowerCase();
+
+/* Deux fiches que rien ne separe : elles ne portent pas deux adresses
+   differentes, ni deux numeros differents. Une information absente ne separe
+   personne — c'est le cas courant sur les listes a moitie remplies. */
+function rienNeSepare(a, b) {
+  const ma = mailCompare(a.email), mb = mailCompare(b.email);
+  if (ma && mb && ma !== mb) return false;
+  const ta = telCompare(a.telephone), tb = telCompare(b.telephone);
+  if (ta && tb && ta !== tb) return false;
+  return true;
+}
+
+/**
+ * Les groupes de fiches inscrites a une meme activite qui designent la meme
+ * personne.
+ *
+ * Trois rapprochements, dans l'ordre de leur solidite :
+ *  - la meme identite (les mots du nom et du prenom, tries) : sur une seule
+ *    activite, c'est un doublon, pas une personne revenue ;
+ *  - la meme adresse ou le meme numero, avec un nom compatible — « Awa Diop »
+ *    et « Awa Marie Diop » ;
+ *  - pour les fiches a l'identite incomplete (« Diop » sans prenom), les memes
+ *    mots, a condition que rien ne les separe.
+ */
+function doublonsSurActivite(lignes) {
+  const parActivite = new Map();
+  for (const l of lignes) {
+    if (!parActivite.has(l.activite_id)) {
+      parActivite.set(l.activite_id, {
+        activite_id: l.activite_id, titre: l.titre, date: l.date, fiches: new Map(),
+      });
+    }
+    parActivite.get(l.activite_id).fiches.set(l.id, l);
+  }
+
+  const groupes = [];
+  for (const act of parActivite.values()) {
+    const fiches = [...act.fiches.values()];
+    if (fiches.length < 2) continue;
+
+    const parents = new Map(fiches.map((f) => [f.id, f.id]));
+
+    /* Identites strictement identiques. */
+    const parCle = new Map();
+    for (const f of fiches) {
+      const cle = clePersonne(f.nom, f.prenom);
+      if (!cle) continue;
+      if (parCle.has(cle)) unir(parents, parCle.get(cle), f.id);
+      else parCle.set(cle, f.id);
+    }
+
+    /* Meme contact et nom compatible. */
+    const parContact = new Map();
+    for (const f of fiches) {
+      for (const contact of [mailCompare(f.email), telCompare(f.telephone)]) {
+        if (!contact) continue;
+        if (!parContact.has(contact)) parContact.set(contact, []);
+        parContact.get(contact).push(f);
+      }
+    }
+    for (const memeContact of parContact.values()) {
+      for (let i = 0; i < memeContact.length; i++) {
+        for (let j = i + 1; j < memeContact.length; j++) {
+          if (nomsCompatibles(memeContact[i], memeContact[j])) {
+            unir(parents, memeContact[i].id, memeContact[j].id);
+          }
+        }
+      }
+    }
+
+    /* Identites incompletes : les memes mots, et rien qui les separe. */
+    const parApprochee = new Map();
+    for (const f of fiches) {
+      if (clePersonne(f.nom, f.prenom)) continue;
+      const cle = cleApprochee(f.nom, f.prenom);
+      if (!cle) continue;
+      if (!parApprochee.has(cle)) parApprochee.set(cle, []);
+      parApprochee.get(cle).push(f);
+    }
+    for (const memesMots of parApprochee.values()) {
+      for (let i = 0; i < memesMots.length; i++) {
+        for (let j = i + 1; j < memesMots.length; j++) {
+          if (rienNeSepare(memesMots[i], memesMots[j])) {
+            unir(parents, memesMots[i].id, memesMots[j].id);
+          }
+        }
+      }
+    }
+
+    const parGroupe = new Map();
+    for (const f of fiches) {
+      const r = racine(parents, f.id);
+      if (!parGroupe.has(r)) parGroupe.set(r, []);
+      parGroupe.get(r).push(f);
+    }
+
+    for (const membres of parGroupe.values()) {
+      if (membres.length < 2) continue;
+
+      /* La fiche conservee est la mieux renseignee — celle dont on perd le
+         moins en retirant les autres inscriptions. A egalite, celle qui figure
+         sur le plus d'autres formations : son identifiant circule deja. Puis la
+         plus ancienne. */
+      const ordre = [...membres].sort(
+        (a, b) => renseignes(b) - renseignes(a)
+          || (b.total_activites || 0) - (a.total_activites || 0)
+          || a.id - b.id
+      );
+      const garder = ordre[0];
+      const retirer = ordre.slice(1);
+
+      /* Les identites strictement identiques ne demandent pas d'arbitrage :
+         deux fois le meme nom sur une seule feuille, c'est la meme personne
+         inscrite deux fois. Les autres rapprochements se regardent. */
+      const cles = new Set(membres.map((f) => clePersonne(f.nom, f.prenom)));
+      const certain = cles.size === 1 && !cles.has(null);
+
+      groupes.push({
+        cle: `${act.activite_id}:${garder.id}`,
+        activite: { id: act.activite_id, titre: act.titre, date: act.date },
+        certain,
+        motif: certain
+          ? "identite_identique"
+          : membres.every((f) => clePersonne(f.nom, f.prenom))
+            ? "nom_plus_complet"
+            : "identite_incomplete",
+        garder,
+        retirer,
+      });
+    }
+  }
+
+  /* Les cas surs d'abord : ce sont ceux qu'on traite sans hesiter. */
+  groupes.sort(
+    (a, b) => Number(b.certain) - Number(a.certain)
+      || a.activite.id - b.activite.id
+      || a.garder.id - b.garder.id
+  );
+  return groupes;
+}
+
+const MAX_GROUPES_DOUBLONS = 300;
+
+/* Les fiches lues dans le perimetre de l'utilisateur, avec l'activite de
+   chaque inscription et le nombre total de formations de la fiche. */
+async function lignesInscrites(req) {
+  const { baseFrom, params } = buildFilters(req);
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ap.activity_id AS activite_id, a.title AS titre,
+            to_char(a.activity_date, 'YYYY-MM-DD') AS date,
+            p.id, p.nom, p.prenom, p.email, p.telephone,
+            p.genre, p.age_range, p.statut, p.structure,
+            (SELECT COUNT(*) FROM activity_participants x WHERE x.participant_id = p.id)
+              ::int AS total_activites
+       ${baseFrom}
+      ORDER BY ap.activity_id, p.id`,
+    params
+  );
+  return rows;
+}
+
+router.get("/doublons-activite", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const groupes = doublonsSurActivite(await lignesInscrites(req));
+    res.json({
+      /* Le nombre d'inscriptions en trop : c'est exactement ce que les
+         effectifs comptent en double. */
+      total: groupes.reduce((n, g) => n + g.retirer.length, 0),
+      groupes_total: groupes.length,
+      certains: groupes.filter((g) => g.certain).length,
+      a_regarder: groupes.filter((g) => !g.certain).length,
+      activites: new Set(groupes.map((g) => g.activite.id)).size,
+      tronquee: groupes.length > MAX_GROUPES_DOUBLONS,
+      groupes: groupes.slice(0, MAX_GROUPES_DOUBLONS),
+    });
+  } catch (err) {
+    console.error("[DOUBLONS ACTIVITE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Retirer les inscriptions en trop.
+ *
+ * L'appelant ne designe pas les lignes a supprimer : il designe des groupes, et
+ * le serveur recalcule lesquelles sont en trop. Accepter une liste de couples
+ * (activite, fiche) donnerait a cet ecran le pouvoir de vider n'importe quelle
+ * liste de presence, et agirait sur un etat peut-etre perime. */
+router.post("/doublons-activite/retirer", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const tout = req.body?.tout === true;
+    const demandes = new Set(
+      Array.isArray(req.body?.groupes) ? req.body.groupes.map(String) : []
+    );
+    if (!tout && !demandes.size) {
+      return res.status(400).json({ error: "Aucun doublon sélectionné." });
+    }
+
+    const tous = doublonsSurActivite(await lignesInscrites(req));
+    const retenus = tout ? tous : tous.filter((g) => demandes.has(g.cle));
+    if (!retenus.length) {
+      return res.json({ retirees: 0, groupes: 0, activites: 0, deja_faites: 0 });
+    }
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let retirees = 0;
+    let dejaFaites = 0;
+    const activitesTouchees = new Set();
+    const traces = [];
+
+    for (const g of retenus) {
+      for (const f of g.retirer) {
+        const r = await client.query(
+          `DELETE FROM activity_participants
+            WHERE activity_id = $1 AND participant_id = $2`,
+          [g.activite.id, f.id]
+        );
+        if (!r.rowCount) { dejaFaites += 1; continue; }
+        retirees += 1;
+        activitesTouchees.add(g.activite.id);
+        traces.push({ groupe: g, fiche: f });
+      }
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    /* Une trace par inscription retiree : c'est elle qui permet de la remettre.
+       Elle porte de quoi reconstituer la ligne sans rien deviner. */
+    for (const { groupe, fiche } of traces) {
+      await logAudit(
+        req, "DELETE", "activity_participants", `${groupe.activite.id}:${fiche.id}`,
+        `${fiche.prenom || ""} ${fiche.nom || ""}`.trim() || `fiche ${fiche.id}`,
+        {
+          motif: "inscription en double sur la même activité",
+          doublon_de: groupe.garder.id,
+          rapprochement: groupe.motif,
+          activite_id: groupe.activite.id,
+          activite: groupe.activite.titre,
+          participant_id: fiche.id,
+          fiche: {
+            nom: fiche.nom || "", prenom: fiche.prenom || "",
+            email: fiche.email || null, telephone: fiche.telephone || null,
+          },
+        }
+      );
+    }
+
+    /* Les effectifs ont bouge : le score de fiabilite de ces activites se
+       recalcule, sinon il resterait celui d'avant. */
+    for (const id of activitesTouchees) {
+      await computeAndStoreReliability(id).catch((e) =>
+        console.warn("[DOUBLONS ACTIVITE] fiabilité:", e.message)
+      );
+    }
+
+    res.json({
+      retirees,
+      groupes: retenus.length,
+      activites: activitesTouchees.size,
+      deja_faites: dejaFaites,
+    });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[DOUBLONS ACTIVITE RETRAIT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+/* Les inscriptions retirees, et le moyen de les remettre.
+   Remettre une inscription est sans danger : c'est reinserer un lien, et
+   l'operation ne peut pas se produire deux fois — le lien existe ou non. */
+router.get("/inscriptions-retirees", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const LIMITE = 500;
+    const total = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM audit_logs
+        WHERE resource = 'activity_participants' AND action = 'DELETE'`
+    );
+    const r = await pool.query(
+      `SELECT id, resource_label, details, created_at FROM audit_logs
+        WHERE resource = 'activity_participants' AND action = 'DELETE'
+        ORDER BY created_at DESC LIMIT $1`,
+      [LIMITE]
+    );
+
+    const lignes = [];
+    for (const l of r.rows) {
+      const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
+      if (!d.activite_id || !d.participant_id) continue;
+      lignes.push({
+        journal: l.id,
+        retiree_le: l.created_at,
+        nom: l.resource_label,
+        activite_id: Number(d.activite_id),
+        activite: d.activite || `Activité ${d.activite_id}`,
+        participant_id: Number(d.participant_id),
+        doublon_de: d.doublon_de ?? null,
+        fiche: d.fiche || null,
+      });
+    }
+
+    /* Deja remise ? On le lit dans la base, pas dans le journal : la ligne
+       existe ou elle n'existe pas. */
+    if (lignes.length) {
+      const { rows: presentes } = await pool.query(
+        `SELECT activity_id, participant_id FROM activity_participants
+          WHERE (activity_id, participant_id) IN (
+            SELECT unnest($1::int[]), unnest($2::int[])
+          )`,
+        [lignes.map((l) => l.activite_id), lignes.map((l) => l.participant_id)]
+      );
+      const vues = new Set(presentes.map((p) => `${p.activity_id}:${p.participant_id}`));
+      for (const l of lignes) {
+        l.retablie = vues.has(`${l.activite_id}:${l.participant_id}`);
+      }
+    }
+
+    res.json({
+      total: lignes.length,
+      a_retablir: lignes.filter((l) => !l.retablie).length,
+      tronquee: total.rows[0].n > LIMITE,
+      total_journal: total.rows[0].n,
+      lignes,
+    });
+  } catch (err) {
+    console.error("[INSCRIPTIONS RETIREES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/inscriptions-retirees/retablir", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const journaux = Array.isArray(req.body?.journaux)
+      ? req.body.journaux.map(Number).filter(Number.isInteger) : [];
+    if (!journaux.length) return res.status(400).json({ error: "Aucune inscription à rétablir." });
+
+    const r = await client.query(
+      `SELECT id, details FROM audit_logs
+        WHERE id = ANY($1::int[])
+          AND resource = 'activity_participants' AND action = 'DELETE'`,
+      [journaux]
+    );
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let retablies = 0;
+    let impossibles = 0;
+    const activitesTouchees = new Set();
+    const traces = [];
+    for (const l of r.rows) {
+      const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
+      const activiteId = Number(d.activite_id);
+      const participantId = Number(d.participant_id);
+      if (!activiteId || !participantId) continue;
+
+      /* L'activite ou la fiche a pu disparaitre depuis : on passe la ligne
+         plutot que de faire echouer le reste. */
+      const ins = await client.query(
+        `INSERT INTO activity_participants (activity_id, participant_id)
+         SELECT $1, $2
+          WHERE EXISTS (SELECT 1 FROM activities WHERE id = $1)
+            AND EXISTS (SELECT 1 FROM participants WHERE id = $2)
+         ON CONFLICT DO NOTHING`,
+        [activiteId, participantId]
+      );
+      if (!ins.rowCount) { impossibles += 1; continue; }
+      retablies += 1;
+      activitesTouchees.add(activiteId);
+      traces.push({ journal: l.id, activiteId, participantId, d });
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    for (const t of traces) {
+      await logAudit(
+        req, "CREATE", "activity_participants", `${t.activiteId}:${t.participantId}`,
+        t.d.fiche ? `${t.d.fiche.prenom || ""} ${t.d.fiche.nom || ""}`.trim() : null,
+        {
+          motif: "inscription remise en place",
+          depuis_journal: t.journal,
+          activite_id: t.activiteId,
+          activite: t.d.activite || null,
+          participant_id: t.participantId,
+        }
+      );
+    }
+
+    for (const id of activitesTouchees) {
+      await computeAndStoreReliability(id).catch((e) =>
+        console.warn("[INSCRIPTIONS RETIREES] fiabilité:", e.message)
+      );
+    }
+
+    res.json({ retablies, impossibles, activites: activitesTouchees.size });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[INSCRIPTIONS RETIREES RETABLIR]", err);
     res.status(500).json({ error: "Erreur serveur" });
   } finally {
     client.release();

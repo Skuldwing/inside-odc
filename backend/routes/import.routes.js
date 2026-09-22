@@ -9,7 +9,8 @@ const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 
 const {
-  repetitionsDans, normaliser, clePersonne, memePersonne,
+  repetitionsDans, normaliser, compacterNom,
+  clePersonne, cleApprochee, nomsCompatibles, memePersonne,
 } = require("../services/nomsDoublons");
 
 const router = express.Router();
@@ -381,6 +382,9 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       prenom,
       normalizedGender: normalizeGender(p.genre),
       cle: clePersonne(nom, prenom),
+      /* La cle de repli, pour les lignes dont le nom est a moitie vide : elles
+         n'avaient aucune cle, et deux fois la meme ligne donnait deux fiches. */
+      approchee: cleApprochee(nom, prenom),
       resolvedId: null,
     });
   }
@@ -394,6 +398,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     return {
       imported: 0, skippedMissingName, duplicatesInActivity: 0,
       contactsIgnores, rattachements: 0, champsCompletes: 0, lignesIncompletes,
+      doublonsReunis: [],
     };
   }
 
@@ -432,12 +437,33 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
      que son adresse n'etait rattachable par rien — l'import creait un second
      exemplaire d'elle-meme, et son information restait eparpillee entre deux
      fiches dont aucune n'etait complete. */
-  const nomsCherches = [...new Set(items.map(it => normaliser(it.nom)).filter(Boolean))];
+  /* La recherche se fait sur la forme compacte du nom : sans accent, sans
+     casse, sans apostrophe. Comparee a « lower(trim(nom)) », elle ne manquait
+     pas seulement « N'Diaye » face a « Ndiaye » — elle manquait aussi
+     « Ndiayé », puisque la valeur cherchee etait deja desaccentuee et celle de
+     la base non. La fiche existante n'etait alors pas trouvee, et l'import en
+     creait une seconde.
+
+     Les deux colonnes sont interrogees avec l'ensemble des noms ET des prenoms
+     du fichier : sur les feuilles de presence, « Nom » et « Prenom » sont
+     remplies dans un sens ou dans l'autre selon qui tient la feuille. */
+  const nomsCherches = [...new Set(
+    items.flatMap((it) => [compacterNom(it.nom), compacterNom(it.prenom)]).filter(Boolean)
+  )];
   const parNom = new Map(); // cle personne → fiche, ou null si le nom est ambigu
   if (nomsCherches.length > 0) {
+    /* translate() desaccentue, regexp_replace() ote tout le reste — espaces,
+       tirets, apostrophes. Les deux colonnes de la base passent par la meme
+       transformation que compacterNom() applique au fichier. */
+    const COMPACT = (colonne) => `regexp_replace(
+      translate(lower(trim(${colonne})),
+                'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ',
+                'aaaaaaceeeeiiiinooooouuuuyy'),
+      '[^a-z0-9]+', '', 'g')`;
     const { rows: connus } = await client.query(
       `SELECT id, nom, prenom, email, telephone, genre, age_range, statut, structure
-         FROM participants WHERE lower(trim(nom)) = ANY($1)`,
+         FROM participants
+        WHERE ${COMPACT("nom")} = ANY($1) OR ${COMPACT("prenom")} = ANY($1)`,
       [nomsCherches]
     );
     for (const r of connus) {
@@ -463,8 +489,18 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
 
   /* Parmi les fiches qui portent ce contact, celle qui designe la meme
      personne. Le contact seul ne suffit plus a identifier quelqu'un : un
-     numero de famille en designe plusieurs. */
-  const memeNom = (fiches, it) => (fiches || []).find((f) => memePersonne(f, it)) || null;
+     numero de famille en designe plusieurs.
+     A defaut d'une identite identique, une identite compatible : le meme
+     contact et un nom qui dit la meme chose en plus court ou en plus long
+     (« Awa Diop » et « Awa Marie Diop »). Si deux fiches s'y reconnaissent, on
+     ne devine pas laquelle — l'import en creera une plutot que de confondre. */
+  const memeNom = (fiches, it) => {
+    const liste = fiches || [];
+    const exact = liste.find((f) => memePersonne(f, it));
+    if (exact) return exact;
+    const compatibles = liste.filter((f) => nomsCompatibles(f, it));
+    return compatibles.length === 1 ? compatibles[0] : null;
+  };
 
   /* Ce que le fichier peut completer sur une fiche deja connue, au-dela des
      coordonnees. L'import les jetait : une liste apportant le genre et la
@@ -498,8 +534,69 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   /* Deux lignes du meme fichier qui designent la meme personne ne doivent
      donner qu'une fiche. Le rapprochement se fait sur l'identite, non sur le
      contact : deux personnes differentes partageant une adresse restent deux
-     personnes, et gardent chacune cette adresse. */
-  const dejaVu = new Map(); // cle personne → indice dans items[]
+     personnes, et gardent chacune cette adresse.
+     Trois lectures, de la plus sure a la plus prudente : la meme identite,
+     puis le meme contact avec un nom compatible, puis — pour les lignes dont le
+     nom est a moitie vide, qui n'ont donc pas d'identite — les memes mots sans
+     rien qui les oppose. */
+  const dejaVu = new Map();          // cle personne → indice dans items[]
+  const parContactLigne = new Map(); // email ou telephone → [indices]
+  const parApprochee = new Map();    // cle approchee → [indices]
+
+  const noter = (carte, cle, i) => {
+    if (!cle) return;
+    if (!carte.has(cle)) carte.set(cle, []);
+    carte.get(cle).push(i);
+  };
+
+  /* Ce qui separe deux lignes : toutes deux portent une adresse, ou toutes deux
+     un numero, et ce n'est pas le meme. Une information absente ne contredit
+     rien — c'est justement le cas qu'on veut rattraper. */
+  const seContredisent = (a, b) =>
+    Boolean(
+      (a.email && b.email && a.email !== b.email) ||
+      (a.telephone && b.telephone && a.telephone !== b.telephone)
+    );
+
+  const jumelleDe = (it) => {
+    if (it.cle && dejaVu.has(it.cle)) {
+      return { indice: dejaVu.get(it.cle), motif: "identite_identique" };
+    }
+
+    for (const contact of [it.email, it.telephone].filter(Boolean)) {
+      for (const j of parContactLigne.get(contact) || []) {
+        if (nomsCompatibles(items[j], it)) {
+          return { indice: j, motif: "meme_contact" };
+        }
+      }
+    }
+
+    /* Deux lignes sans identite complete : « Diop » sans prenom, deux fois. Ni
+       l'une ni l'autre ne porte de quoi les distinguer — pas d'adresse
+       differente, pas de numero different. Les compter deux fois gonflerait
+       l'effectif de l'activite d'une personne qui n'existe pas. */
+    if (!it.cle && it.approchee) {
+      for (const j of parApprochee.get(it.approchee) || []) {
+        if (!items[j].cle && !seContredisent(items[j], it)) {
+          return { indice: j, motif: "identite_incomplete" };
+        }
+      }
+    }
+    return null;
+  };
+
+  /* Ce que cette ligne apporte pour reconnaitre les suivantes. */
+  const enregistrer = (i) => {
+    const it = items[i];
+    if (it.cle && !dejaVu.has(it.cle)) dejaVu.set(it.cle, i);
+    noter(parContactLigne, it.email, i);
+    noter(parContactLigne, it.telephone, i);
+    noter(parApprochee, it.approchee, i);
+  };
+
+  /* Les lignes reunies, avec le motif : un import qui ramene 18 lignes pour 20
+     doit pouvoir dire lesquelles, et pourquoi. */
+  const doublonsReunis = [];
 
   const signaler = (it, champ, valeur, motif, detenteur) => {
     contactsIgnores.push({
@@ -559,14 +656,15 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
         signaler(it, "email", it.email, "adresse_differente", ex);
       }
 
-      if (it.cle && !dejaVu.has(it.cle)) dejaVu.set(it.cle, i);
+      enregistrer(i);
       continue;
     }
 
     /* Deja rencontree plus haut dans ce meme fichier : une seule fiche, qui
        recoit ce que cette ligne-ci apporte en plus. */
-    if (it.cle && dejaVu.has(it.cle)) {
-      const premier = items[dejaVu.get(it.cle)];
+    const jumelle = jumelleDe(it);
+    if (jumelle) {
+      const premier = items[jumelle.indice];
       const ajoutes = completerDepuis(premier, it);
       for (const [colonne, valeur] of Object.entries(ajoutes)) {
         const champ = CHAMPS_COMPLETABLES.find(([c]) => c === colonne)?.[1] || colonne;
@@ -578,11 +676,25 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       if (premier.resolvedId && Object.keys(ajoutes).length) {
         aCompleter.push({ id: premier.resolvedId, maj: ajoutes });
       }
-      items[i].memeQue = dejaVu.get(it.cle);
+      items[i].memeQue = jumelle.indice;
+      /* La ligne reunie portait une autre adresse. C'est la premiere qui est
+         conservee — le fichier ne dit pas laquelle est la bonne — mais la
+         seconde ne doit pas disparaitre sans un mot : c'est peut-etre celle a
+         laquelle la personne attend son attestation. */
+      if (it.email && premier.email && it.email !== premier.email) {
+        signaler(it, "email", it.email, "adresse_differente", premier);
+      }
+      doublonsReunis.push({
+        nom: it.nom, prenom: it.prenom,
+        email: it.email || null, telephone: it.telephone || null,
+        motif: jumelle.motif,
+        avec: `${premier.prenom || ""} ${premier.nom || ""}`.trim(),
+      });
+      enregistrer(i);
       continue;
     }
 
-    if (it.cle) dejaVu.set(it.cle, i);
+    enregistrer(i);
     items[i].aInserer = true;
   }
 
@@ -673,6 +785,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   return {
     imported, skippedMissingName, duplicatesInActivity,
     contactsIgnores, rattachements, champsCompletes, lignesIncompletes,
+    doublonsReunis,
   };
 }
 
@@ -805,6 +918,9 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
       total_lignes: rows.length,
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
+      /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
+         pouvoir le justifier, sinon le doute porte sur tout le reste. */
+      doublons_reunis: stats.doublonsReunis,
       /* Le nom de famille recopie dans la case « Prenom » : on le dit ici
          plutot que de le laisser decouvrir au moment d'envoyer les
          attestations, ou il est deja trop tard pour le corriger en amont. */
@@ -882,6 +998,9 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
       total_lignes: rows.length,
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
+      /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
+         pouvoir le justifier, sinon le doute porte sur tout le reste. */
+      doublons_reunis: stats.doublonsReunis,
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
       /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
          Sans cette liste, la campagne partirait plus courte que la liste de
@@ -960,6 +1079,9 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       total_lignes: rows.length,
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
+      /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
+         pouvoir le justifier, sinon le doute porte sur tout le reste. */
+      doublons_reunis: stats.doublonsReunis,
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
       /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
          Sans cette liste, la campagne partirait plus courte que la liste de
