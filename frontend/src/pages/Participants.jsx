@@ -178,6 +178,154 @@ function GroupeFiches({ groupe: g, ecarte, onBasculer }) {
   );
 }
 
+
+/**
+ * Fiches supprimées par l'ancienne réunion.
+ *
+ * Cette opération supprimait la fiche absorbée. Quand deux fiches d'une même
+ * personne figuraient sur la même activité, son effectif perdait une unité —
+ * et si le rapprochement était faux, un vrai bénéficiaire disparaissait d'une
+ * liste de présence.
+ *
+ * Le journal d'audit avait conservé chaque fiche et ses inscriptions : elles
+ * peuvent être remises en place. Rien n'est restauré d'office — certaines
+ * réunions étaient justes, et recréer une vraie ligne en double regonflerait
+ * un effectif à tort. On montre, l'utilisateur choisit.
+ */
+function FichesARestaurer() {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [ouvert, setOuvert] = useState(false);
+  const [choisies, setChoisies] = useState(() => new Set());
+  const [enCours, setEnCours] = useState(false);
+
+  const charger = useCallback(async () => {
+    try {
+      const res = await api.get("/participants/fiches-absorbees");
+      setData(res.data);
+    } catch {
+      setData(null);   /* silencieux : c'est une réparation, pas la page */
+    }
+  }, []);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  const aRestaurer = (data?.lignes || []).filter((l) => !l.restauree);
+  if (!aRestaurer.length) return null;
+
+  const basculer = (j) =>
+    setChoisies((prec) => {
+      const suivant = new Set(prec);
+      if (suivant.has(j)) suivant.delete(j); else suivant.add(j);
+      return suivant;
+    });
+
+  const restaurer = async () => {
+    if (!choisies.size) return;
+    setEnCours(true);
+    try {
+      const res = await api.post("/participants/fiches-absorbees/restaurer", {
+        journaux: [...choisies],
+      });
+      toast.success(
+        `${res.data.restaurees} fiche${res.data.restaurees > 1 ? "s" : ""} remise${res.data.restaurees > 1 ? "s" : ""} en place, ` +
+        `${res.data.inscriptions} inscription${res.data.inscriptions > 1 ? "s" : ""} rétablie${res.data.inscriptions > 1 ? "s" : ""}.`
+      );
+      setChoisies(new Set());
+      await charger();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La restauration a échoué.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <section className="card-solid overflow-hidden border border-red-300">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-600" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-800">
+            {aRestaurer.length} fiche{aRestaurer.length > 1 ? "s" : ""} supprimée
+            {aRestaurer.length > 1 ? "s" : ""} par une ancienne réunion
+          </span>
+          <span className="block text-xs text-slate-500">
+            Cette opération supprimait la fiche absorbée : l&apos;effectif de certaines activités
+            a pu baisser. Elles peuvent être remises en place.
+          </span>
+        </span>
+        <span className="text-xs text-slate-500">{ouvert ? "Masquer" : "Voir la liste"}</span>
+      </button>
+
+      {ouvert && (
+        <div className="border-t border-red-200">
+          <ul className="max-h-96 divide-y divide-slate-100 overflow-y-auto">
+            {aRestaurer.map((l) => (
+              <li key={l.journal} className="px-4 py-2.5 text-xs">
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={choisies.has(l.journal)}
+                    onChange={() => basculer(l.journal)}
+                    className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-red-600"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-slate-800">
+                      {l.fiche.prenom} {l.fiche.nom}
+                      <span className="ml-2 font-normal text-slate-400">
+                        supprimée le {new Date(l.supprimee_le).toLocaleDateString("fr-FR")}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-slate-500">
+                      {[l.fiche.email, l.fiche.telephone, l.fiche.structure]
+                        .filter(Boolean).join(" · ") || "aucune coordonnée"}
+                    </span>
+                    {/* Ce qui décide : les listes de présence où sa ligne
+                        manque aujourd'hui. */}
+                    <span className="mt-1 block text-[11px] text-slate-500">
+                      {l.activites.length === 0
+                        ? "n'était inscrite à aucune activité"
+                        : `inscrite à : ${l.activites.map((a) =>
+                            a.existe ? `${a.titre}${a.date ? ` (${formatDate(a.date)})` : ""}`
+                                     : `${a.titre} — supprimée depuis`).join(" · ")}`}
+                    </span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3">
+            <p className="max-w-xl text-xs text-slate-500">
+              La fiche est recréée avec ses inscriptions : les effectifs concernés remontent.
+              Elle reçoit un nouvel identifiant — l&apos;ancien est perdu — mais les listes de
+              présence retrouvent leur ligne.{" "}
+              <strong className="text-slate-600">
+                Ne restaurez que celles qui manquent vraiment
+              </strong>{" "}
+              : certaines réunions étaient justes, et remettre une ligne réellement en double
+              regonflerait un effectif à tort.
+            </p>
+            <button
+              type="button"
+              onClick={restaurer}
+              disabled={enCours || choisies.size === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              {enCours ? "Restauration…" : `Remettre en place ${choisies.size} fiche${choisies.size > 1 ? "s" : ""}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Participants() {
   const { isCompact } = useDensity();
   const { isViewer } = useAuth();
@@ -483,6 +631,8 @@ export default function Participants() {
           )}
         </section>
       )}
+
+      <FichesARestaurer />
 
       {/* Une personne suit plusieurs formations et figure sur autant de listes,
           qui ne portent pas les mêmes colonnes. Les anciens imports créaient

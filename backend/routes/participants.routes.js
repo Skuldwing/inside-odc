@@ -765,10 +765,23 @@ router.post("/fiches-absorbees/restaurer", authMiddleware, async (req, res) => {
 
     let restaurees = 0;
     let inscriptions = 0;
+    let dejaFaites = 0;
     for (const l of r.rows) {
       const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
       const f = d.fiche_absorbee;
       if (!f) continue;
+
+      /* Deja remise en place ? On le verifie ici, dans la transaction, et pas
+         seulement a l'affichage : un double clic, un rechargement, un appel
+         repete recreerait sinon une seconde fiche — c'est-a-dire le defaut
+         que cet ecran repare. */
+      const { rows: faite } = await client.query(
+        `SELECT 1 FROM audit_logs
+          WHERE resource = 'participants' AND action = 'CREATE'
+            AND details->>'depuis_journal' = $1 LIMIT 1`,
+        [String(l.id)]
+      );
+      if (faite.length) { dejaFaites += 1; continue; }
 
       const { rows } = await client.query(
         `INSERT INTO participants (nom, prenom, email, telephone, genre, age_range, statut, structure)
@@ -790,7 +803,10 @@ router.post("/fiches-absorbees/restaurer", authMiddleware, async (req, res) => {
         inscriptions += ins.rowCount;
       }
 
-      logAudit(req, "CREATE", "participants", nouvelId, `${f.prenom} ${f.nom}`, {
+      /* La trace est attendue : c'est elle qui empeche la restauration
+         suivante. Repondre avant qu'elle soit ecrite laisserait une fenetre
+         ou la fiche serait de nouveau proposee. */
+      await logAudit(req, "CREATE", "participants", nouvelId, `${f.prenom} ${f.nom}`, {
         motif: "fiche remise en place après une réunion",
         depuis_journal: l.id,
         ancien_id: d.fusionnee_avec ? String(d.fusionnee_avec) : null,
@@ -800,7 +816,7 @@ router.post("/fiches-absorbees/restaurer", authMiddleware, async (req, res) => {
 
     await client.query("COMMIT");
     ouverte = false;
-    res.json({ restaurees, inscriptions });
+    res.json({ restaurees, inscriptions, deja_faites: dejaFaites });
   } catch (err) {
     if (ouverte) await client.query("ROLLBACK").catch(() => {});
     console.error("[RESTAURATION FICHES]", err);
