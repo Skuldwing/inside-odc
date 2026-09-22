@@ -1333,6 +1333,7 @@ export default function Activities({
                     </p>
                   )}
                 </div>
+                <DoublonsReunisInfo result={importDirectResult} />
                 <ContactsIgnoresInfo result={importDirectResult} />
                 <ColumnMappingInfo result={importDirectResult} />
               </div>
@@ -1588,8 +1589,49 @@ function ImportResultSummary({ result }) {
           </p>
         </div>
       )}
+      <DoublonsReunisInfo result={result} />
       <ContactsIgnoresInfo result={result} />
       <ColumnMappingInfo result={result} />
+    </div>
+  );
+}
+
+/* Les lignes que l'import a réunies.
+   Une même personne revient souvent deux fois sur une feuille de présence :
+   écrite « Awa Diop » le matin et « Awa Marie Diop » l'après-midi, ou sans
+   prénom la seconde fois. L'import n'en fait plus deux bénéficiaires — mais il
+   ne peut pas le faire en silence : un import qui ramène 18 lignes pour 20 doit
+   dire lesquelles, sinon le doute porte sur tout le reste. */
+const MOTIFS_DOUBLON = {
+  identite_identique: "la même identité figure déjà plus haut",
+  meme_contact: "même adresse ou même numéro, et un nom qui dit la même chose",
+  identite_incomplete: "identité incomplète, identique à une ligne précédente",
+};
+
+function DoublonsReunisInfo({ result }) {
+  const reunis = result?.doublons_reunis ?? [];
+  if (reunis.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+      <p className="font-semibold">
+        {reunis.length} ligne{reunis.length > 1 ? "s" : ""} réunie{reunis.length > 1 ? "s" : ""} à une
+        autre : {reunis.length > 1 ? "ce sont" : "c'est"} la même personne
+      </p>
+      <ul className="mt-1 max-h-32 space-y-0.5 overflow-y-auto">
+        {reunis.slice(0, 50).map((d, i) => (
+          <li key={i}>
+            {[d.prenom, d.nom].filter(Boolean).join(" ") || d.email || d.telephone || "ligne sans nom"}
+            {d.avec && ` → ${d.avec}`} — {MOTIFS_DOUBLON[d.motif] || d.motif}
+          </li>
+        ))}
+      </ul>
+      {reunis.length > 50 && <p className="mt-1">…et {reunis.length - 50} autre(s).</p>}
+      <p className="mt-1.5 text-sky-700">
+        Une seule fiche par personne, et un seul bénéficiaire compté pour cette activité. Si l&apos;un
+        de ces rapprochements est faux — deux homonymes —, ajoutez la ligne manquante depuis la
+        liste de l&apos;activité.
+      </p>
     </div>
   );
 }
