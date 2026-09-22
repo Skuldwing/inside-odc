@@ -670,13 +670,25 @@ router.get("/fiches-absorbees", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
+    /* Le filtre designe une seule chose : les suppressions ecrites par
+       l'ancienne reunion, reconnaissables a « fusionnee_avec ». C'est le seul
+       endroit de la plateforme qui ait jamais supprime une fiche — vider la
+       liste d'une activite ou supprimer une activite retire des inscriptions,
+       pas des fiches, et ne laisse rien a restaurer ici. */
+    const LIMITE = 1000;
+    const total = await pool.query(
+      `SELECT COUNT(*)::int AS n FROM audit_logs
+        WHERE resource = 'participants' AND action = 'DELETE'
+          AND details->>'fusionnee_avec' IS NOT NULL`
+    );
     const r = await pool.query(
       `SELECT id, resource_id, resource_label, details, created_at
          FROM audit_logs
         WHERE resource = 'participants' AND action = 'DELETE'
           AND details->>'fusionnee_avec' IS NOT NULL
         ORDER BY created_at DESC
-        LIMIT 500`
+        LIMIT $1`,
+      [LIMITE]
     );
 
     /* Une fiche deja remise en place ne doit plus etre proposee. On la
@@ -733,6 +745,11 @@ router.get("/fiches-absorbees", authMiddleware, async (req, res) => {
     res.json({
       total: lignes.length,
       a_restaurer: lignes.filter((l) => !l.restauree).length,
+      /* Une liste tronquee doit le dire : afficher 1000 lignes sur 1400 sans
+         le signaler laisserait croire que le reste n'existe pas. On en
+         restaure un lot, on recharge, la suite apparait. */
+      tronquee: total.rows[0].n > LIMITE,
+      total_journal: total.rows[0].n,
       lignes,
     });
   } catch (err) {
