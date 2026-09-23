@@ -1207,6 +1207,16 @@ function Attestations({ activities, onEnvoye }) {
   );
 }
 
+/* Un horodatage de base de données — « 2026-09-22T14:03:11.000Z » — n'est pas
+   une date lisible dans une ligne de liste. */
+function formatDateCourte(valeur) {
+  if (!valeur) return "";
+  const d = new Date(valeur);
+  return Number.isNaN(d.getTime())
+    ? String(valeur).slice(0, 10)
+    : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+}
+
 /* Les dispositifs d'une personne, du plus suivi au moins suivi.
    Chaque module porte le sien ; une personne passe souvent par plusieurs. */
 const SANS_DISPOSITIF = "\u0000sans";
@@ -1255,6 +1265,10 @@ function ParParticipant() {
   const [enEdition, setEnEdition] = useState(null);
   const [adresse, setAdresse] = useState("");
   const [envoi, setEnvoi] = useState(false);
+  /* La fiche dont la marque est en cours d'écriture : sa case se fige le temps
+     de l'aller-retour, pour qu'un double clic n'envoie pas deux ordres
+     contraires. */
+  const [marquage, setMarquage] = useState(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -1330,14 +1344,16 @@ function ParParticipant() {
   }, [data, dispositif, modeDispositif, parcours]);
 
   const aServir = useMemo(
-    () => duDispositif.filter((p) => p.modules_a_envoyer > 0 && p.adresses.length).length,
+    () => duDispositif.filter((p) => p.modules_a_envoyer > 0 && p.adresses.length && !p.termine).length,
     [duDispositif]
   );
 
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
     return duDispositif.filter((p) => {
-      if (seulsARegler && p.modules_a_envoyer === 0) return false;
+      /* Déclarée servie : elle sort de la liste de travail, c'est tout l'objet
+         de la case. Elle reste atteignable en décochant le filtre. */
+      if (seulsARegler && (p.termine || p.modules_a_envoyer === 0)) return false;
       if (!q) return true;
       return (
         `${p.prenom} ${p.nom}`.toLowerCase().includes(q) ||
@@ -1346,6 +1362,28 @@ function ParParticipant() {
       );
     });
   }, [duDispositif, recherche, seulsARegler]);
+
+  /* « Pour celle-là, c'est réglé. » Toutes les attestations ne partent pas
+     d'ici : une remise en main propre, un envoi depuis une autre boîte, un
+     bénéficiaire qui n'en veut pas. La marque porte les formations connues au
+     moment où on la pose — si la personne en suit une nouvelle, elle revient
+     dans la liste d'elle-même. */
+  const marquerTermine = async (p, termine) => {
+    setMarquage(p.cle);
+    try {
+      await api.post("/attestations-participant/terminer", { fiches: p.fiches, termine });
+      toast.success(
+        termine
+          ? `${p.prenom} ${p.nom} : attestations marquées comme servies.`
+          : `${p.prenom} ${p.nom} revient dans la liste.`
+      );
+      await charger();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La marque n'a pas pu être enregistrée.");
+    } finally {
+      setMarquage(null);
+    }
+  };
 
   const envoyer = async (p, forcer = false) => {
     const modules = p.modules.filter((m) => choix[cle(m)]);
@@ -1410,6 +1448,16 @@ function ParParticipant() {
         Une personne, tous ses modules, un seul message. Les fiches d&apos;une même personne
         sont réunies par son adresse, son téléphone ou son nom. Les attestations déjà envoyées
         — y compris par activité — sont marquées « reçue » et ne sont pas proposées.
+      </p>
+
+      <p className="text-xs text-slate-500">
+        La case à gauche d&apos;un nom dit « pour cette personne, c&apos;est réglé » : utile quand
+        l&apos;attestation a été remise autrement qu&apos;ici, ou qu&apos;elle n&apos;en veut pas.
+        Elle sort alors de la liste de travail
+        {data.terminees > 0 && ` (${data.terminees} aujourd'hui)`} — décochez « ceux qui
+        attendent » pour la retrouver. Si elle suit une nouvelle formation, elle revient
+        d&apos;elle-même
+        {data.revenues > 0 && `, comme ${data.revenues} personne${data.revenues > 1 ? "s" : ""} en ce moment`}.
       </p>
 
       {data.avec_repetition > 0 && (
@@ -1499,11 +1547,32 @@ function ParParticipant() {
         const depliee = ouverte === p.cle;
         const coches = p.modules.filter((m) => choix[cle(m)]).length;
         return (
-          <div key={p.cle} className="card-solid overflow-hidden border border-slate-200">
+          <div
+            key={p.cle}
+            className={`card-solid overflow-hidden border ${
+              p.termine ? "border-emerald-200 bg-emerald-50/40" : "border-slate-200"
+            }`}
+          >
+            {/* La case sort du bouton : un bouton ne peut pas en contenir un
+                autre, et cliquer dessus ne doit pas déplier la fiche. */}
+            <div className="flex items-center gap-1 pl-3">
+              <input
+                type="checkbox"
+                checked={p.termine}
+                disabled={marquage === p.cle}
+                onChange={() => marquerTermine(p, !p.termine)}
+                className="h-4 w-4 flex-shrink-0 cursor-pointer accent-emerald-600"
+                title={
+                  p.termine
+                    ? "Ses attestations sont servies — décocher pour la remettre dans la liste"
+                    : "Marquer ses attestations comme servies"
+                }
+                aria-label={`Attestations servies pour ${p.prenom} ${p.nom}`}
+              />
             <button
               type="button"
               onClick={() => ouvrir(p)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left"
+              className="flex w-full min-w-0 items-center gap-3 px-3 py-3 text-left"
             >
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -1516,6 +1585,17 @@ function ParParticipant() {
                   {p.homonymes && (
                     <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
                       homonyme
+                    </span>
+                  )}
+                  {/* Marquée puis revenue : elle a suivi une formation depuis,
+                      la marque ne la couvre plus. On dit laquelle — sans quoi
+                      son retour dans la liste ressemble à une erreur. */}
+                  {!p.termine && p.modules_depuis_marque > 0 && (
+                    <span className="rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800">
+                      {p.modules_depuis_marque} nouvelle
+                      {p.modules_depuis_marque > 1 ? "s" : ""} formation
+                      {p.modules_depuis_marque > 1 ? "s" : ""} depuis
+                      {p.titres_depuis_marque?.length ? ` : ${p.titres_depuis_marque.join(", ")}` : ""}
                     </span>
                   )}
                   {p.fiches.length > 1 && (
@@ -1549,24 +1629,38 @@ function ParParticipant() {
                       {" · "}{p.modules_recus} déjà reçue{p.modules_recus > 1 ? "s" : ""}
                     </span>
                   )}
+                  {/* Qui a décidé, et quand : c'est une décision humaine, pas
+                      un constat de la plateforme. */}
+                  {p.termine && (
+                    <span className="text-emerald-700">
+                      {" · "}servie
+                      {p.marque_par ? ` par ${p.marque_par}` : ""}
+                      {p.marque_le ? ` le ${formatDateCourte(p.marque_le)}` : ""}
+                    </span>
+                  )}
                 </span>
               </span>
               <span
                 className={`flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                  p.modules_a_envoyer > 0
-                    ? "bg-orange-50 text-orange-700"
-                    : "bg-emerald-50 text-emerald-700"
+                  p.termine
+                    ? "bg-emerald-100 text-emerald-800"
+                    : p.modules_a_envoyer > 0
+                      ? "bg-orange-50 text-orange-700"
+                      : "bg-emerald-50 text-emerald-700"
                 }`}
               >
-                {p.modules_a_envoyer > 0
-                  ? `${p.modules_a_envoyer} à envoyer`
-                  : `${p.modules_recus} reçue${p.modules_recus > 1 ? "s" : ""}`}
+                {p.termine
+                  ? "servie"
+                  : p.modules_a_envoyer > 0
+                    ? `${p.modules_a_envoyer} à envoyer`
+                    : `${p.modules_recus} reçue${p.modules_recus > 1 ? "s" : ""}`}
               </span>
               <ChevronDown
                 className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform ${depliee ? "rotate-180" : ""}`}
                 aria-hidden="true"
               />
             </button>
+            </div>
 
             {depliee && (
               <div className="space-y-3 border-t border-slate-200 px-4 py-3">

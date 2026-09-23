@@ -33,6 +33,7 @@ const { ensureCoachDevicesSchema } = require("./migrations/coachDevices");
 const { ensureCampagnesSchema } = require("./migrations/campagnesSchema");
 const { ensureContactsPartages } = require("./migrations/contactsPartages");
 const { ensureAttestationsEnvoyees } = require("./migrations/attestationsEnvoyees");
+const { ensureAttestationsTerminees } = require("./migrations/attestationsTerminees");
 const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
 const { ensureEmargementPartenaire } = require("./migrations/emargementPartenaire");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
@@ -736,6 +737,15 @@ pool.query(`
     console.log("Migration OK: attestations envoyees");
   } catch (e) {
     console.error("Migration attestations envoyees ECHOUEE :", e.message);
+  }
+})();
+
+(async () => {
+  try {
+    await ensureAttestationsTerminees();
+    console.log("Migration OK: attestations terminees");
+  } catch (e) {
+    console.error("Migration attestations terminees ECHOUEE :", e.message);
   }
 })();
 

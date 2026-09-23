@@ -9,6 +9,7 @@ const { classerParAssiduite } = require("../services/assiduite");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
 const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
+const { ensureAttestationsTerminees } = require("../migrations/attestationsTerminees");
 
 const router = express.Router();
 
@@ -84,6 +85,19 @@ async function etatDesPersonnes(req) {
     envoyees.rows.map((r) => [`${r.activity_id}:${r.participant_id}`, r])
   );
 
+  /* Les personnes qu'on a declarees servies. La marque est posee sur chacune
+     de leurs fiches, et porte les activites connues a ce moment-la. */
+  let terminees = { rows: [] };
+  try {
+    terminees = await pool.query(
+      "SELECT participant_id, activites, marque_par_nom, marque_le FROM attestations_terminees"
+    );
+  } catch (err) {
+    if (err?.code !== "42P01") throw err;
+    await ensureAttestationsTerminees();
+  }
+  const marques = new Map(terminees.rows.map((r) => [r.participant_id, r]));
+
   const personnes = classerParAssiduite(lignes.rows).map((x) => {
     /* Combien de seances portent chaque intitule. Au-dela d'une, c'est la
        repetition que l'envoi par activite ne montrait pas. */
@@ -128,6 +142,21 @@ async function etatDesPersonnes(req) {
         .map((l) => String(l.email).trim())
     )];
 
+    /* La marque « c'est réglé », s'il y en a une sur l'une de ses fiches.
+       La plus récente fait foi : deux fiches marquées à deux moments
+       differents decrivent le meme parcours a deux etats, et c'est le dernier
+       qui dit ce qui etait connu quand on a decide. */
+    const marque = x.fiches
+      .map((id) => marques.get(id))
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.marque_le) - new Date(a.marque_le))[0] || null;
+
+    /* Ce que la marque ne couvre pas : les formations suivies depuis. C'est la
+       condition qui empeche une case cochee de faire disparaitre pour toujours
+       quelqu'un qui a droit a un nouveau document. */
+    const couvertes = new Set(marque?.activites || []);
+    const nouveaux = marque ? modules.filter((m) => !couvertes.has(m.id)) : [];
+
     return {
       ...x,
       modules,
@@ -135,6 +164,14 @@ async function etatDesPersonnes(req) {
       modules_a_envoyer: modules.filter((m) => m.suggere).length,
       modules_recus: modules.filter((m) => m.deja_envoyee).length,
       titres_repetes: [...parTitre.values()].filter((n) => n > 1).length,
+      /* Marquee, et toujours a jour : rien n'est venu s'ajouter depuis. */
+      termine: Boolean(marque) && nouveaux.length === 0,
+      marque_le: marque?.marque_le || null,
+      marque_par: marque?.marque_par_nom || null,
+      /* Marquee, mais depassee : on le dit plutot que de la faire reapparaitre
+         sans explication. */
+      modules_depuis_marque: nouveaux.length,
+      titres_depuis_marque: nouveaux.map((m) => m.titre).slice(0, 3),
     };
   });
 
@@ -148,8 +185,16 @@ router.get("/", authMiddleware, async (req, res) => {
     const personnes = await etatDesPersonnes(req);
     res.json({
       personnes: personnes.length,
-      a_servir: personnes.filter((p) => p.modules_a_envoyer > 0 && p.adresses.length).length,
+      /* Une personne declaree servie n'attend plus rien : elle ne compte pas
+         parmi celles a servir, meme si des modules restent sans trace
+         d'envoi — c'est tout l'objet de la marque. */
+      a_servir: personnes.filter(
+        (p) => p.modules_a_envoyer > 0 && p.adresses.length && !p.termine
+      ).length,
       sans_adresse: personnes.filter((p) => !p.adresses.length).length,
+      terminees: personnes.filter((p) => p.termine).length,
+      /* Marquees, puis revenues : elles ont suivi une formation depuis. */
+      revenues: personnes.filter((p) => !p.termine && p.modules_depuis_marque > 0).length,
       /* Le chiffre qui justifie cet ecran : combien de personnes ont suivi
          deux fois le meme intitule. */
       avec_repetition: personnes.filter((p) => p.titres_repetes > 0).length,
@@ -158,6 +203,108 @@ router.get("/", authMiddleware, async (req, res) => {
   } catch (err) {
     console.error("[ATTESTATIONS PAR PERSONNE]", err);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== « C'EST REGLE POUR CETTE PERSONNE » =====
+ *
+ * Une decision, pas un constat : toutes les attestations ne partent pas d'ici.
+ * Une remise en main propre, un document envoye depuis une autre boite, un
+ * beneficiaire qui n'en veut pas — dans tous ces cas la personne restait dans
+ * la liste des gens a servir, indefiniment.
+ *
+ * La marque porte les activites connues au moment ou elle est posee. Si la
+ * personne suit une nouvelle formation ensuite, la marque ne couvre plus ce qui
+ * s'ajoute et elle revient dans la liste : une case cochee ne doit pas faire
+ * disparaitre pour toujours quelqu'un qui a droit a un nouveau document.
+ */
+router.post("/terminer", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const fiches = Array.isArray(req.body?.fiches)
+      ? [...new Set(req.body.fiches.map(Number).filter(Number.isInteger))] : [];
+    const termine = req.body?.termine !== false;
+    if (!fiches.length) return res.status(400).json({ error: "Aucune fiche indiquée." });
+    if (fiches.length > 200) return res.status(400).json({ error: "Trop de fiches en une fois." });
+
+    /* Le perimetre se reverifie ici : sans ce controle, un partenaire pourrait
+       marquer les beneficiaires d'un autre. Une fiche n'est retenue que si
+       l'utilisateur voit au moins une de ses activites. */
+    const { where, params } = perimetre(req);
+    const { rows: visibles } = await client.query(
+      `SELECT DISTINCT ap.participant_id
+         FROM activity_participants ap
+         JOIN activities a ON a.id = ap.activity_id
+         ${where ? `${where} AND` : "WHERE"} ap.participant_id = ANY($${params.length + 1}::int[])`,
+      [...params, fiches]
+    );
+    const retenues = visibles.map((r) => r.participant_id);
+    if (!retenues.length) return res.status(403).json({ error: "Accès refusé" });
+
+    await ensureAttestationsTerminees().catch(() => {});
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let touchees = 0;
+    if (termine) {
+      /* L'instantane du parcours est calcule par le serveur, pas recu : la
+         page pourrait en envoyer un perime, et la marque couvrirait alors des
+         formations qu'on n'a pas regardees. */
+      const { rows: activites } = await client.query(
+        `SELECT DISTINCT activity_id FROM activity_participants
+          WHERE participant_id = ANY($1::int[])`,
+        [retenues]
+      );
+      const ids = activites.map((r) => r.activity_id);
+
+      /* Le jeton ne porte que l'identifiant et le role : sans cette lecture,
+         la marque dirait « posee par personne » et on ne saurait pas a qui
+         demander pourquoi. */
+      const { rows: auteur } = await client.query(
+        "SELECT full_name FROM users WHERE id = $1",
+        [req.user.id]
+      );
+
+      const r = await client.query(
+        `INSERT INTO attestations_terminees
+           (participant_id, activites, marque_par, marque_par_nom)
+         SELECT unnest($1::int[]), $2::int[], $3, $4
+         ON CONFLICT (participant_id) DO UPDATE
+           SET activites = EXCLUDED.activites,
+               marque_par = EXCLUDED.marque_par,
+               marque_par_nom = EXCLUDED.marque_par_nom,
+               marque_le = NOW()`,
+        [retenues, ids, req.user.id || null, auteur[0]?.full_name || null]
+      );
+      touchees = r.rowCount;
+    } else {
+      const r = await client.query(
+        "DELETE FROM attestations_terminees WHERE participant_id = ANY($1::int[])",
+        [retenues]
+      );
+      touchees = r.rowCount;
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    await logAudit(
+      req, termine ? "CREATE" : "DELETE", "attestations_terminees", null,
+      `${retenues.length} fiche(s)`,
+      { motif: termine ? "attestations déclarées servies" : "marque retirée", fiches: retenues }
+    );
+
+    res.json({ fiches: retenues.length, lignes: touchees, termine });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[ATTESTATIONS TERMINEES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
   }
 });
 
