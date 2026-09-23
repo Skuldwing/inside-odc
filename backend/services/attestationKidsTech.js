@@ -313,14 +313,21 @@ function genererAttestationKidsTech({
           { ...COLONNE, y: 4.10 * POUCE, interligne: INTERLIGNE }
         );
         /* La ligne manuscrite respire : un peu d'air au-dessus, et la suite
-           de la phrase reprend en dessous. */
-        const ligneModule = basIntro + 20;
-        traitPlein(ligneModule);
+           de la phrase reprend en dessous.
+
+           Le trait passe sous les jambages au lieu de suivre la ligne
+           d'ecriture. L'intitule est long — il remplit presque toute la
+           colonne — et un trait pose a hauteur d'ecriture disparaissait
+           derriere les lettres : il n'en restait qu'un bout a chaque bout
+           de ligne. Le nom, plus court, laisse voir le sien de part et
+           d'autre, d'ou son trait reste a hauteur d'ecriture. */
+        const ligneModule = basIntro + 16;
+        traitPlein(ligneModule + 8);
         ecrireManuscrit(doc, intitule, {
           ...COLONNE, ligneY: ligneModule, taille: 26, plancher: 14,
         });
         basDuParagraphe = paragrapheRiche(
-          doc, cadre, { ...COLONNE, y: ligneModule + 10, interligne: INTERLIGNE }
+          doc, cadre, { ...COLONNE, y: ligneModule + 18, interligne: INTERLIGNE }
         );
       } else {
         basDuParagraphe = paragrapheRiche(
