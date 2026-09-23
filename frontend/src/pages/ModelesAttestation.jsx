@@ -36,6 +36,7 @@ import { useToast, useConfirm, EmptyState } from "../components/ui";
 
 const VIDE = {
   nom: "",
+  style: "tech-ki",
   bandeau_avant: "",
   bandeau_apres: "",
   programme: "",
@@ -46,6 +47,33 @@ const VIDE = {
 };
 
 const CHAMPS_TEXTE = Object.keys(VIDE);
+
+/* Les deux maquettes n'écrivent pas leur titre au même endroit ni de la même
+   façon : dans le Tech-Ki c'est un mot coupé en deux dans le coin, dans le
+   Kids Tech un surtitre et un grand mot au milieu. Les libellés du formulaire
+   suivent, sinon on remplit deux cases sans savoir ce qu'on écrit. */
+const MAQUETTES = {
+  "tech-ki": {
+    libelle: "Tech-Ki",
+    resume: "Sobre, pour les formations adultes.",
+    titreBandeau: "Bandeau en haut à droite",
+    aideBandeau:
+      "Les deux morceaux s'écrivent à la suite ; le second en orange. Pensez à l'espace si les mots sont séparés. Un logo de partenaire prend leur place.",
+    exemples: ["TECH-", "KI"],
+    aideLogo: "Il remplace le bandeau, en haut à droite.",
+  },
+  "kids-tech": {
+    libelle: "Kids Tech",
+    resume: "Illustré et coloré, pour les enfants — participation ou Super Codeur.",
+    titreBandeau: "Titre de l'attestation",
+    aideBandeau:
+      "Le premier tient sur une petite ligne, le second s'écrit en très grand dessous. « ATTESTATION DE » puis « SUPER CODEUR » ou « PARTICIPATION ». Un titre long se resserre pour tenir.",
+    exemples: ["ATTESTATION DE", "SUPER CODEUR"],
+    aideLogo: "Il se place à côté du logo du centre, en bas à gauche.",
+  },
+};
+
+const maquetteDe = (cle) => MAQUETTES[cle] || MAQUETTES["tech-ki"];
 
 
 /**
@@ -293,7 +321,9 @@ export default function ModelesAttestation() {
     setSelection(modele ? modele.id : "nouveau");
     setRattaches(modele ? modele.dispositifs.map((d) => d.id) : []);
     const base = { ...VIDE };
-    if (modele) for (const c of CHAMPS_TEXTE) base[c] = modele[c] ?? "";
+    /* La maquette n'est pas un texte : une valeur vide laisserait les deux
+       boutons décochés, alors que le document en a forcément une. */
+    if (modele) for (const c of CHAMPS_TEXTE) base[c] = modele[c] ?? (c === "style" ? VIDE.style : "");
     setForm(base);
     setApercu((url) => {
       if (url) URL.revokeObjectURL(url);
@@ -506,27 +536,55 @@ export default function ModelesAttestation() {
                   </p>
                 </div>
 
-                {/* Le bandeau du coin supérieur droit, en deux morceaux. */}
+                {/* La maquette : c'est elle qui décide du dessin, donc de ce
+                    que veulent dire les deux cases qui suivent. */}
                 <div>
-                  <label className="text-sm font-medium">Bandeau en haut à droite</label>
+                  <label className="text-sm font-medium">Maquette</label>
+                  <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                    {Object.entries(MAQUETTES).map(([cle, m]) => (
+                      <label
+                        key={cle}
+                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 ${
+                          form.style === cle
+                            ? "border-orange-400 bg-orange-50"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="style-modele"
+                          className="mt-0.5 accent-orange-500"
+                          checked={form.style === cle}
+                          onChange={() => setForm((f) => ({ ...f, style: cle }))}
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-slate-800">{m.libelle}</span>
+                          <span className="block text-xs text-slate-500">{m.resume}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Le titre du document, en deux morceaux — leur rôle dépend de
+                    la maquette choisie juste au-dessus. */}
+                <div>
+                  <label className="text-sm font-medium">{maquetteDe(form.style).titreBandeau}</label>
                   <div className="mt-1 grid grid-cols-2 gap-3">
                     <input
                       className="input"
-                      placeholder="TECH-"
+                      placeholder={maquetteDe(form.style).exemples[0]}
                       value={form.bandeau_avant}
                       onChange={modifier("bandeau_avant")}
                     />
                     <input
                       className="input"
-                      placeholder="KI"
+                      placeholder={maquetteDe(form.style).exemples[1]}
                       value={form.bandeau_apres}
                       onChange={modifier("bandeau_apres")}
                     />
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Les deux morceaux s'écrivent à la suite ; le second en orange. Pensez à
-                    l'espace si les mots sont séparés. Un logo de partenaire prend leur place.
-                  </p>
+                  <p className="mt-1 text-xs text-gray-500">{maquetteDe(form.style).aideBandeau}</p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -592,7 +650,7 @@ export default function ModelesAttestation() {
                     <div>
                       <p className="text-sm font-medium">Logo du partenaire</p>
                       <p className="text-xs text-gray-500">
-                        PNG ou JPEG, 2 Mo maximum. Il remplace le bandeau, en haut à droite.
+                        PNG ou JPEG, 2 Mo maximum. {maquetteDe(form.style).aideLogo}
                       </p>
                     </div>
                     {courant?.a_logo && (

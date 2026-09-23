@@ -41,6 +41,15 @@ async function ensureModelesAttestation() {
     )
   `);
 
+  /* Le dessin du document. « tech-ki » est celui d'origine ; « kids-tech »
+     est le modele illustre destine aux enfants, sur lequel s'ecrivent les
+     attestations de Super Codeur. Les modeles existants gardent le premier :
+     changer le dessin d'une attestation deja delivree serait un contresens. */
+  await pool.query(
+    `ALTER TABLE modeles_attestation
+       ADD COLUMN IF NOT EXISTS style TEXT NOT NULL DEFAULT 'tech-ki'`
+  );
+
   /* Un dispositif choisit son modele. A defaut, celui marque par defaut. */
   await pool.query(
     `ALTER TABLE devices

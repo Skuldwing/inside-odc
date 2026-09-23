@@ -1,5 +1,5 @@
 const { generateAttestationPDF } = require("./attestation");
-const { genererAttestationTechKi, ressourcesPresentes } = require("./attestationTechKi");
+const { genererAttestation, ressourcesManquantes } = require("./attestationModele");
 const { modelePourActivite } = require("../routes/modelesAttestation.routes");
 
 /**
@@ -12,15 +12,14 @@ const { modelePourActivite } = require("../routes/modelesAttestation.routes");
  * ici, pas la ; un intitule borne d'un cote, brut de l'autre.
  */
 
-/* Le modele Tech-Ki fourni par l'equipe remplace le rendu generique des que
-   ses ressources sont en place — fond, logo, signature, police manuscrite.
-   Si l'une manque, on retombe sur l'ancien rendu plutot que d'echouer. */
-const MODELE_TECH_KI_DISPONIBLE = ressourcesPresentes().length === 0;
-if (!MODELE_TECH_KI_DISPONIBLE) {
-  console.warn(
-    "[ATTESTATION] modele Tech-Ki indisponible, ressources manquantes :",
-    ressourcesPresentes().join(", ")
-  );
+/* Les maquettes fournies par l'equipe remplacent le rendu generique des que
+   leurs ressources sont en place — fond, illustrations, signature, police
+   manuscrite. Si l'une manque, on retombe sur l'ancien rendu plutot que
+   d'echouer. */
+const RESSOURCES_MANQUANTES = ressourcesManquantes();
+const MODELE_TECH_KI_DISPONIBLE = !RESSOURCES_MANQUANTES["tech-ki"];
+for (const [style, liste] of Object.entries(RESSOURCES_MANQUANTES)) {
+  console.warn(`[ATTESTATION] maquette ${style} indisponible, il manque :`, liste.join(", "));
 }
 
 /* L'intitule du module tel qu'il sera trace sur le document. Par defaut celui
@@ -41,7 +40,7 @@ async function attestationPourActivite({ participant, activity, module: intitule
        le COJOJ porte le logo et la mention du partenaire. A defaut, le modele
        par defaut ; a defaut encore, les valeurs d'origine du rendu. */
     const modele = await modelePourActivite(activity);
-    return genererAttestationTechKi({
+    return genererAttestation({
       participant,
       /* Le module imprime sur la ligne est l'intitule de la seance : c'est ce
          que la personne a suivi, plus parlant que le nom du dispositif. */

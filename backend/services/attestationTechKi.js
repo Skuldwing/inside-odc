@@ -463,4 +463,16 @@ function ressourcesPresentes() {
     .map(([nom]) => nom);
 }
 
-module.exports = { genererAttestationTechKi, ressourcesPresentes };
+/* Les outils de mise en page sont partages avec le modele Kids Tech : meme
+   maniere de composer une phrase a plusieurs styles, meme ecriture manuscrite
+   posee sur une ligne. Les exporter ne change rien a ce document — le dessin
+   ci-dessus reste intact. */
+module.exports = {
+  genererAttestationTechKi,
+  ressourcesPresentes,
+  dateEnToutesLettres,
+  nomComplet,
+  tailleQuiTient,
+  paragrapheRiche,
+  ecrireManuscrit,
+};
