@@ -17,7 +17,7 @@ import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import {
   Plus, Mail, MessageSquare, Calendar, ShieldAlert, Zap,
-  Save, RotateCcw, Check, ChevronRight, ChevronDown,
+  Save, RotateCcw, Check, ChevronLeft, ChevronRight, ChevronDown,
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Link as LinkIcon,
@@ -1269,6 +1269,13 @@ function ParParticipant() {
      de l'aller-retour, pour qu'un double clic n'envoie pas deux ordres
      contraires. */
   const [marquage, setMarquage] = useState(null);
+  /* Pagination. Le rapprochement rend une entrée par personne, avec tous ses
+     modules : passé quelques centaines de bénéficiaires, tout afficher d'un
+     coup fabrique des milliers de lignes que le navigateur met plusieurs
+     secondes à poser, pour un écran qu'on ne lit de toute façon pas au-delà
+     du premier tiers. */
+  const [page, setPage] = useState(1);
+  const [parPage, setParPage] = useState(25);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -1362,6 +1369,16 @@ function ParParticipant() {
       );
     });
   }, [duDispositif, recherche, seulsARegler]);
+
+  const pages = Math.max(1, Math.ceil(filtres.length / parPage));
+  const pageSure = Math.min(page, pages);
+  const visibles = filtres.slice((pageSure - 1) * parPage, pageSure * parPage);
+
+  /* Changer de filtre remet au début : rester page 4 d'une liste qui n'en a
+     plus que deux afficherait un vide inexplicable. */
+  useEffect(() => {
+    setPage(1);
+  }, [recherche, seulsARegler, dispositif, modeDispositif, parPage]);
 
   /* « Pour celle-là, c'est réglé. » Toutes les attestations ne partent pas
      d'ici : une remise en main propre, un envoi depuis une autre boîte, un
@@ -1505,6 +1522,16 @@ function ParParticipant() {
             )}
           </>
         )}
+        <select
+          value={parPage}
+          onChange={(e) => setParPage(Number(e.target.value))}
+          className="input text-sm sm:w-36"
+          aria-label="Nombre de personnes par page"
+        >
+          {[10, 25, 50, 100].map((n) => (
+            <option key={n} value={n}>{n} par page</option>
+          ))}
+        </select>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
           <input
             type="checkbox"
@@ -1543,7 +1570,7 @@ function ParParticipant() {
       {filtres.length === 0 ? (
         <EmptyState icon={Award} title="Personne à servir" compact
           description="Tout le monde a reçu ses attestations, ou aucun bénéficiaire ne correspond." />
-      ) : filtres.map((p) => {
+      ) : visibles.map((p) => {
         const depliee = ouverte === p.cle;
         const coches = p.modules.filter((m) => choix[cle(m)]).length;
         return (
@@ -1781,6 +1808,41 @@ function ParParticipant() {
           </div>
         );
       })}
+
+      {filtres.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            {filtres.length === data.personnes
+              ? `${filtres.length} personne${filtres.length > 1 ? "s" : ""}`
+              : `${filtres.length} personne${filtres.length > 1 ? "s" : ""} sur ${data.personnes}`}
+            {pages > 1 && ` · page ${pageSure} / ${pages}`}
+          </p>
+
+          {pages > 1 && (
+            <div className="flex items-center gap-2">
+              {/* Changer de page referme la fiche ouverte : elle appartient à
+                  l'écran qu'on quitte, et la retrouver dépliée au retour
+                  donnerait l'impression d'avoir cliqué. */}
+              <button
+                type="button"
+                onClick={() => { setOuverte(null); setPage((n) => Math.max(1, n - 1)); }}
+                disabled={pageSure <= 1}
+                className="btn-ghost border text-xs disabled:opacity-40"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Précédent
+              </button>
+              <button
+                type="button"
+                onClick={() => { setOuverte(null); setPage((n) => Math.min(pages, n + 1)); }}
+                disabled={pageSure >= pages}
+                className="btn-ghost border text-xs disabled:opacity-40"
+              >
+                Suivant <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
