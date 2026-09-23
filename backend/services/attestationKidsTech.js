@@ -239,17 +239,23 @@ function genererAttestationKidsTech({
           width: ZONE_TITRE.l, align: "center", lineBreak: false,
         });
 
-      /* ── « Nous soussignés… » ─────────────────────────────────────────── */
+      /* ── « … certifie que » ───────────────────────────────────────────
+         Le modèle d'origine portait « Nous soussignés, Orange Digital
+         Center, certifions que ». La formule est bancale : « nous
+         soussignés » désigne des personnes qui signent, pas une
+         structure, et elle impose un pluriel là où une seule entité
+         atteste. On s'en tient à l'attestation elle-même. */
       const petit = { police: "Helvetica", taille: 12.99, couleur: NOIR };
       const petitGras = { police: "Helvetica-Bold", taille: 12.99, couleur: NOIR };
       const petitOrange = { police: "Helvetica-Bold", taille: 12.99, couleur: ORANGE };
+      const premierMot = M.organisation.split(" ")[0];
+      const resteDuNom = M.organisation.split(" ").slice(1).join(" ");
       paragrapheRiche(
         doc,
         [
-          { ...petit, texte: "Nous soussignés, " },
-          { ...petitOrange, texte: M.organisation.split(" ")[0] },
-          { ...petitGras, texte: " " + M.organisation.split(" ").slice(1).join(" ") },
-          { ...petit, texte: ", certifions que" },
+          { ...petitOrange, texte: premierMot },
+          ...(resteDuNom ? [{ ...petitGras, texte: " " + resteDuNom }] : []),
+          { ...petit, texte: " certifie que" },
         ],
         { x: 4.80 * POUCE, largeur: 5.43 * POUCE, y: 2.88 * POUCE, interligne: 18 }
       );
