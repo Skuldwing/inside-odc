@@ -42,6 +42,7 @@ const FICHIERS = {
   curseur: path.join(ASSETS, "kids", "curseur.png"),
   etoiles: path.join(ASSETS, "kids", "etoiles.png"),
   ampoule: path.join(ASSETS, "kids", "ampoule.png"),
+  nuage: path.join(ASSETS, "kids", "nuage.png"),
   /* La signature vient du modele Kids Tech, pas de celle du Tech-Ki : c'est la
      meme personne, mais le detourage n'est pas le meme et celui-ci remplit la
      boite prevue. */
@@ -49,8 +50,11 @@ const FICHIERS = {
   manuscrite: path.join(ASSETS, "..", "fonts", "Caveat-Regular.ttf"),
 };
 
-/* La carte interieure, sur laquelle tout se pose. */
-const CARTE = { x: 0.38, y: 0.45, l: 10.99, h: 7.42, rayon: 0.22 };
+/* La carte interieure, sur laquelle tout se pose, et la couche orange qu'elle
+   recouvre : decalee de 0,10 pouce vers le bas et la droite, elle depasse sur
+   ces deux cotes et fait l'ombre portee du modele. */
+const CARTE = { x: 0.38, y: 0.45, l: 10.99, h: 7.42 };
+const OMBRE = { x: 0.48, y: 0.57, l: 10.99, h: 7.42 };
 
 /**
  * @param {object} options
@@ -107,11 +111,12 @@ function genererAttestationKidsTech({
          A pleine opacite, le document serait un arc-en-ciel avec du texte
          noir dessus — ce n'est pas ce que montre le modele. */
       const carte = () =>
-        doc.roundedRect(
-          CARTE.x * POUCE, CARTE.y * POUCE,
-          CARTE.l * POUCE, CARTE.h * POUCE, CARTE.rayon * POUCE
-        );
+        doc.rect(CARTE.x * POUCE, CARTE.y * POUCE, CARTE.l * POUCE, CARTE.h * POUCE);
 
+      doc
+        .rect(OMBRE.x * POUCE, OMBRE.y * POUCE, OMBRE.l * POUCE, OMBRE.h * POUCE)
+        .fillColor(ORANGE)
+        .fill();
       carte().fillColor("#FFFFFF").fill();
 
       doc.save();
@@ -126,28 +131,40 @@ function genererAttestationKidsTech({
       /* ── Filets orange ───────────────────────────────────────────────
          Deux horizontaux dans la carte, deux verticaux plus bas : ensemble ils
          dessinent un cadre ouvert aux quatre coins, ou se posent les curseurs. */
-      const filet = (x1, y1, x2, y2) =>
-        doc.lineWidth(1.1).strokeColor(ORANGE)
+      /* Tirets, pas un trait plein : c'est ce que trace le modele
+         (« sysDash », soit trois fois l'epaisseur du trait puis un blanc). */
+      const filet = (x1, y1, x2, y2, epaisseur) => {
+        doc.save();
+        doc.lineWidth(epaisseur).strokeColor(ORANGE).lineCap("round")
+          .dash(epaisseur * 3, { space: epaisseur })
           .moveTo(x1 * POUCE, y1 * POUCE).lineTo(x2 * POUCE, y2 * POUCE).stroke();
+        doc.undash();
+        doc.restore();
+      };
 
-      filet(0.71, 0.64, 11.04, 0.64);
-      filet(0.74, 7.70, 10.99, 7.70);
-      filet(0.58, 1.07, 0.58, 7.28);
-      filet(11.19, 1.07, 11.19, 7.28);
+      filet(0.71, 0.64, 11.04, 0.64, 2);
+      filet(0.74, 7.70, 10.99, 7.70, 2);
+      filet(0.58, 1.07, 0.58, 7.28, 1.5);
+      filet(11.19, 1.07, 11.19, 7.28, 1.5);
 
       /* ── Plages claires ───────────────────────────────────────────────
          Trois taches blanches a 64 % attenuent le lavis la ou se posent le
          logo, la medaille et la signature : sans elles, ces trois elements se
          lisent sur un fond colore. */
-      const plage = (x, y, l, h) => {
+      const nuage = (x, y, l, h, angle) => {
         doc.save();
-        doc.fillOpacity(0.64).fillColor("#FFFFFF");
-        doc.roundedRect(x * POUCE, y * POUCE, l * POUCE, h * POUCE, 0.18 * POUCE).fill();
+        if (angle) {
+          doc.rotate(angle, { origin: [(x + l / 2) * POUCE, (y + h / 2) * POUCE] });
+        }
+        doc.fillOpacity(0.64);
+        doc.image(FICHIERS.nuage, x * POUCE, y * POUCE, {
+          width: l * POUCE, height: h * POUCE,
+        });
         doc.restore();
       };
-      plage(0.71, 6.21, 2.12, 1.29);
-      plage(9.33, 0.73, 1.97, 1.19);
-      plage(9.34, 6.33, 2.04, 1.23);
+      nuage(0.71, 6.21, 2.12, 1.29, 0);
+      nuage(9.33, 0.73, 1.97, 1.19, 33.9);
+      nuage(9.34, 6.33, 2.04, 1.23, 150.2);
 
       /* ── Décors ──────────────────────────────────────────────────────── */
       doc.image(FICHIERS.enfants, 0.43 * POUCE, 0.40 * POUCE, {
@@ -196,9 +213,13 @@ function genererAttestationKidsTech({
          49,9 pt, « SUPER CODEUR » aussi, mais un intitule plus long
          deborderait de la carte. */
       const ZONE_TITRE = { x: 4.72 * POUCE, l: 5.60 * POUCE };
+      /* Le surtitre est interlettre dans le modele : « A T T E S T A T I O N
+         D E ». Sans cet ecart, la ligne est beaucoup plus courte et le
+         document ne se reconnait pas. */
       doc.font("Helvetica").fontSize(20.85).fillColor(NOIR)
         .text(M.surtitre, ZONE_TITRE.x, 1.22 * POUCE, {
           width: ZONE_TITRE.l, align: "center", lineBreak: false, ellipsis: true,
+          characterSpacing: 6.25,
         });
 
       doc.font("Helvetica-Bold");
@@ -230,10 +251,13 @@ function genererAttestationKidsTech({
          Quatre traits, comme sur du papier réglé : le modèle est fait pour
          être rempli à la main. On les garde — ici ils font partie du dessin,
          et le nom s'écrit dessus. */
+      doc.save();
+      doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt").dash(0.75, { space: 0.75 });
       for (const y of [3.57, 3.71, 3.85, 3.99]) {
-        doc.lineWidth(0.7).strokeColor("#B9BDC7")
-          .moveTo(5.37 * POUCE, y * POUCE).lineTo((5.37 + 4.68) * POUCE, y * POUCE).stroke();
+        doc.moveTo(5.37 * POUCE, y * POUCE).lineTo((5.37 + 4.68) * POUCE, y * POUCE).stroke();
       }
+      doc.undash();
+      doc.restore();
       ecrireManuscrit(doc, nomComplet(participant), {
         x: 5.37 * POUCE, largeur: 4.68 * POUCE, ligneY: 3.87 * POUCE, taille: 30, plancher: 15,
       });
@@ -268,9 +292,12 @@ function genererAttestationKidsTech({
 
       /* ── « Fait à : » ─────────────────────────────────────────────────── */
       doc.font("Helvetica").fontSize(10).fillColor(GRIS)
-        .text("Fait à :", 5.92 * POUCE, 5.90 * POUCE, { lineBreak: false });
-      doc.lineWidth(0.7).strokeColor(NOIR)
+        .text("Fait à :", 5.92 * POUCE, 5.90 * POUCE, { lineBreak: false, characterSpacing: 0.4 });
+      doc.save();
+      doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt").dash(0.75, { space: 0.75 })
         .moveTo(6.49 * POUCE, 6.02 * POUCE).lineTo((6.49 + 2.36) * POUCE, 6.02 * POUCE).stroke();
+      doc.undash();
+      doc.restore();
       ecrireManuscrit(doc, [lieu, quand].filter(Boolean).join(", le "), {
         x: 6.49 * POUCE, largeur: 2.36 * POUCE, ligneY: 6.02 * POUCE, taille: 15, plancher: 9,
       });
@@ -285,10 +312,12 @@ function genererAttestationKidsTech({
       doc.font("Helvetica-Bold").fontSize(9.87).fillColor(NOIR)
         .text(M.signataireNom, 8.28 * POUCE, 7.17 * POUCE, {
           width: 2.55 * POUCE, align: "center", lineBreak: false, ellipsis: true,
+          characterSpacing: 0.29,
         });
       doc.font("Helvetica").fontSize(8.35).fillColor(NOIR)
         .text(M.signataireFonction, 8.23 * POUCE, 7.38 * POUCE, {
           width: 2.64 * POUCE, align: "center", lineBreak: false, ellipsis: true,
+          characterSpacing: 0.25,
         });
 
       /* ── Logos ───────────────────────────────────────────────────────
