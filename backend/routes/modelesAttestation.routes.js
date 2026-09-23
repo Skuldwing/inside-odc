@@ -5,7 +5,7 @@ const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const { logAudit } = require("../services/audit");
 const { ensureModelesAttestation } = require("../migrations/modelesAttestation");
-const { genererAttestationTechKi } = require("../services/attestationTechKi");
+const { genererAttestation, styleRetenu, stylesDisponibles } = require("../services/attestationModele");
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
@@ -44,7 +44,7 @@ async function avecSchema(travail) {
 /* Jamais le logo dans la liste : une image par modele dans chaque reponse JSON
    ferait grossir la page pour rien. Un booleen suffit a savoir qu'il existe. */
 const CHAMPS = `
-  id, nom, bandeau_avant, bandeau_apres, programme, organisation, mention,
+  id, nom, style, bandeau_avant, bandeau_apres, programme, organisation, mention,
   signataire_nom, signataire_fonction, par_defaut,
   (logo_partenaire IS NOT NULL) AS a_logo
 `;
@@ -69,8 +69,16 @@ function lireTextes(corps) {
     const v = BORDS_CONSERVES.has(champ) ? brut : brut.trim();
     valeurs[champ] = v.trim() ? v.slice(0, LONGUEUR_MAX) : null;
   }
+  /* Le dessin du document. Une valeur inconnue retombe sur le modele
+     d'origine : la liste des maquettes est fermee, elle ne se dicte pas
+     depuis le navigateur. */
+  if (corps.style !== undefined) valeurs.style = styleRetenu(corps.style);
   return valeurs;
 }
+
+/* Les maquettes proposees au menu. Servie a part de la liste des modeles :
+   c'est un catalogue fixe, pas une donnee du centre. */
+router.get("/styles", authMiddleware, (_req, res) => res.json(stylesDisponibles()));
 
 /* ===== LISTE =====
    Avec les dispositifs rattaches : c'est la question que l'on se pose devant
@@ -363,7 +371,7 @@ router.post("/apercu", authMiddleware, requireAdmin, async (req, res) => {
       );
       if (r.rows[0]?.logo_partenaire) modele.logo_partenaire = r.rows[0].logo_partenaire;
     }
-    const pdf = await genererAttestationTechKi({
+    const pdf = await genererAttestation({
       participant: { prenom: "Prénom", nom: "Nom du participant" },
       module: String(corps.module || "Initiation au numérique").slice(0, 120),
       date: new Date(),
@@ -392,7 +400,7 @@ router.post("/generer", authMiddleware, requireAdmin, async (req, res) => {
     if (d.erreur) return res.status(400).json({ error: d.erreur });
 
     const modele = await modeleEnregistre(Number(corps.modele_id));
-    const pdf = await genererAttestationTechKi({
+    const pdf = await genererAttestation({
       participant: { prenom: d.prenom, nom: d.nom },
       module: d.intitule,
       date: d.date,
@@ -451,7 +459,7 @@ router.post("/envoyer", authMiddleware, requireAdmin, async (req, res) => {
     }
 
     const modele = await modeleEnregistre(Number(corps.modele_id));
-    const pdf = await genererAttestationTechKi({
+    const pdf = await genererAttestation({
       participant: { prenom: d.prenom, nom: d.nom },
       module: d.intitule,
       date: d.date,
