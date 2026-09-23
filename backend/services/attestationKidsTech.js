@@ -264,13 +264,15 @@ function genererAttestationKidsTech({
          Le modèle en portait quatre, comme du papier réglé : il était fait
          pour être rempli à la main. Ici le nom est imprimé, une seule ligne
          suffit — celle sur laquelle il repose. Les trois autres traversaient
-         le nom et le rendaient moins lisible. */
+         le nom et le rendaient moins lisible.
+
+         Trait plein : le pointillé du modèle appelait une écriture à la main,
+         ce qui n'a plus lieu d'être une fois le nom imprimé. */
       const LIGNE_NOM = 3.87;
       doc.save();
-      doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt").dash(0.75, { space: 0.75 });
+      doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt");
       doc.moveTo(5.37 * POUCE, LIGNE_NOM * POUCE)
         .lineTo((5.37 + 4.68) * POUCE, LIGNE_NOM * POUCE).stroke();
-      doc.undash();
       doc.restore();
       ecrireManuscrit(doc, nomComplet(participant), {
         x: 5.37 * POUCE, largeur: 4.68 * POUCE, ligneY: LIGNE_NOM * POUCE, taille: 30, plancher: 15,
