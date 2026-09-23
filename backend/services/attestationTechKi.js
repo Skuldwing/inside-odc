@@ -119,6 +119,11 @@ function paragrapheRiche(doc, segments, { x, largeur, y, interligne }) {
       curseur += mot.largeur;
     }
   });
+
+  /* Le bas du bloc, pour ce qui vient se poser dessous : le nombre de
+     lignes depend du texte, donc de l'intitule du module et du nom du
+     dispositif. Un appelant qui n'en a pas besoin ignore la valeur. */
+  return y + lignes.length * interligne;
 }
 
 function ecrireManuscrit(doc, texte, { x, largeur, ligneY, taille, plancher = 14 }) {

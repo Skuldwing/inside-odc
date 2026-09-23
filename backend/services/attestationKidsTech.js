@@ -239,24 +239,15 @@ function genererAttestationKidsTech({
           width: ZONE_TITRE.l, align: "center", lineBreak: false,
         });
 
-      /* ── « … certifie que » ───────────────────────────────────────────
-         Le modèle d'origine portait « Nous soussignés, Orange Digital
-         Center, certifions que ». La formule est bancale : « nous
-         soussignés » désigne des personnes qui signent, pas une
-         structure, et elle impose un pluriel là où une seule entité
-         atteste. On s'en tient à l'attestation elle-même. */
+      /* ── « décernée à » ───────────────────────────────────────────────
+         Le document ne se lit plus comme une declaration — « X certifie
+         que… » — mais comme une remise : le grand titre au-dessus annonce
+         ce qui est decerne, cette ligne dit a qui, et le nom suit juste
+         en dessous. La phrase court d'un bloc jusqu'au paragraphe. */
       const petit = { police: "Helvetica", taille: 12.99, couleur: NOIR };
-      const petitGras = { police: "Helvetica-Bold", taille: 12.99, couleur: NOIR };
-      const petitOrange = { police: "Helvetica-Bold", taille: 12.99, couleur: ORANGE };
-      const premierMot = M.organisation.split(" ")[0];
-      const resteDuNom = M.organisation.split(" ").slice(1).join(" ");
       paragrapheRiche(
         doc,
-        [
-          { ...petitOrange, texte: premierMot },
-          ...(resteDuNom ? [{ ...petitGras, texte: " " + resteDuNom }] : []),
-          { ...petit, texte: " certifie que" },
-        ],
+        [{ ...petit, texte: "décernée à" }],
         { x: 4.80 * POUCE, largeur: 5.43 * POUCE, y: 2.88 * POUCE, interligne: 18 }
       );
 
@@ -278,31 +269,41 @@ function genererAttestationKidsTech({
         x: 5.37 * POUCE, largeur: 4.68 * POUCE, ligneY: LIGNE_NOM * POUCE, taille: 30, plancher: 15,
       });
 
-      /* ── « a participé au programme… » ────────────────────────────────── */
+      /* ── « pour avoir participé… » ────────────────────────────────────
+         La suite de la phrase ouverte par « décernée à » : ce qui a été
+         suivi, quand, et dans quel cadre. Le paragraphe est cale sur la
+         meme largeur que le trait du nom — il tient en trois lignes au
+         lieu de quatre et le bloc se lit d'aplomb. */
       const corps = { police: "Helvetica", taille: 14.24, couleur: NOIR };
       const corpsGras = { police: "Helvetica-Bold", taille: 14.24, couleur: NOIR };
       const corpsOrange = { police: "Helvetica-Bold", taille: 14.24, couleur: ORANGE };
       const quand = dateEnToutesLettres(date);
-      paragrapheRiche(
+      const basDuParagraphe = paragrapheRiche(
         doc,
         [
-          { ...corps, texte: "a participé au programme " },
+          { ...corps, texte: "pour avoir participé à une session de formation ludique et pratique" },
+          ...(intitule
+            ? [{ ...corps, texte: " sur le module " }, { ...corpsGras, texte: intitule }]
+            : []),
+          { ...corps, texte: quand ? `, le ${quand},` : "," },
+          { ...corps, texte: " dans le cadre du programme " },
           { ...corpsOrange, texte: M.programme },
-          ...(intitule ? [{ ...corps, texte: ", module " }, { ...corpsGras, texte: intitule }] : []),
-          { ...corps, texte: quand ? `, le ${quand}` : "" },
-          { ...corps, texte: " à " },
+          { ...corps, texte: " de " },
           { ...corpsGras, texte: M.organisation },
           { ...corps, texte: "." },
         ].filter((s) => s.texte),
-        { x: 5.39 * POUCE, largeur: 4.25 * POUCE, y: 4.16 * POUCE, interligne: 20 }
+        { x: 5.37 * POUCE, largeur: 4.68 * POUCE, y: 4.16 * POUCE, interligne: 20 }
       );
 
       /* La mention du partenariat : un dispositif mené avec un tiers doit
-         pouvoir le dire sur le document. */
+         pouvoir le dire sur le document. Elle suit le paragraphe plutôt que
+         de tenir une position fixe : celui-ci fait trois ou quatre lignes
+         selon la longueur de l'intitulé, et la mention tombait dessus. Le
+         plafond la garde à distance du « Fait à : ». */
       if (M.mention) {
         doc.font("Helvetica-Oblique").fontSize(10).fillColor(GRIS)
-          .text(M.mention, 5.39 * POUCE, 5.20 * POUCE, {
-            width: 4.25 * POUCE, align: "center", lineBreak: false, ellipsis: true,
+          .text(M.mention, 5.37 * POUCE, Math.min(basDuParagraphe + 6, 5.62 * POUCE), {
+            width: 4.68 * POUCE, align: "center", lineBreak: false, ellipsis: true,
           });
       }
 
