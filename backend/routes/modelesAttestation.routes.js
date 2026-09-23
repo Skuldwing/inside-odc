@@ -380,6 +380,9 @@ router.post("/apercu", authMiddleware, requireAdmin, async (req, res) => {
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="apercu-modele.pdf"');
+    /* Un apercu doit montrer la maquette du jour, jamais une copie gardee
+       par le navigateur : c'est precisement ce qu'on vient y verifier. */
+    res.setHeader("Cache-Control", "no-store");
     res.send(pdf);
   } catch (err) {
     console.error("[MODELES ATTESTATION APERCU]", err);
@@ -419,6 +422,9 @@ router.post("/generer", authMiddleware, requireAdmin, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${nomFichier(d.prenom, d.nom)}"`);
     res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    /* Document nominatif : il ne reste ni dans le navigateur ni dans un
+       cache intermediaire. */
+    res.setHeader("Cache-Control", "no-store");
     res.send(pdf);
   } catch (err) {
     console.error("[ATTESTATION PONCTUELLE]", err);

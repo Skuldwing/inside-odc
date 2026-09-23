@@ -546,6 +546,11 @@ router.get("/:id/attestation-apercu", authMiddleware, requireWriteAccess, async 
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", 'inline; filename="attestation-apercu.pdf"');
+    /* Sans en-tete, le navigateur applique sa propre heuristique et peut
+       garder ce PDF : on a alors beau corriger la maquette et redeployer,
+       l'apercu continue d'afficher l'ancien document. Un document nominatif
+       n'a de toute facon rien a faire dans un cache partage. */
+    res.setHeader("Cache-Control", "no-store");
     res.send(pdf);
   } catch (err) {
     console.error("[ATTESTATION APERCU]", err);
