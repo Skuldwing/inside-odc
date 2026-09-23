@@ -222,10 +222,17 @@ function genererAttestationKidsTech({
           characterSpacing: 6.25,
         });
 
+      /* Le modele compose « PARTICIPATION » a 49,86 pt dans un Helvetica Now
+         Bold, plus etroit que l'Helvetica des polices standard du PDF : le meme
+         corps donne ici un mot 5 % plus large, qui vient frôler la medaille. On
+         cale donc sur la largeur du modele — 4,95 pouces — plutot que sur le
+         corps : le grand mot occupe la meme bande quelle que soit sa longueur,
+         et un titre plus long se resserre au lieu de deborder. */
+      const LARGEUR_TITRE = 4.95 * POUCE;
       doc.font("Helvetica-Bold");
       let tailleTitre = 49.86;
-      while (tailleTitre > 24 && doc.fontSize(tailleTitre).widthOfString(M.titre) > ZONE_TITRE.l) {
-        tailleTitre -= 1;
+      while (tailleTitre > 24 && doc.fontSize(tailleTitre).widthOfString(M.titre) > LARGEUR_TITRE) {
+        tailleTitre -= 0.5;
       }
       doc.fontSize(tailleTitre).fillColor(NOIR)
         .text(M.titre, ZONE_TITRE.x, 1.76 * POUCE, {
