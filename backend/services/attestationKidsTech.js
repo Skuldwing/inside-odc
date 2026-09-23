@@ -260,11 +260,15 @@ function genererAttestationKidsTech({
          Trait plein : le pointillé du modèle appelait une écriture à la main,
          ce qui n'a plus lieu d'être une fois le nom imprimé. */
       const LIGNE_NOM = 3.87;
-      doc.save();
-      doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt");
-      doc.moveTo(5.37 * POUCE, LIGNE_NOM * POUCE)
-        .lineTo((5.37 + 4.68) * POUCE, LIGNE_NOM * POUCE).stroke();
-      doc.restore();
+      /* Le meme trait sert au nom et a l'intitule du module : les deux
+         valeurs manuscrites du document reposent sur la meme reglure. */
+      const traitPlein = (y) => {
+        doc.save();
+        doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt");
+        doc.moveTo(5.37 * POUCE, y).lineTo((5.37 + 4.68) * POUCE, y).stroke();
+        doc.restore();
+      };
+      traitPlein(LIGNE_NOM * POUCE);
       ecrireManuscrit(doc, nomComplet(participant), {
         x: 5.37 * POUCE, largeur: 4.68 * POUCE, ligneY: LIGNE_NOM * POUCE, taille: 30, plancher: 15,
       });
@@ -311,6 +315,7 @@ function genererAttestationKidsTech({
         /* La ligne manuscrite respire : un peu d'air au-dessus, et la suite
            de la phrase reprend en dessous. */
         const ligneModule = basIntro + 20;
+        traitPlein(ligneModule);
         ecrireManuscrit(doc, intitule, {
           ...COLONNE, ligneY: ligneModule, taille: 26, plancher: 14,
         });
