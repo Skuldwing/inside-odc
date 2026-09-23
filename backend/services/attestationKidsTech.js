@@ -260,19 +260,20 @@ function genererAttestationKidsTech({
         { x: 4.80 * POUCE, largeur: 5.43 * POUCE, y: 2.88 * POUCE, interligne: 18 }
       );
 
-      /* ── Lignes du nom ────────────────────────────────────────────────
-         Quatre traits, comme sur du papier réglé : le modèle est fait pour
-         être rempli à la main. On les garde — ici ils font partie du dessin,
-         et le nom s'écrit dessus. */
+      /* ── Ligne du nom ─────────────────────────────────────────────────
+         Le modèle en portait quatre, comme du papier réglé : il était fait
+         pour être rempli à la main. Ici le nom est imprimé, une seule ligne
+         suffit — celle sur laquelle il repose. Les trois autres traversaient
+         le nom et le rendaient moins lisible. */
+      const LIGNE_NOM = 3.87;
       doc.save();
       doc.lineWidth(0.75).strokeColor(NOIR).lineCap("butt").dash(0.75, { space: 0.75 });
-      for (const y of [3.57, 3.71, 3.85, 3.99]) {
-        doc.moveTo(5.37 * POUCE, y * POUCE).lineTo((5.37 + 4.68) * POUCE, y * POUCE).stroke();
-      }
+      doc.moveTo(5.37 * POUCE, LIGNE_NOM * POUCE)
+        .lineTo((5.37 + 4.68) * POUCE, LIGNE_NOM * POUCE).stroke();
       doc.undash();
       doc.restore();
       ecrireManuscrit(doc, nomComplet(participant), {
-        x: 5.37 * POUCE, largeur: 4.68 * POUCE, ligneY: 3.87 * POUCE, taille: 30, plancher: 15,
+        x: 5.37 * POUCE, largeur: 4.68 * POUCE, ligneY: LIGNE_NOM * POUCE, taille: 30, plancher: 15,
       });
 
       /* ── « a participé au programme… » ────────────────────────────────── */
