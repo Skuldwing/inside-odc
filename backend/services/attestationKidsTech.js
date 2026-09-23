@@ -222,27 +222,40 @@ function genererAttestationKidsTech({
           characterSpacing: 6.25,
         });
 
+      /* Le modele compose « PARTICIPATION » a 49,86 pt dans un Helvetica Now
+         Bold, plus etroit que l'Helvetica des polices standard du PDF : le meme
+         corps donne ici un mot 5 % plus large, qui vient frôler la medaille. On
+         cale donc sur la largeur du modele — 4,95 pouces — plutot que sur le
+         corps : le grand mot occupe la meme bande quelle que soit sa longueur,
+         et un titre plus long se resserre au lieu de deborder. */
+      const LARGEUR_TITRE = 4.95 * POUCE;
       doc.font("Helvetica-Bold");
       let tailleTitre = 49.86;
-      while (tailleTitre > 24 && doc.fontSize(tailleTitre).widthOfString(M.titre) > ZONE_TITRE.l) {
-        tailleTitre -= 1;
+      while (tailleTitre > 24 && doc.fontSize(tailleTitre).widthOfString(M.titre) > LARGEUR_TITRE) {
+        tailleTitre -= 0.5;
       }
       doc.fontSize(tailleTitre).fillColor(NOIR)
         .text(M.titre, ZONE_TITRE.x, 1.76 * POUCE, {
           width: ZONE_TITRE.l, align: "center", lineBreak: false,
         });
 
-      /* ── « Nous soussignés… » ─────────────────────────────────────────── */
+      /* ── « … certifie que » ───────────────────────────────────────────
+         Le modèle d'origine portait « Nous soussignés, Orange Digital
+         Center, certifions que ». La formule est bancale : « nous
+         soussignés » désigne des personnes qui signent, pas une
+         structure, et elle impose un pluriel là où une seule entité
+         atteste. On s'en tient à l'attestation elle-même. */
       const petit = { police: "Helvetica", taille: 12.99, couleur: NOIR };
       const petitGras = { police: "Helvetica-Bold", taille: 12.99, couleur: NOIR };
       const petitOrange = { police: "Helvetica-Bold", taille: 12.99, couleur: ORANGE };
+      const premierMot = M.organisation.split(" ")[0];
+      const resteDuNom = M.organisation.split(" ").slice(1).join(" ");
       paragrapheRiche(
         doc,
         [
-          { ...petit, texte: "Nous soussignés, " },
-          { ...petitOrange, texte: M.organisation.split(" ")[0] },
-          { ...petitGras, texte: " " + M.organisation.split(" ").slice(1).join(" ") },
-          { ...petit, texte: ", certifions que" },
+          { ...petitOrange, texte: premierMot },
+          ...(resteDuNom ? [{ ...petitGras, texte: " " + resteDuNom }] : []),
+          { ...petit, texte: " certifie que" },
         ],
         { x: 4.80 * POUCE, largeur: 5.43 * POUCE, y: 2.88 * POUCE, interligne: 18 }
       );
