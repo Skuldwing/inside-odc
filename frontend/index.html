@@ -46,5 +46,78 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+
+    <!-- Filet de secours contre la page blanche.
+
+         Un service worker qui a gardé une ancienne coquille en cache peut
+         servir un document dont les fichiers JavaScript n'existent plus : ils
+         répondent 404, rien ne s'exécute, et la page reste vide. L'application
+         ne peut pas se réparer elle-même dans ce cas — son propre code n'a
+         jamais démarré. Il faut donc que le secours vive ici, dans le document,
+         en clair : ce script-ci s'exécute même quand tout le reste a échoué.
+
+         La personne n'a alors rien à faire. Sans lui, elle reste devant un
+         écran blanc, et seule une désinscription manuelle du service worker
+         depuis les outils de développement la débloque — ce qu'on ne peut
+         demander à personne.
+
+         Une seule tentative par session : si la page est encore vide après le
+         rechargement, c'est autre chose, et boucler n'y changerait rien. -->
+    <script>
+      (function () {
+        var DELAI_MS = 8000;
+        var CLE = "reparation_coquille";
+
+        function estVide() {
+          var r = document.getElementById("root");
+          return !r || r.childElementCount === 0;
+        }
+
+        function dejaTente() {
+          try {
+            return sessionStorage.getItem(CLE) === "1";
+          } catch (e) {
+            /* Stockage bloqué : on s'abstient plutôt que de risquer une
+               boucle de rechargements qu'on ne pourrait pas arrêter. */
+            return true;
+          }
+        }
+
+        setTimeout(function () {
+          if (!estVide() || dejaTente()) return;
+          try {
+            sessionStorage.setItem(CLE, "1");
+          } catch (e) {
+            return;
+          }
+
+          var travaux = [];
+          if ("serviceWorker" in navigator) {
+            travaux.push(
+              navigator.serviceWorker
+                .getRegistrations()
+                .then(function (liste) {
+                  return Promise.all(liste.map(function (r) { return r.unregister(); }));
+                })
+                .catch(function () {})
+            );
+          }
+          if (window.caches && caches.keys) {
+            travaux.push(
+              caches
+                .keys()
+                .then(function (cles) {
+                  return Promise.all(cles.map(function (c) { return caches.delete(c); }));
+                })
+                .catch(function () {})
+            );
+          }
+
+          Promise.all(travaux).then(function () {
+            location.reload();
+          });
+        }, DELAI_MS);
+      })();
+    </script>
   </body>
 </html>

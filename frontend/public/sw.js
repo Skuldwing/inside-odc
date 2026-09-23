@@ -13,10 +13,12 @@
  * chiffres perimes. Ces requetes passent directement au reseau.
  *
  * La version est incrementee a chaque changement de strategie ; les caches
- * des versions precedentes sont supprimes a l'activation.
+ * des versions precedentes sont supprimes a l'activation. C'est aussi le seul
+ * moyen de se debarrasser d'une coquille mise en cache par erreur par une
+ * version precedente : la passer a v3 vide les caches v2 de tout le monde.
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `inside-odc-shell-${VERSION}`;
 const ASSET_CACHE = `inside-odc-assets-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
@@ -94,8 +96,21 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(SHELL_CACHE).then((cache) => cache.put("/index.html", copy));
+          /* Seul un document complet et bien servi devient la coquille de
+             secours. Mettre en cache n'importe quelle reponse — une page
+             d'erreur, une reponse partielle recue pendant un deploiement —
+             revient a garder une coquille dont les fichiers n'existent plus :
+             au prochain passage hors ligne, elle est servie, ses scripts
+             repondent 404, et la page reste blanche sans moyen d'en sortir. */
+          const utilisable =
+            response.ok &&
+            response.status === 200 &&
+            response.type === "basic" &&
+            (response.headers.get("content-type") || "").includes("text/html");
+          if (utilisable) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put("/index.html", copy));
+          }
           return response;
         })
         .catch(async () => {
