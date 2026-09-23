@@ -76,10 +76,18 @@ function tailleQuiTient(doc, texte, largeurMax, tailleIdeale, taillePlancher) {
 
    PDFKit propose « continued: true » pour enchainer des styles, mais chaque
    morceau est alors centre pour lui-meme : les segments se chevauchent. On
-   mesure donc mot a mot, on compose les lignes, puis on les dessine. */
+   mesure donc mot a mot, on compose les lignes, puis on les dessine.
+
+   Un segment marque « insecable » n'est pas decoupe : un nom propre —
+   programme, organisation — se lit d'un bloc, et « Kids Tech » coupe entre
+   les deux mots fait lire deux choses la ou il n'y en a qu'une. */
 function paragrapheRiche(doc, segments, { x, largeur, y, interligne }) {
   const mots = [];
   for (const seg of segments) {
+    if (seg.insecable) {
+      mots.push({ ...seg });
+      continue;
+    }
     const parts = seg.texte.split(/(\s+)/).filter((m) => m !== "");
     for (const m of parts) mots.push({ ...seg, texte: m });
   }

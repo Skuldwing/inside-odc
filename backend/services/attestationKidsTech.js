@@ -270,30 +270,63 @@ function genererAttestationKidsTech({
       });
 
       /* ── « pour avoir participé… » ────────────────────────────────────
-         La suite de la phrase ouverte par « décernée à » : ce qui a été
-         suivi, quand, et dans quel cadre. Le paragraphe est cale sur la
-         meme largeur que le trait du nom — il tient en trois lignes au
-         lieu de quatre et le bloc se lit d'aplomb. */
-      const corps = { police: "Helvetica", taille: 14.24, couleur: NOIR };
-      const corpsGras = { police: "Helvetica-Bold", taille: 14.24, couleur: NOIR };
-      const corpsOrange = { police: "Helvetica-Bold", taille: 14.24, couleur: ORANGE };
+         La suite de la phrase ouverte par « décernée à ». L'intitule du
+         module est traite comme le nom : seul sur sa ligne, en manuscrit.
+         Ce sont les deux seules choses qui changent d'une attestation a
+         l'autre — les isoler du texte courant les rend lisibles d'un coup
+         d'oeil, et evite qu'un intitule long se perde au milieu d'une
+         phrase.
+
+         La phrase se coupe donc en deux blocs, avec la ligne manuscrite au
+         milieu. Le corps descend a 13 pt et l'interligne a 18 : a 14,24 pt
+         les deux blocs plus la ligne manuscrite debordaient sur le
+         « Fait à : ».
+
+         Sans module — une seance qui n'en declare pas — la phrase reste
+         d'un seul tenant : une ligne manuscrite vide n'aurait aucun sens. */
+      const TAILLE_CORPS = 13;
+      const INTERLIGNE = 18;
+      const COLONNE = { x: 5.37 * POUCE, largeur: 4.68 * POUCE };
+      const corps = { police: "Helvetica", taille: TAILLE_CORPS, couleur: NOIR };
+      const corpsGras = { police: "Helvetica-Bold", taille: TAILLE_CORPS, couleur: NOIR };
+      const corpsOrange = { police: "Helvetica-Bold", taille: TAILLE_CORPS, couleur: ORANGE };
       const quand = dateEnToutesLettres(date);
-      const basDuParagraphe = paragrapheRiche(
-        doc,
-        [
-          { ...corps, texte: "pour avoir participé à une session de formation ludique et pratique" },
-          ...(intitule
-            ? [{ ...corps, texte: " sur le module " }, { ...corpsGras, texte: intitule }]
-            : []),
-          { ...corps, texte: quand ? `, le ${quand},` : "," },
-          { ...corps, texte: " dans le cadre du programme " },
-          { ...corpsOrange, texte: M.programme },
-          { ...corps, texte: " de " },
-          { ...corpsGras, texte: M.organisation },
-          { ...corps, texte: "." },
-        ].filter((s) => s.texte),
-        { x: 5.37 * POUCE, largeur: 4.68 * POUCE, y: 4.16 * POUCE, interligne: 20 }
-      );
+
+      const cadre = [
+        { ...corps, texte: quand ? `le ${quand}, ` : "" },
+        { ...corps, texte: "dans le cadre du programme " },
+        { ...corpsOrange, texte: M.programme, insecable: true },
+        { ...corps, texte: " de " },
+        { ...corpsGras, texte: M.organisation, insecable: true },
+        { ...corps, texte: "." },
+      ].filter((s) => s.texte);
+
+      let basDuParagraphe;
+      if (intitule) {
+        const basIntro = paragrapheRiche(
+          doc,
+          [{ ...corps, texte: "pour avoir participé à une session de formation ludique et pratique sur le module" }],
+          { ...COLONNE, y: 4.10 * POUCE, interligne: INTERLIGNE }
+        );
+        /* La ligne manuscrite respire : un peu d'air au-dessus, et la suite
+           de la phrase reprend en dessous. */
+        const ligneModule = basIntro + 20;
+        ecrireManuscrit(doc, intitule, {
+          ...COLONNE, ligneY: ligneModule, taille: 26, plancher: 14,
+        });
+        basDuParagraphe = paragrapheRiche(
+          doc, cadre, { ...COLONNE, y: ligneModule + 10, interligne: INTERLIGNE }
+        );
+      } else {
+        basDuParagraphe = paragrapheRiche(
+          doc,
+          [
+            { ...corps, texte: "pour avoir participé à une session de formation ludique et pratique, " },
+            ...cadre,
+          ],
+          { ...COLONNE, y: 4.16 * POUCE, interligne: INTERLIGNE }
+        );
+      }
 
       /* La mention du partenariat : un dispositif mené avec un tiers doit
          pouvoir le dire sur le document. Elle suit le paragraphe plutôt que
