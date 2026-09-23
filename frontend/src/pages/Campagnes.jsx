@@ -1207,12 +1207,45 @@ function Attestations({ activities, onEnvoye }) {
   );
 }
 
+/* Les dispositifs d'une personne, du plus suivi au moins suivi.
+   Chaque module porte le sien ; une personne passe souvent par plusieurs. */
+const SANS_DISPOSITIF = "\u0000sans";
+
+function dispositifsDe(p) {
+  const parNom = new Map();
+  for (const m of p.modules || []) {
+    const nom = m.dispositif || SANS_DISPOSITIF;
+    parNom.set(nom, (parNom.get(nom) || 0) + 1);
+  }
+  return [...parNom.entries()]
+    .map(([nom, modules]) => ({ nom, modules }))
+    .sort((a, b) => b.modules - a.modules || a.nom.localeCompare(b.nom));
+}
+
+/* Le dispositif où la personne a suivi le plus de modules.
+   Une égalité en tête ne désigne personne : quelqu'un qui a suivi deux modules
+   Tech Academy et deux modules Orange Fab n'appartient « en majorité » à aucun
+   des deux, et le dire serait une invention. */
+function dispositifPrincipal(liste) {
+  if (!liste.length) return null;
+  if (liste.length > 1 && liste[1].modules === liste[0].modules) return null;
+  return liste[0];
+}
+
+const nomDispositif = (nom) => (nom === SANS_DISPOSITIF ? "Sans dispositif" : nom);
+
 function ParParticipant() {
   const toast = useToast();
   const [data, setData] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [recherche, setRecherche] = useState("");
   const [seulsARegler, setSeulsARegler] = useState(true);
+  /* Le dispositif retenu, et la façon de l'entendre : avoir suivi au moins un
+     de ses modules, ou y avoir suivi l'essentiel de son parcours. Les deux
+     lectures servent — l'une pour une remise groupée, l'autre pour ne
+     s'adresser qu'aux bénéficiaires du programme. */
+  const [dispositif, setDispositif] = useState("");
+  const [modeDispositif, setModeDispositif] = useState("participe");
   const [ouverte, setOuverte] = useState(null);
   const [choix, setChoix] = useState({});      // clé module → coché
   /* L'intitulé écrit sur le document, quand on ne veut pas celui de
@@ -1252,9 +1285,58 @@ function ParParticipant() {
     setAdresse(p.adresses[0] || p.email || "");
   };
 
+  /* Calculé une fois par chargement : le parcours d'une personne ne change pas
+     entre deux frappes au clavier, et la liste peut être longue. */
+  const parcours = useMemo(() => {
+    const carte = new Map();
+    for (const p of data?.liste || []) {
+      const liste = dispositifsDe(p);
+      carte.set(p.cle, { liste, principal: dispositifPrincipal(liste) });
+    }
+    return carte;
+  }, [data]);
+
+  /* Les dispositifs proposés au filtre, avec le nombre de personnes concernées
+     dans chaque lecture : « 48 personnes, dont 31 principalement ». Sans ces
+     deux chiffres, on ne sait pas lequel des deux modes choisir. */
+  const dispositifsConnus = useMemo(() => {
+    const carte = new Map();
+    for (const p of data?.liste || []) {
+      const info = parcours.get(p.cle);
+      if (!info) continue;
+      for (const d of info.liste) {
+        if (!carte.has(d.nom)) carte.set(d.nom, { nom: d.nom, personnes: 0, principalement: 0 });
+        carte.get(d.nom).personnes += 1;
+      }
+      if (info.principal) carte.get(info.principal.nom).principalement += 1;
+    }
+    return [...carte.values()].sort(
+      (a, b) => b.personnes - a.personnes || nomDispositif(a.nom).localeCompare(nomDispositif(b.nom))
+    );
+  }, [data, parcours]);
+
+  /* Le dispositif d'abord : c'est lui qui définit à qui l'on s'adresse. La
+     recherche et « ceux qui attendent » affinent ensuite, et leurs compteurs
+     doivent porter sur ce périmètre-là, pas sur la base entière. */
+  const duDispositif = useMemo(() => {
+    const liste = data?.liste || [];
+    if (!dispositif) return liste;
+    return liste.filter((p) => {
+      const info = parcours.get(p.cle);
+      if (!info) return false;
+      if (modeDispositif === "principal") return info.principal?.nom === dispositif;
+      return info.liste.some((d) => d.nom === dispositif);
+    });
+  }, [data, dispositif, modeDispositif, parcours]);
+
+  const aServir = useMemo(
+    () => duDispositif.filter((p) => p.modules_a_envoyer > 0 && p.adresses.length).length,
+    [duDispositif]
+  );
+
   const filtres = useMemo(() => {
     const q = recherche.trim().toLowerCase();
-    return (data?.liste || []).filter((p) => {
+    return duDispositif.filter((p) => {
       if (seulsARegler && p.modules_a_envoyer === 0) return false;
       if (!q) return true;
       return (
@@ -1263,7 +1345,7 @@ function ParParticipant() {
         p.modules.some((m) => (m.titre || "").toLowerCase().includes(q))
       );
     });
-  }, [data, recherche, seulsARegler]);
+  }, [duDispositif, recherche, seulsARegler]);
 
   const envoyer = async (p, forcer = false) => {
     const modules = p.modules.filter((m) => choix[cle(m)]);
@@ -1345,15 +1427,70 @@ function ParParticipant() {
           placeholder="Nom, adresse ou module…"
           className="input min-w-0 flex-1 text-sm"
         />
+        {dispositifsConnus.length > 1 && (
+          <>
+            <select
+              value={dispositif}
+              onChange={(e) => setDispositif(e.target.value)}
+              className="input text-sm sm:w-56"
+              aria-label="Filtrer par dispositif"
+            >
+              <option value="">Tous les dispositifs</option>
+              {dispositifsConnus.map((d) => (
+                <option key={d.nom} value={d.nom}>
+                  {nomDispositif(d.nom)} ({d.personnes})
+                </option>
+              ))}
+            </select>
+            {/* Le mode ne s'affiche qu'une fois un dispositif choisi : seul, il
+                ne veut rien dire. */}
+            {dispositif && (
+              <select
+                value={modeDispositif}
+                onChange={(e) => setModeDispositif(e.target.value)}
+                className="input text-sm sm:w-48"
+                aria-label="Façon de retenir le dispositif"
+              >
+                <option value="participe">Au moins un module</option>
+                <option value="principal">Principalement</option>
+              </select>
+            )}
+          </>
+        )}
         <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
           <input
             type="checkbox"
             checked={seulsARegler}
             onChange={(e) => setSeulsARegler(e.target.checked)}
           />
-          Seulement ceux qui attendent une attestation ({data.a_servir})
+          Seulement ceux qui attendent une attestation ({aServir})
         </label>
       </div>
+
+      {/* Ce que le filtre retient, dit en clair : « principalement » écarte les
+          personnes passées par plusieurs programmes, et il vaut mieux le lire
+          que de le déduire d'une liste plus courte que prévu. */}
+      {dispositif && (
+        <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
+          {duDispositif.length} personne{duDispositif.length > 1 ? "s" : ""}
+          {modeDispositif === "principal"
+            ? ` ont suivi l'essentiel de leur parcours en « ${nomDispositif(dispositif)} »`
+            : ` ont suivi au moins un module en « ${nomDispositif(dispositif)} »`}
+          {modeDispositif === "principal" && (
+            <>
+              {" "}— les parcours partagés à égalité entre deux dispositifs sont écartés, aucun
+              n&apos;y est majoritaire.
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setDispositif("")}
+            className="ml-2 font-medium underline"
+          >
+            Retirer le filtre
+          </button>
+        </p>
+      )}
 
       {filtres.length === 0 ? (
         <EmptyState icon={Award} title="Personne à servir" compact
@@ -1383,6 +1520,22 @@ function ParParticipant() {
                   )}
                   {p.fiches.length > 1 && (
                     <span className="text-[11px] text-slate-400">{p.fiches.length} fiches réunies</span>
+                  )}
+                  {/* Son parcours par dispositif : c'est ce sur quoi le filtre
+                      travaille, et il doit se vérifier à l'œil sur la ligne. */}
+                  {(parcours.get(p.cle)?.liste || []).slice(0, 2).map((d) => (
+                    <span
+                      key={d.nom}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-600"
+                    >
+                      {nomDispositif(d.nom)} · {d.modules}
+                    </span>
+                  ))}
+                  {(parcours.get(p.cle)?.liste || []).length > 2 && (
+                    <span className="text-[11px] text-slate-400">
+                      +{parcours.get(p.cle).liste.length - 2} autre
+                      {parcours.get(p.cle).liste.length - 2 > 1 ? "s" : ""}
+                    </span>
                   )}
                 </span>
                 <span className="mt-0.5 block text-xs text-slate-500">
