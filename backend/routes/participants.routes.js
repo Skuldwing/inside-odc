@@ -20,12 +20,53 @@ const PAGE_SIZE = 100;
    gonfler le processus. */
 const EXPORT_BATCH = 2000;
 
+/* Accents retires et minuscules, des deux cotes de la comparaison.
+   « Cherif » doit trouver « Chérif », et « NDEYE » trouver « Ndèye » : les
+   listes de presence sont saisies a la main, tantot accentuees tantot non,
+   et personne ne retape un accent pour retrouver quelqu'un.
+
+   translate() plutot que l'extension unaccent : celle-ci demande un CREATE
+   EXTENSION que la base de production n'a pas forcement le droit de faire. */
+const LETTRES_ACCENTUEES = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝ";
+const LETTRES_SIMPLES = "aaaaaaceeeeiiiinooooouuuuyyAAAAAACEEEEIIIINOOOOOUUUUY";
+const DEPLIE = (colonne) =>
+  `lower(translate(coalesce(${colonne}, ''), '${LETTRES_ACCENTUEES}', '${LETTRES_SIMPLES}'))`;
+
+/* Le meme pliage, cote JavaScript, pour le motif recherche. */
+function deplier(valeur) {
+  return String(valeur)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
+/* « % » et « _ » sont des jokers en SQL : tapes par quelqu'un qui cherche
+   « 100_ouvriers », ils elargiraient la recherche au lieu de la restreindre. */
+const echapperMotif = (mot) => mot.replace(/([\\%_])/g, "\\$1");
+
+/* Les colonnes ou l'on cherche du texte. Le nom et le prenom sont separes en
+   base : sans cette liste, « aminata ndiaye » ne trouvait rien, puisque la
+   chaine entiere etait cherchee dans chaque colonne prise isolement. */
+const COLONNES_TEXTE = [
+  "p.nom", "p.prenom", "p.structure", "p.email", "p.statut",
+  "a.title", "pr.name", "d.name",
+];
+
+/* Le numero, compare chiffre a chiffre : « 77 123 45 67 », « +221771234567 »
+   et « 771234567 » designent la meme personne. */
+const CHIFFRES_TEL = `regexp_replace(coalesce(p.telephone, ''), '[^0-9]', '', 'g')`;
+
 /* Filtres et cloisonnement, partages par la liste paginee et l'export.
    Les deux vues doivent voir exactement le meme perimetre : un partenaire
    n'exporte que ses propres participants, un coach que les siens. */
 function buildFilters(req) {
   const search = (req.query.search || "").trim();
   const genre = req.query.genre || "";
+  const dispositif = req.query.dispositif || "";
+  const partenaire = req.query.partenaire || "";
+  const statut = (req.query.statut || "").trim();
+  const age = (req.query.age || "").trim();
+  const du = (req.query.du || "").trim();
+  const au = (req.query.au || "").trim();
 
   const conditions = [];
   const params = [];
@@ -44,14 +85,71 @@ function buildFilters(req) {
     params.push(genre);
   }
 
-  if (search) {
-    conditions.push(`(
-      p.nom       ILIKE $${idx} OR p.prenom    ILIKE $${idx} OR
-      p.structure ILIKE $${idx} OR a.title     ILIKE $${idx} OR
-      pr.name     ILIKE $${idx} OR d.name      ILIKE $${idx}
-    )`);
-    params.push(`%${search}%`);
+  if (dispositif) {
+    conditions.push(`a.device_id = $${idx++}`);
+    params.push(dispositif);
+  }
+
+  if (partenaire) {
+    conditions.push(`a.partner_id = $${idx++}`);
+    params.push(partenaire);
+  }
+
+  if (statut) {
+    conditions.push(`${DEPLIE("p.statut")} = $${idx++}`);
+    params.push(deplier(statut));
+  }
+
+  if (age) {
+    conditions.push(`p.age_range = $${idx++}`);
+    params.push(age);
+  }
+
+  /* Bornes de la date d'activite. Chacune vaut seule : « depuis le 1er
+     janvier » est une demande aussi courante que « entre deux dates ». */
+  if (du) {
+    conditions.push(`a.activity_date >= $${idx++}`);
+    params.push(du);
+  }
+  if (au) {
+    conditions.push(`a.activity_date <= $${idx++}`);
+    params.push(au);
+  }
+
+  /* Un numero de telephone se tape comme il s'ecrit : « 77 123 45 67 », avec
+     des espaces. Decoupe en mots, il donnerait « 77 », « 123 »… — des
+     fragments trop courts pour designer qui que ce soit, et la recherche ne
+     rendrait rien. Quand toute la saisie n'est faite que de chiffres et de
+     ponctuation de numero, on la traite donc d'un bloc. */
+  const estNumero = search.length > 0
+    && /^[0-9+().\-\s]+$/.test(search)
+    && search.replace(/\D/g, "").length >= 3;
+
+  /* Sinon la recherche se fait mot a mot : chaque mot tape doit se retrouver
+     quelque part sur la ligne, mais pas forcement dans la meme colonne. C'est
+     ce qui permet de chercher « aminata ndiaye » — le prenom est dans une
+     colonne, le nom dans une autre —, et aussi bien « ndiaye aminata », ou
+     « ndiaye kids tech » pour ne garder que ses seances Kids Tech.
+
+     Un mot d'au moins trois chiffres est en plus confronte au numero de
+     telephone, debarrasse de ses espaces et de son indicatif. */
+  const mots = estNumero ? [search] : search.split(/\s+/).filter(Boolean).slice(0, 8);
+  for (const mot of mots) {
+    const motif = `%${echapperMotif(deplier(mot))}%`;
+    const alternatives = COLONNES_TEXTE.map((c) => `${DEPLIE(c)} LIKE $${idx}`);
+
+    const chiffres = mot.replace(/\D/g, "");
+    if (chiffres.length >= 3) {
+      alternatives.push(`${CHIFFRES_TEL} LIKE $${idx + 1}`);
+    }
+
+    conditions.push(`(${alternatives.join(" OR ")})`);
+    params.push(motif);
     idx++;
+    if (chiffres.length >= 3) {
+      params.push(`%${chiffres}%`);
+      idx++;
+    }
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -65,8 +163,52 @@ function buildFilters(req) {
     ${where}
   `;
 
-  return { baseFrom, params, nextIdx: idx, search, genre };
+  return {
+    baseFrom, params, nextIdx: idx,
+    search, genre, dispositif, partenaire, statut, age, du, au,
+  };
 }
+
+/* ===== VALEURS DISPONIBLES POUR LES FILTRES =====
+   Les listes deroulantes se remplissent depuis ce qui existe reellement dans
+   le perimetre de la personne connectee : proposer un dispositif dont elle ne
+   verra aucune ligne n'aide personne, et un partenaire n'a pas a decouvrir le
+   nom des autres. On ne passe donc pas par /partners et /devices — le premier
+   est d'ailleurs reserve aux administrateurs. */
+router.get("/filtres", authMiddleware, async (req, res) => {
+  try {
+    /* Le perimetre seul : les filtres en cours ne doivent pas retirer des
+       choix de la liste, sans quoi on ne pourrait plus revenir en arriere. */
+    const perimetre = buildFilters({ user: req.user, query: {} });
+
+    const { rows } = await pool.query(`
+      SELECT
+        json_agg(DISTINCT jsonb_build_object('id', d.id, 'nom', d.name))
+          FILTER (WHERE d.id IS NOT NULL)                       AS dispositifs,
+        json_agg(DISTINCT jsonb_build_object('id', pr.id, 'nom', pr.name))
+          FILTER (WHERE pr.id IS NOT NULL)                      AS partenaires,
+        json_agg(DISTINCT p.statut)    FILTER (WHERE nullif(trim(p.statut), '')    IS NOT NULL) AS statuts,
+        json_agg(DISTINCT p.age_range) FILTER (WHERE nullif(trim(p.age_range), '') IS NOT NULL) AS ages,
+        min(a.activity_date) AS premiere,
+        max(a.activity_date) AS derniere
+      ${perimetre.baseFrom}
+    `, perimetre.params);
+
+    const l = rows[0] || {};
+    const parNom = (a, b) => String(a.nom || "").localeCompare(String(b.nom || ""), "fr");
+    res.json({
+      dispositifs: (l.dispositifs || []).sort(parNom),
+      partenaires: (l.partenaires || []).sort(parNom),
+      statuts: (l.statuts || []).sort((a, b) => String(a).localeCompare(String(b), "fr")),
+      ages: (l.ages || []).sort((a, b) => String(a).localeCompare(String(b), "fr", { numeric: true })),
+      premiere: l.premiere || null,
+      derniere: l.derniere || null,
+    });
+  } catch (err) {
+    console.error("[PARTICIPANTS FILTRES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 /* ===== GET PARTICIPANTS (pagine, filtre cote serveur) ===== */
 router.get("/", authMiddleware, async (req, res) => {

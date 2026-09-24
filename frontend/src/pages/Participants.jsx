@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List } from "lucide-react";
+import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List, X, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -675,9 +675,30 @@ export default function Participants() {
   const [vue, setVue] = useState(searchParams.get("vue") === "assiduite" ? "assiduite" : "liste");
   const [exportAssiduite, setExportAssiduite] = useState(false);
 
+  /* Tous les filtres dans un seul objet : ils partent ensemble au serveur, se
+     réinitialisent ensemble, et se comptent ensemble pour dire combien sont
+     actifs. Les tenir en variables séparées obligeait à les énumérer à chaque
+     appel, et le jour où l'on en ajoute un, à ne pas en oublier un seul. */
+  const FILTRES_VIDES = {
+    search: "", genre: "", dispositif: "", partenaire: "",
+    statut: "", age: "", du: "", au: "",
+  };
+  const [filtres, setFiltres] = useState(() => ({
+    ...FILTRES_VIDES,
+    search: searchParams.get("q") || "",
+  }));
   const [search, setSearch]           = useState(searchParams.get("q") || "");
-  const [genderFilter, setGenderFilter] = useState("");
   const [page, setPage]               = useState(1);
+
+  /* Ce que le serveur connaît de la base, dans le périmètre de la personne
+     connectée : de quoi remplir les listes déroulantes sans proposer des
+     choix qui ne rendraient aucune ligne. */
+  const [choix, setChoix] = useState({
+    dispositifs: [], partenaires: [], statuts: [], ages: [],
+  });
+
+  const filtresActifs = Object.entries(filtres)
+    .filter(([cle, v]) => cle !== "search" && String(v || "").trim() !== "").length;
 
   const [rows, setRows]               = useState([]);
   const [total, setTotal]             = useState(0);
@@ -713,7 +734,7 @@ export default function Participants() {
       toast.success(`${res.data.corriges} nom${res.data.corriges > 1 ? "s" : ""} corrigé${res.data.corriges > 1 ? "s" : ""}.`);
       setDoublonsOuverts(false);
       await chercherDoublons();
-      fetchPage(debouncedSearch.current, genderFilter, page);
+      fetchPage(filtresEnvoyes.current, page);
     } catch (err) {
       toast.error(err?.response?.data?.error || "La correction a échoué.");
     } finally {
@@ -781,7 +802,7 @@ export default function Participants() {
       );
       setFichesOuvertes(false);
       await chercherFiches();
-      fetchPage(debouncedSearch.current, genderFilter, page);
+      fetchPage(filtresEnvoyes.current, page);
     } catch (err) {
       toast.error(err?.response?.data?.error || "La complétion a échoué.");
     } finally {
@@ -791,15 +812,26 @@ export default function Participants() {
 
   /* Debounce search → réinitialise la page */
   const debounceRef = useRef(null);
-  const debouncedSearch = useRef(search);
+  /* Les filtres réellement partis au serveur. La recherche est temporisée :
+     entre la frappe et l'appel, l'état React n'est pas encore celui qu'on
+     veut interroger, et un rechargement déclenché entre-temps — par un des
+     panneaux de réparation — rappellerait l'ancienne recherche. */
+  const filtresEnvoyes = useRef(filtres);
 
-  const fetchPage = useCallback(async (searchVal, genreVal, pageVal) => {
+  const parametresDe = (f) => {
+    const p = {};
+    for (const [cle, valeur] of Object.entries(f)) {
+      if (String(valeur || "").trim() !== "") p[cle] = String(valeur).trim();
+    }
+    return p;
+  };
+
+  const fetchPage = useCallback(async (filtresVal, pageVal) => {
+    filtresEnvoyes.current = filtresVal;
     setLoading(true);
     setError("");
     try {
-      const params = { page: pageVal };
-      if (searchVal) params.search = searchVal;
-      if (genreVal)  params.genre  = genreVal;
+      const params = { page: pageVal, ...parametresDe(filtresVal) };
       const res = await api.get("/participants", { params });
       const d   = res.data;
       setRows(d.rows || []);
@@ -819,40 +851,60 @@ export default function Participants() {
      d'annoncer après coup les doublons qu'on venait de traiter. */
   const rechargerListe = useCallback(async () => {
     await Promise.all([
-      fetchPage(debouncedSearch.current, genderFilter, page),
+      fetchPage(filtresEnvoyes.current, page),
       chercherFiches(),
     ]);
-  }, [fetchPage, chercherFiches, genderFilter, page]);
+  }, [fetchPage, chercherFiches, page]);
 
   /* Chargement initial */
   useEffect(() => {
-    fetchPage(search, genderFilter, page);
+    fetchPage(filtres, page);
     chercherDoublons();
     chercherFiches();
+    api.get("/participants/filtres")
+      .then((r) => setChoix({
+        dispositifs: r.data?.dispositifs || [],
+        partenaires: r.data?.partenaires || [],
+        statuts: r.data?.statuts || [],
+        ages: r.data?.ages || [],
+      }))
+      .catch(() => {}); /* silencieux : sans les listes, la recherche marche */
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Filtre genre → reset page 1 */
-  const handleGenre = (val) => {
-    setGenderFilter(val);
+  /* Un filtre change → on repart de la première page. Rester sur la page 7
+     d'un résultat qui n'en fait plus que deux affiche un tableau vide sans
+     rien expliquer. */
+  const changerFiltre = (cle, valeur) => {
+    const suivant = { ...filtres, [cle]: valeur };
+    setFiltres(suivant);
     setPage(1);
-    fetchPage(debouncedSearch.current, val, 1);
+    fetchPage(suivant, 1);
+  };
+
+  const reinitialiser = () => {
+    clearTimeout(debounceRef.current);
+    setFiltres(FILTRES_VIDES);
+    setSearch("");
+    setPage(1);
+    fetchPage(FILTRES_VIDES, 1);
   };
 
   /* Recherche avec debounce 350ms → reset page 1 */
   const handleSearch = (val) => {
     setSearch(val);
-    debouncedSearch.current = val;
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
+      const suivant = { ...filtres, search: val };
+      setFiltres(suivant);
       setPage(1);
-      fetchPage(val, genderFilter, 1);
+      fetchPage(suivant, 1);
     }, 350);
   };
 
   /* Changement de page */
   const goToPage = (p) => {
     setPage(p);
-    fetchPage(debouncedSearch.current, genderFilter, p);
+    fetchPage(filtresEnvoyes.current, p);
   };
 
   /* Export CSV.
@@ -884,9 +936,9 @@ export default function Participants() {
   const exportCsv = async () => {
     setExporting(true);
     try {
-      const params = {};
-      if (debouncedSearch.current) params.search = debouncedSearch.current;
-      if (genderFilter) params.genre = genderFilter;
+      /* Exactement les filtres de l'écran : ce qu'on voit est ce qu'on
+         télécharge, sinon le fichier ne correspond pas à ce qu'on a demandé. */
+      const params = parametresDe(filtresEnvoyes.current);
 
       const res = await api.get("/participants/export.csv", {
         params,
@@ -1141,27 +1193,136 @@ export default function Participants() {
       </section>
 
       <section className="card p-4 lg:p-5">
-        <div className="mb-4 flex flex-wrap items-center gap-2 text-slate-700">
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-slate-700">
           <Filter className="h-4 w-4 text-orange-500" aria-hidden="true" />
           <h2 className="text-sm font-semibold uppercase tracking-wide">Recherche et filtres</h2>
+          {filtresActifs > 0 && (
+            <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
+              {filtresActifs} filtre{filtresActifs > 1 ? "s" : ""} actif{filtresActifs > 1 ? "s" : ""}
+            </span>
+          )}
           <DensityToggle className="ml-auto" />
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
-            <input
-              value={search}
-              onChange={(e) => handleSearch(e.target.value)}
-              placeholder="Rechercher nom, activité, partenaire..."
-              className="input pl-10"
-            />
-          </div>
-          <select className="select" value={genderFilter} onChange={(e) => handleGenre(e.target.value)}>
+
+        {/* La recherche prend toute la largeur : c'est par elle qu'on passe
+            neuf fois sur dix, les listes déroulantes servent à dégrossir. */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
+          <input
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="Nom, prénom, téléphone, e-mail, structure, activité…"
+            className="input pl-10 pr-10"
+            aria-label="Rechercher un participant"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => handleSearch("")}
+              aria-label="Effacer la recherche"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {/* Ce que la recherche sait faire ne se devine pas : sans cette ligne,
+            personne n'essaie de taper un nom entier ni un numéro. */}
+        <p className="mt-1.5 text-xs text-slate-500">
+          Plusieurs mots se cumulent — « aminata ndiaye » ou « ndiaye kids tech ».
+          Les accents sont ignorés, et un numéro se tape comme il s'écrit.
+        </p>
+
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <select
+            className="select" value={filtres.genre} aria-label="Genre"
+            onChange={(e) => changerFiltre("genre", e.target.value)}
+          >
             <option value="">Tous les genres</option>
             <option value="H">Hommes</option>
             <option value="F">Femmes</option>
           </select>
+
+          <select
+            className="select" value={filtres.dispositif} aria-label="Dispositif"
+            onChange={(e) => changerFiltre("dispositif", e.target.value)}
+          >
+            <option value="">Tous les dispositifs</option>
+            {choix.dispositifs.map((d) => (
+              <option key={d.id} value={d.id}>{d.nom}</option>
+            ))}
+          </select>
+
+          <select
+            className="select" value={filtres.partenaire} aria-label="Partenaire"
+            onChange={(e) => changerFiltre("partenaire", e.target.value)}
+          >
+            <option value="">Tous les partenaires</option>
+            {choix.partenaires.map((p) => (
+              <option key={p.id} value={p.id}>{p.nom}</option>
+            ))}
+          </select>
+
+          <select
+            className="select" value={filtres.statut} aria-label="Statut"
+            onChange={(e) => changerFiltre("statut", e.target.value)}
+          >
+            <option value="">Tous les statuts</option>
+            {choix.statuts.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          <select
+            className="select" value={filtres.age} aria-label="Tranche d'âge"
+            onChange={(e) => changerFiltre("age", e.target.value)}
+          >
+            <option value="">Toutes les tranches d&apos;âge</option>
+            {choix.ages.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
+          </select>
+
+          {/* Les bornes de date valent séparément : « depuis le 1er janvier »
+              est une demande aussi courante que « entre deux dates ». */}
+          <div className="flex items-center gap-2">
+            <label className="flex-1">
+              <span className="sr-only">Activités à partir du</span>
+              <input
+                type="date" className="input" value={filtres.du}
+                max={filtres.au || undefined}
+                onChange={(e) => changerFiltre("du", e.target.value)}
+              />
+            </label>
+            <span className="text-xs text-slate-500">au</span>
+            <label className="flex-1">
+              <span className="sr-only">Activités jusqu&apos;au</span>
+              <input
+                type="date" className="input" value={filtres.au}
+                min={filtres.du || undefined}
+                onChange={(e) => changerFiltre("au", e.target.value)}
+              />
+            </label>
+          </div>
         </div>
+
+        {(filtresActifs > 0 || search) && (
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+            <p className="text-xs text-slate-500">
+              {loading
+                ? "Recherche…"
+                : `${total.toLocaleString("fr-FR")} inscription${total !== 1 ? "s" : ""} correspondent.`}
+            </p>
+            <button
+              type="button"
+              onClick={reinitialiser}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Tout effacer
+            </button>
+          </div>
+        )}
       </section>
 
       {error && (
