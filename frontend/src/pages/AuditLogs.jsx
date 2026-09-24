@@ -10,6 +10,8 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  Download,
+  Loader2,
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL ?? "";
@@ -20,11 +22,34 @@ const ACTION_LABELS = {
   DELETE: { label: "Suppression", bg: "bg-red-100 text-red-700 border-red-200" },
 };
 
+/* Les noms lisibles des ressources journalisées. La liste déroulante se
+   remplit désormais depuis le journal lui-même — une liste écrite à la main
+   dérive dès que le code enregistre autre chose, et c'est ce qui était
+   arrivé : elle n'en proposait que quatre sur une vingtaine, et les retraits
+   d'inscription, justement, n'y figuraient pas. Ce tableau ne sert plus qu'à
+   traduire ; ce qu'il ne connaît pas s'affiche tel quel. */
 const RESOURCE_LABELS = {
   activities: "Activités",
+  activity_participants: "Inscriptions aux activités",
+  participants: "Participants",
+  import_participants: "Imports de listes",
   users: "Utilisateurs",
   partners: "Partenaires",
   devices: "Dispositifs",
+  forms: "Formulaires",
+  public_form: "Formulaires publics",
+  checkin_public: "Émargements publics",
+  modeles_attestation: "Modèles d'attestation",
+  attestations_envoyees: "Attestations envoyées",
+  attestations_terminees: "Attestations réglées",
+  attestation_ponctuelle: "Attestations ponctuelles",
+  photo: "Photos",
+  profil: "Profils",
+  informations: "Informations",
+  app_settings: "Réglages",
+  mbootay_projects: "Projets Mbootay",
+  reliability_reject_manual: "Fiabilité — rejet manuel",
+  reliability_reset_auto: "Fiabilité — remise à zéro",
 };
 
 const ROLE_LABELS = {
@@ -111,6 +136,45 @@ export default function AuditLogs() {
   const [page, setPage] = useState(0);
   const LIMIT = 50;
 
+  /* Les ressources réellement présentes dans le journal, avec leur nombre de
+     lignes : on ne propose pas un filtre qui ne rendrait rien. */
+  const [ressources, setRessources] = useState([]);
+  useEffect(() => {
+    axios.get(`${API}/audit-logs/ressources`, { withCredentials: true })
+      .then((r) => setRessources(r.data || []))
+      .catch(() => setRessources([]));
+  }, []);
+
+  const [export_, setExport] = useState(false);
+  const telecharger = async () => {
+    setExport(true);
+    try {
+      /* Les mêmes filtres que l'écran : le fichier doit contenir ce qu'on
+         regarde, sinon il ne répond pas à la question qu'on se pose. */
+      const params = {};
+      Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+      const res = await axios.get(`${API}/audit-logs/export.csv`, {
+        params, withCredentials: true, responseType: "blob",
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        res.headers["content-disposition"]?.match(/filename="([^"]+)"/)?.[1] ||
+        "journal-audit-odc.csv";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      /* Libération différée : Safari annule le téléchargement si l'URL est
+         révoquée trop tôt. */
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (err) {
+      console.error("Erreur export journal", err);
+    } finally {
+      setExport(false);
+    }
+  };
+
   const fetchLogs = useCallback(async () => {
     setLoading(true);
     try {
@@ -143,22 +207,41 @@ export default function AuditLogs() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      {/* Deux boutons plutôt qu'un : sur un écran de téléphone ils ne tiennent
+          plus à côté du titre, et la page se mettait à défiler de côté. Ils
+          passent donc à la ligne, et le titre garde sa largeur. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="page-title flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 text-orange-500" />
+            <ShieldCheck className="w-6 h-6 flex-shrink-0 text-orange-500" />
             Journaux d'audit
           </h1>
           <p className="page-subtitle">Historique de toutes les modifications sur la plateforme</p>
         </div>
-        <button
-          onClick={fetchLogs}
-          className="btn btn-ghost gap-2"
-          disabled={loading}
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          Rafraîchir
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={fetchLogs}
+            className="btn btn-ghost gap-2"
+            disabled={loading}
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+            Rafraîchir
+          </button>
+          {/* Le téléchargement suit les filtres : ce qui est affiché est ce
+              qui part dans le fichier. Le nombre le rappelle, pour qu'on ne
+              croie pas emporter tout le journal quand on a filtré. */}
+          <button
+            onClick={telecharger}
+            className="btn btn-primary gap-2"
+            disabled={export_ || total === 0}
+            title="Télécharger les lignes affichées au format CSV"
+          >
+            {export_
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Download className="w-4 h-4" />}
+            {export_ ? "Préparation…" : `Télécharger (${total.toLocaleString("fr-FR")})`}
+          </button>
+        </div>
       </div>
 
       {/* Filtres */}
@@ -171,8 +254,10 @@ export default function AuditLogs() {
             onChange={(e) => setFilter("resource", e.target.value)}
           >
             <option value="">Toutes les ressources</option>
-            {Object.entries(RESOURCE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+            {ressources.map(({ resource, n }) => (
+              <option key={resource} value={resource}>
+                {RESOURCE_LABELS[resource] ?? resource} ({n})
+              </option>
             ))}
           </select>
 
@@ -193,7 +278,7 @@ export default function AuditLogs() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
             <input
               className="input pl-8 text-sm"
-              placeholder="Rechercher..."
+              placeholder="Nom, auteur, activité…"
               value={filters.search}
               onChange={(e) => setFilter("search", e.target.value)}
             />
