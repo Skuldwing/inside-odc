@@ -77,8 +77,13 @@ router.get("/", async (req, res) => {
     params.push(Number(limit));
     params.push(Number(offset));
     const dataResult = await pool.query(
+      /* Le numero departage les ex aequo. Sans lui, l'ordre de deux lignes de
+         la meme seconde n'est pas garanti d'une requete a l'autre : en
+         paginant, une ligne pouvait revenir sur deux pages et une autre
+         n'apparaitre sur aucune. Un nettoyage en masse ecrit des centaines de
+         lignes dans la meme seconde — le cas n'a rien de theorique. */
       `SELECT * FROM audit_logs ${where}
-       ORDER BY created_at DESC
+       ORDER BY created_at DESC, id DESC
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
@@ -104,8 +109,13 @@ router.get("/", async (req, res) => {
  * Il porte des donnees personnelles — noms, adresses, numeros, tels qu'ils
  * figuraient sur les fiches au moment du geste. C'est un document interne.
  */
+/* Le numero de ligne du journal vient en tete. Sans lui, le fichier ne se
+   recoupe pas avec lui-meme : une remise en place porte « depuis_journal »,
+   qui designe la ligne de suppression correspondante — et cette ligne etait
+   introuvable dans l'export. On a du recouper par les noms, ce qui ne
+   distingue pas deux homonymes. */
 const EN_TETES_CSV = [
-  "Date", "Heure", "Auteur", "Rôle", "Action", "Ressource",
+  "N° journal", "Date", "Heure", "Auteur", "Rôle", "Action", "Ressource",
   "Identifiant", "Libellé", "Détail", "Adresse IP",
 ];
 
@@ -143,16 +153,17 @@ router.get("/export.csv", async (req, res) => {
 
     for (let debut = 0; debut < total; debut += LOT_EXPORT) {
       const lot = await pool.query(
-        `SELECT created_at, user_full_name, user_role, action, resource,
+        `SELECT id, created_at, user_full_name, user_role, action, resource,
                 resource_id, resource_label, details, ip_address
            FROM audit_logs ${where}
-          ORDER BY created_at DESC
+          ORDER BY created_at DESC, id DESC
           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, LOT_EXPORT, debut]
       );
       for (const l of lot.rows) {
         const d = l.created_at ? new Date(l.created_at) : null;
         res.write(ligneCsv([
+          l.id,
           d ? d.toISOString().slice(0, 10) : "",
           d ? d.toISOString().slice(11, 19) : "",
           l.user_full_name, l.user_role, l.action, l.resource,

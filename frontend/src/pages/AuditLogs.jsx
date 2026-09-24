@@ -12,6 +12,7 @@ import {
   X,
   Download,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL ?? "";
@@ -145,31 +146,113 @@ export default function AuditLogs() {
       .catch(() => setRessources([]));
   }, []);
 
+  /* Les filtres de l'écran, prêts à partir : le fichier doit contenir ce
+     qu'on regarde, sinon il ne répond pas à la question qu'on se pose. */
+  const parametresActifs = () => {
+    const params = {};
+    Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
+    return params;
+  };
+
+  /* Remet le fichier à l'utilisateur. */
+  const enregistrer = (blob, nom) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nom;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    /* Libération différée : Safari annule le téléchargement si l'URL est
+       révoquée trop tôt. */
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+
+  /* Le même CSV, mais fabriqué ici, en relisant la liste page par page.
+     Le serveur sait le produire — c'est plus rapide et ça n'occupe pas le
+     navigateur — mais tant qu'il n'a pas repris le code, sa route répond
+     404 et le bouton ne faisait rien. Plutôt que d'attendre un
+     redéploiement, on retombe sur ce que l'ancienne version sait déjà
+     servir : la liste paginée, qui existe depuis toujours. */
+  /* Les mêmes colonnes que le serveur, dans le même ordre : les deux fichiers
+     doivent être interchangeables, sinon celui de secours ne se relit pas
+     comme l'autre. */
+  const EN_TETES = [
+    "N° journal", "Date", "Heure", "Auteur", "Rôle", "Action", "Ressource",
+    "Identifiant", "Libellé", "Détail", "Adresse IP",
+  ];
+
+  const cellule = (valeur) => {
+    if (valeur === null || valeur === undefined) return "";
+    let t = typeof valeur === "object" ? JSON.stringify(valeur) : String(valeur);
+    /* Une cellule commençant par =, +, - ou @ est lue comme une formule par
+       Excel : on la neutralise. */
+    if (/^[=+\-@]/.test(t)) t = `'${t}`;
+    t = t.replace(/"/g, '""');
+    return /[;"\n\r]/.test(t) ? `"${t}"` : t;
+  };
+
+  const fabriquerCsv = async (params) => {
+    const PAS = 200;
+    const morceaux = [EN_TETES.map(cellule).join(";")];
+    let depart = 0;
+    let total = Infinity;
+    /* Garde-fou : un journal très long ne doit pas bloquer le navigateur
+       indéfiniment si quelque chose se passe mal côté pagination. */
+    while (depart < total && depart < 50000) {
+      const r = await axios.get(`${API}/audit-logs`, {
+        params: { ...params, limit: PAS, offset: depart },
+        withCredentials: true,
+      });
+      total = r.data.total ?? 0;
+      const lignes = r.data.rows || [];
+      if (!lignes.length) break;
+      for (const l of lignes) {
+        const d = l.created_at ? new Date(l.created_at) : null;
+        morceaux.push([
+          l.id,
+          d ? d.toISOString().slice(0, 10) : "",
+          d ? d.toISOString().slice(11, 19) : "",
+          l.user_full_name, l.user_role, l.action, l.resource,
+          l.resource_id, l.resource_label, l.details, l.ip_address,
+        ].map(cellule).join(";"));
+      }
+      depart += lignes.length;
+    }
+    /* BOM : sans lui, Excel lit le fichier en ANSI et casse les accents. */
+    return new Blob(["﻿" + morceaux.join("\r\n") + "\r\n"],
+      { type: "text/csv;charset=utf-8;" });
+  };
+
   const [export_, setExport] = useState(false);
+  const [erreurExport, setErreurExport] = useState("");
   const telecharger = async () => {
     setExport(true);
+    setErreurExport("");
+    const params = parametresActifs();
+    const nomParDefaut = `journal-audit-odc-${new Date().toISOString().slice(0, 10)}.csv`;
     try {
-      /* Les mêmes filtres que l'écran : le fichier doit contenir ce qu'on
-         regarde, sinon il ne répond pas à la question qu'on se pose. */
-      const params = {};
-      Object.entries(filters).forEach(([k, v]) => { if (v) params[k] = v; });
       const res = await axios.get(`${API}/audit-logs/export.csv`, {
         params, withCredentials: true, responseType: "blob",
       });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download =
-        res.headers["content-disposition"]?.match(/filename="([^"]+)"/)?.[1] ||
-        "journal-audit-odc.csv";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      /* Libération différée : Safari annule le téléchargement si l'URL est
-         révoquée trop tôt. */
-      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      enregistrer(
+        res.data,
+        res.headers["content-disposition"]?.match(/filename="([^"]+)"/)?.[1] || nomParDefaut
+      );
     } catch (err) {
       console.error("Erreur export journal", err);
+      /* Le serveur ne sait pas produire le fichier : on le fabrique ici. */
+      try {
+        enregistrer(await fabriquerCsv(params), nomParDefaut);
+      } catch (err2) {
+        console.error("Erreur export journal (repli)", err2);
+        /* Un bouton qui ne fait rien ne se distingue pas d'un bouton cassé :
+           on dit ce qui s'est passé. */
+        setErreurExport(
+          "Le téléchargement n'a pas abouti. Réessayez dans un instant ; " +
+          "si cela persiste, signalez-le à l'équipe technique."
+        );
+      }
     } finally {
       setExport(false);
     }
@@ -243,6 +326,14 @@ export default function AuditLogs() {
           </button>
         </div>
       </div>
+
+      {/* Un bouton qui ne fait rien ne se distingue pas d'un bouton cassé. */}
+      {erreurExport && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <span>{erreurExport}</span>
+        </div>
+      )}
 
       {/* Filtres */}
       <div className="card-solid p-4">
