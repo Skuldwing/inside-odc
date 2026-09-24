@@ -1496,14 +1496,23 @@ router.get("/fiches-absorbees", authMiddleware, async (req, res) => {
     );
 
     /* Une fiche deja remise en place ne doit plus etre proposee. On la
-       reconnait a une trace de restauration portant le meme journal. */
+       reconnait a une trace de restauration portant le meme journal.
+
+       La comparaison se fait en chaines des deux cotes, et ce n'est pas un
+       detail : audit_logs.id est un BIGSERIAL, et le pilote PostgreSQL rend
+       les entiers 64 bits en chaine pour ne pas perdre de precision. Compare
+       a un ensemble de nombres, aucun identifiant ne correspondait jamais —
+       518 fiches deja remises en place etaient donc proposees a nouveau,
+       indefiniment. Le piege ne se voit pas sur une base d'essai dont la
+       colonne serait un entier 32 bits : le pilote y rend un nombre, et tout
+       semble marcher. */
     const { rows: faites } = await pool.query(
       `SELECT details->>'depuis_journal' AS journal
          FROM audit_logs
         WHERE resource = 'participants' AND action = 'CREATE'
           AND details->>'depuis_journal' IS NOT NULL`
     );
-    const restaurees = new Set(faites.map((f) => Number(f.journal)));
+    const restaurees = new Set(faites.map((f) => String(f.journal)));
 
     const lignes = [];
     for (const l of r.rows) {
@@ -1515,7 +1524,7 @@ router.get("/fiches-absorbees", authMiddleware, async (req, res) => {
         supprimee_le: l.created_at,
         ancien_id: l.resource_id,
         fusionnee_avec: d.fusionnee_avec ?? null,
-        restauree: restaurees.has(l.id),
+        restauree: restaurees.has(String(l.id)),
         fiche: {
           nom: f.nom || "", prenom: f.prenom || "",
           email: f.email || null, telephone: f.telephone || null,
