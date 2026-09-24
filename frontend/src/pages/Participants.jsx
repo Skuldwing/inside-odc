@@ -688,6 +688,255 @@ function FichesARestaurer({ onChange }) {
   );
 }
 
+/**
+ * La revue des groupes que le nom seul soutient.
+ *
+ * Les groupes qu'une adresse ou un numéro prouve se traitent d'un bloc, sans
+ * qu'on ait à les regarder. Restent ceux qui ne tiennent qu'au nom. La
+ * plateforme refuse de trancher à la place de quelqu'un — c'est juste, deux
+ * personnes peuvent porter le même nom — mais refuser de trancher sans donner
+ * de quoi le faire revient à ne rien proposer du tout.
+ *
+ * Un groupe à la fois, donc, avec ce qui permet de décider : ce qui décrit la
+ * personne, et les formations de chaque fiche. Ces dernières pèsent lourd —
+ * deux fiches sur la MÊME formation sont le cas le plus probable d'homonymes,
+ * tandis que deux formations différentes décrivent quelqu'un qui est revenu.
+ *
+ * Trois issues, pas deux. « Je ne sais pas » compte autant que les autres :
+ * forcer un choix binaire sur des fiches qui ne portent rien produirait des
+ * décisions au hasard, c'est-à-dire exactement ce qu'on veut éviter.
+ */
+function RevueDesGroupes({ onChange }) {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [position, setPosition] = useState(0);
+  const [ouvert, setOuvert] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+
+  const charger = useCallback(async (pos) => {
+    try {
+      const r = await api.get("/participants/fiches-doublons/revue", { params: { position: pos } });
+      setData(r.data);
+    } catch {
+      setData(null); /* silencieux : c'est un panneau d'appoint, pas la page */
+    }
+  }, []);
+
+  useEffect(() => { charger(position); }, [charger, position]);
+
+  const decider = async (decision) => {
+    const fiches = (data?.groupe?.fiches || []).map((f) => f.id);
+    if (fiches.length < 2) return;
+    setEnCours(true);
+    try {
+      await api.post("/participants/fiches-doublons/decision", { fiches, decision });
+      toast.success(
+        decision === "meme_personne"
+          ? "Fiches rattachées à une même personne. Aucune ligne de présence supprimée."
+          : "Noté : ces fiches désignent deux personnes. Ce groupe ne sera plus proposé."
+      );
+      /* On reste à la même position : le groupe tranché quitte la file, et
+         c'est le suivant qui vient s'y présenter. Avancer d'un cran ferait
+         sauter un groupe à chaque décision. */
+      await charger(position);
+      await onChange?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La décision n'a pas été enregistrée.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  if (!data?.total) return null;
+  const g = data.groupe;
+
+  /* Ce qui décrit la personne — pas ce qu'elle a fait. C'est là-dessus qu'on
+     décide, et les valeurs qui diffèrent sont signalées. */
+  const CHAMPS = [
+    ["genre", "Genre"],
+    ["age_range", "Tranche d'âge"],
+    ["structure", "Structure"],
+    ["statut", "Statut"],
+    ["email", "E-mail"],
+    ["telephone", "Téléphone"],
+  ];
+  const valeursDe = (champ) =>
+    new Set((g?.fiches || []).map((f) => normaliser(champ, f[champ])).filter((v) => v !== null));
+
+  return (
+    <section className="card-solid overflow-hidden border border-violet-300">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <UserRound className="h-5 w-5 flex-shrink-0 text-violet-600" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-800">
+            {data.total} groupe{data.total > 1 ? "s" : ""} à trancher à la main
+          </span>
+          <span className="block text-xs text-slate-500">
+            Ces fiches portent le même nom, et rien d&apos;autre ne dit si c&apos;est la même
+            personne. Deux personnes peuvent porter le même nom — d&apos;où cette revue.
+            {data.traites_automatiquement > 0 && (
+              <span className="text-emerald-700">
+                {" "}· {data.traites_automatiquement} autre
+                {data.traites_automatiquement > 1 ? "s sont traités" : " est traité"} sans
+                décision, par le bouton ci-dessus
+              </span>
+            )}
+          </span>
+        </span>
+        <span className="text-xs text-slate-500">{ouvert ? "Masquer" : "Commencer la revue"}</span>
+      </button>
+
+      {ouvert && g && (
+        <div className="border-t border-violet-200 px-4 py-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500">
+              Groupe {position + 1} sur {data.total}
+            </span>
+            {g.activite_partagee && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                deux fiches sur la même formation — probablement deux personnes
+              </span>
+            )}
+            {g.conflits?.length > 0 && (
+              <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                {g.conflits.length} désaccord{g.conflits.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {g.noms_differents && (
+              <span className="rounded-full border border-slate-300 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                noms écrits différemment
+              </span>
+            )}
+          </div>
+
+          {/* Les fiches côte à côte : c'est la comparaison qui décide, pas un
+              résumé de la comparaison. */}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[34rem] text-left text-xs">
+              <thead>
+                <tr className="text-slate-500">
+                  <th className="pb-1 pr-3 font-medium">&nbsp;</th>
+                  {g.fiches.map((f) => (
+                    <th key={f.id} className="pb-1 pr-3 font-medium">
+                      fiche {f.id}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="align-top">
+                <tr className="border-t border-slate-100">
+                  <td className="py-1 pr-3 text-slate-500">Nom écrit</td>
+                  {g.fiches.map((f) => (
+                    <td key={f.id} className="py-1 pr-3 font-medium text-slate-800">
+                      {[f.prenom, f.nom].filter(Boolean).join(" ").trim() || (
+                        <span className="text-slate-300">sans nom</span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+                {CHAMPS.map(([champ, libelle]) => {
+                  const distinctes = valeursDe(champ).size > 1;
+                  return (
+                    <tr key={champ} className="border-t border-slate-100">
+                      <td className="py-1 pr-3 text-slate-500">{libelle}</td>
+                      {g.fiches.map((f) => (
+                        <td
+                          key={f.id}
+                          className={`py-1 pr-3 ${distinctes ? "font-medium text-amber-700" : "text-slate-700"}`}
+                        >
+                          {f[champ] || <span className="text-slate-300">—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+                <tr className="border-t border-slate-100">
+                  <td className="py-1 pr-3 text-slate-500">Formations</td>
+                  {g.fiches.map((f) => (
+                    <td key={f.id} className="py-1 pr-3 text-slate-700">
+                      {(f.activites || []).length === 0 ? (
+                        <span className="text-slate-300">aucune</span>
+                      ) : (
+                        <span className="block space-y-0.5">
+                          {(f.activites || []).map((a) => (
+                            <span key={a.id} className="block">
+                              {a.titre}
+                              {a.date && (
+                                <span className="text-slate-400"> · {formatDate(a.date)}</span>
+                              )}
+                            </span>
+                          ))}
+                          {f.activites_total > (f.activites || []).length && (
+                            <span className="block text-slate-400">
+                              et {f.activites_total - f.activites.length} autre
+                              {f.activites_total - f.activites.length > 1 ? "s" : ""}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => decider("meme_personne")}
+              disabled={enCours}
+              className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-700 disabled:opacity-60"
+            >
+              {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              C&apos;est la même personne
+            </button>
+            <button
+              type="button"
+              onClick={() => decider("deux_personnes")}
+              disabled={enCours}
+              className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Ce sont deux personnes
+            </button>
+            {/* La troisième issue. Sans elle, un groupe muet force un choix au
+                hasard — et c'est précisément ce qu'on cherche à éviter. */}
+            <button
+              type="button"
+              onClick={() => setPosition((p) => p + 1)}
+              disabled={enCours || position + 1 >= data.total}
+              className="rounded-xl px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+            >
+              Je ne sais pas — passer
+            </button>
+            {position > 0 && (
+              <button
+                type="button"
+                onClick={() => setPosition((p) => Math.max(0, p - 1))}
+                disabled={enCours}
+                className="rounded-xl px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 disabled:opacity-40"
+              >
+                Revenir au précédent
+              </button>
+            )}
+          </div>
+
+          <p className="mt-3 text-xs text-slate-500">
+            Rien n&apos;est supprimé dans un cas comme dans l&apos;autre. « La même personne »
+            rattache les fiches — le nombre de bénéficiaires se corrige, les lignes de
+            présence ne bougent pas, et le rattachement se défait. « Deux personnes » se
+            retient : ce groupe ne reviendra plus.
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Participants() {
   const { isCompact } = useDensity();
   const { isViewer } = useAuth();
@@ -1191,6 +1440,9 @@ export default function Participants() {
           )}
         </section>
       )}
+
+      {/* La revue : les groupes que le nom seul soutient, un par un. */}
+      <RevueDesGroupes onChange={rechargerListe} />
 
       <section className="surface-glass p-5 lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
