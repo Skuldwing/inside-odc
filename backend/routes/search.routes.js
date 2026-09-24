@@ -1,6 +1,7 @@
 const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const { conditionsDeRecherche } = require("../services/rechercheTexte");
 
 const router = express.Router();
 
@@ -89,10 +90,19 @@ router.get("/", authMiddleware, async (req, res) => {
       });
     }
 
-    /* ── Participants ── */
+    /* ── Participants ──
+       Les memes regles que la page Participants, par le service partage : la
+       barre du haut et la page doivent trouver la meme chose. Avant, celle-ci
+       comparait la chaine entiere a chaque colonne prise isolement — « aminata
+       ndiaye » ne rendait rien — et ignorait le numero de telephone. */
     {
       const scope = activityScope(user, "a");
-      const { params, clause } = build([needle], scope);
+      const recherche = conditionsDeRecherche(raw, {
+        colonnes: ["p.nom", "p.prenom", "p.email", "p.structure"],
+        telephone: "p.telephone",
+        depart: 1,
+      });
+      const { params, clause } = build(recherche.params, scope);
       jobs.push({
         type: "participant",
         label: "Participants",
@@ -102,7 +112,7 @@ router.get("/", authMiddleware, async (req, res) => {
           FROM participants p
           JOIN activity_participants ap ON ap.participant_id = p.id
           JOIN activities a ON a.id = ap.activity_id
-          WHERE (p.nom ILIKE $1 OR p.prenom ILIKE $1 OR p.email ILIKE $1 OR p.structure ILIKE $1)
+          WHERE ${recherche.conditions.join(" AND ")}
             ${clause ? `AND ${clause}` : ""}
           ORDER BY p.id, a.activity_date DESC
           LIMIT ${PER_GROUP + 1}
