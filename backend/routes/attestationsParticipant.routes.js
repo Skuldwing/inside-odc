@@ -56,7 +56,7 @@ const cleTitre = (t) =>
 async function etatDesPersonnes(req) {
   const { where, params } = perimetre(req);
   const lignes = await pool.query(
-    `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure,
+    `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure, p.age_range,
             a.id AS activity_id, a.title AS titre,
             to_char(a.activity_date, 'YYYY-MM-DD') AS date,
             d.name AS dispositif

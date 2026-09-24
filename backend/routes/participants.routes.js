@@ -299,7 +299,7 @@ router.get("/assiduite", authMiddleware, async (req, res) => {
   try {
     const { baseFrom, params } = buildFilters(req);
     const r = await pool.query(
-      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure,
+      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure, p.age_range,
               a.id AS activity_id, a.title AS titre,
               to_char(a.activity_date, 'YYYY-MM-DD') AS date,
               d.name AS dispositif
@@ -329,7 +329,7 @@ router.get("/assiduite/export.csv", authMiddleware, async (req, res) => {
   try {
     const { baseFrom, params } = buildFilters(req);
     const r = await pool.query(
-      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure,
+      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure, p.age_range,
               a.id AS activity_id, a.title AS titre,
               to_char(a.activity_date, 'YYYY-MM-DD') AS date,
               d.name AS dispositif
