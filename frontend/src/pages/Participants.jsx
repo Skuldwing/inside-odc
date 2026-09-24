@@ -696,6 +696,12 @@ export default function Participants() {
   const [choix, setChoix] = useState({
     dispositifs: [], partenaires: [], statuts: [], ages: [],
   });
+  /* Quand le serveur ne sait pas répondre — typiquement parce qu'il exécute
+     encore une version antérieure, qui ignore cette route —, les listes
+     restent vides et les filtres ne font rien. Sans ce signal, la page a
+     simplement l'air cassée : on la dit en panne plutôt que de laisser
+     chercher pourquoi. */
+  const [choixEnPanne, setChoixEnPanne] = useState(false);
 
   const filtresActifs = Object.entries(filtres)
     .filter(([cle, v]) => cle !== "search" && String(v || "").trim() !== "").length;
@@ -862,13 +868,16 @@ export default function Participants() {
     chercherDoublons();
     chercherFiches();
     api.get("/participants/filtres")
-      .then((r) => setChoix({
-        dispositifs: r.data?.dispositifs || [],
-        partenaires: r.data?.partenaires || [],
-        statuts: r.data?.statuts || [],
-        ages: r.data?.ages || [],
-      }))
-      .catch(() => {}); /* silencieux : sans les listes, la recherche marche */
+      .then((r) => {
+        setChoix({
+          dispositifs: r.data?.dispositifs || [],
+          partenaires: r.data?.partenaires || [],
+          statuts: r.data?.statuts || [],
+          ages: r.data?.ages || [],
+        });
+        setChoixEnPanne(false);
+      })
+      .catch(() => setChoixEnPanne(true));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Un filtre change → on repart de la première page. Rester sur la page 7
@@ -1232,6 +1241,18 @@ export default function Participants() {
           Plusieurs mots se cumulent — « aminata ndiaye » ou « ndiaye kids tech ».
           Les accents sont ignorés, et un numéro se tape comme il s'écrit.
         </p>
+
+        {choixEnPanne && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+            <span>
+              Les listes de filtres n&apos;ont pas pu être chargées, et les
+              filtres ci-dessous resteront sans effet. Le serveur exécute
+              probablement une version antérieure&nbsp;: signalez-le à
+              l&apos;équipe technique. La recherche par nom, elle, fonctionne.
+            </span>
+          </div>
+        )}
 
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <select

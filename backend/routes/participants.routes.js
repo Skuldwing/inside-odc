@@ -9,6 +9,7 @@ const {
 const { computeAndStoreReliability } = require("../services/reliability");
 const { trierAdresses } = require("../services/adressesValides");
 const { classerParAssiduite } = require("../services/assiduite");
+const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/rechercheTexte");
 
 const router = express.Router();
 
@@ -20,29 +21,6 @@ const PAGE_SIZE = 100;
    gonfler le processus. */
 const EXPORT_BATCH = 2000;
 
-/* Accents retires et minuscules, des deux cotes de la comparaison.
-   « Cherif » doit trouver « Chérif », et « NDEYE » trouver « Ndèye » : les
-   listes de presence sont saisies a la main, tantot accentuees tantot non,
-   et personne ne retape un accent pour retrouver quelqu'un.
-
-   translate() plutot que l'extension unaccent : celle-ci demande un CREATE
-   EXTENSION que la base de production n'a pas forcement le droit de faire. */
-const LETTRES_ACCENTUEES = "àáâãäåçèéêëìíîïñòóôõöùúûüýÿÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜÝ";
-const LETTRES_SIMPLES = "aaaaaaceeeeiiiinooooouuuuyyAAAAAACEEEEIIIINOOOOOUUUUY";
-const DEPLIE = (colonne) =>
-  `lower(translate(coalesce(${colonne}, ''), '${LETTRES_ACCENTUEES}', '${LETTRES_SIMPLES}'))`;
-
-/* Le meme pliage, cote JavaScript, pour le motif recherche. */
-function deplier(valeur) {
-  return String(valeur)
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
-
-/* « % » et « _ » sont des jokers en SQL : tapes par quelqu'un qui cherche
-   « 100_ouvriers », ils elargiraient la recherche au lieu de la restreindre. */
-const echapperMotif = (mot) => mot.replace(/([\\%_])/g, "\\$1");
-
 /* Les colonnes ou l'on cherche du texte. Le nom et le prenom sont separes en
    base : sans cette liste, « aminata ndiaye » ne trouvait rien, puisque la
    chaine entiere etait cherchee dans chaque colonne prise isolement. */
@@ -50,10 +28,6 @@ const COLONNES_TEXTE = [
   "p.nom", "p.prenom", "p.structure", "p.email", "p.statut",
   "a.title", "pr.name", "d.name",
 ];
-
-/* Le numero, compare chiffre a chiffre : « 77 123 45 67 », « +221771234567 »
-   et « 771234567 » designent la meme personne. */
-const CHIFFRES_TEL = `regexp_replace(coalesce(p.telephone, ''), '[^0-9]', '', 'g')`;
 
 /* Filtres et cloisonnement, partages par la liste paginee et l'export.
    Les deux vues doivent voir exactement le meme perimetre : un partenaire
@@ -116,41 +90,14 @@ function buildFilters(req) {
     params.push(au);
   }
 
-  /* Un numero de telephone se tape comme il s'ecrit : « 77 123 45 67 », avec
-     des espaces. Decoupe en mots, il donnerait « 77 », « 123 »… — des
-     fragments trop courts pour designer qui que ce soit, et la recherche ne
-     rendrait rien. Quand toute la saisie n'est faite que de chiffres et de
-     ponctuation de numero, on la traite donc d'un bloc. */
-  const estNumero = search.length > 0
-    && /^[0-9+().\-\s]+$/.test(search)
-    && search.replace(/\D/g, "").length >= 3;
-
-  /* Sinon la recherche se fait mot a mot : chaque mot tape doit se retrouver
-     quelque part sur la ligne, mais pas forcement dans la meme colonne. C'est
-     ce qui permet de chercher « aminata ndiaye » — le prenom est dans une
-     colonne, le nom dans une autre —, et aussi bien « ndiaye aminata », ou
-     « ndiaye kids tech » pour ne garder que ses seances Kids Tech.
-
-     Un mot d'au moins trois chiffres est en plus confronte au numero de
-     telephone, debarrasse de ses espaces et de son indicatif. */
-  const mots = estNumero ? [search] : search.split(/\s+/).filter(Boolean).slice(0, 8);
-  for (const mot of mots) {
-    const motif = `%${echapperMotif(deplier(mot))}%`;
-    const alternatives = COLONNES_TEXTE.map((c) => `${DEPLIE(c)} LIKE $${idx}`);
-
-    const chiffres = mot.replace(/\D/g, "");
-    if (chiffres.length >= 3) {
-      alternatives.push(`${CHIFFRES_TEL} LIKE $${idx + 1}`);
-    }
-
-    conditions.push(`(${alternatives.join(" OR ")})`);
-    params.push(motif);
-    idx++;
-    if (chiffres.length >= 3) {
-      params.push(`%${chiffres}%`);
-      idx++;
-    }
-  }
+  /* Mot a mot, accents plies, numero compare chiffre a chiffre : les regles
+     sont dans le service, partagees avec la barre de recherche globale. */
+  const r = conditionsDeRecherche(search, {
+    colonnes: COLONNES_TEXTE, telephone: "p.telephone", depart: idx,
+  });
+  conditions.push(...r.conditions);
+  params.push(...r.params);
+  idx = r.nextIdx;
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
