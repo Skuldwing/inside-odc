@@ -321,4 +321,19 @@ function classerParAssiduite(lignes) {
   return resultat;
 }
 
-module.exports = { classerParAssiduite, telNormalise, mailNormalise, seContredisent };
+/* « H », « h », « Homme » : c'est la meme declaration. Deux lettres
+   differentes, en revanche, designent deux personnes. */
+function genresIncompatibles(a, b) {
+  const x = a ? normaliser(a).slice(0, 1) : null;
+  const y = b ? normaliser(b).slice(0, 1) : null;
+  return Boolean(x && y && x !== y);
+}
+
+module.exports = {
+  classerParAssiduite, telNormalise, mailNormalise, seContredisent,
+  /* Les regles qui disent que deux fiches ne peuvent pas etre la meme
+     personne. Le nettoyage des doublons s'en sert aussi : une regle
+     d'identite qui existerait en deux exemplaires finirait par diverger, et
+     les deux ecrans ne diraient plus la meme chose de la meme personne. */
+  agesIncompatibles, genresIncompatibles, intervalleAge,
+};

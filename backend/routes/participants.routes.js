@@ -8,8 +8,11 @@ const {
 } = require("../services/nomsDoublons");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { trierAdresses } = require("../services/adressesValides");
-const { classerParAssiduite } = require("../services/assiduite");
+const {
+  classerParAssiduite, agesIncompatibles, genresIncompatibles,
+} = require("../services/assiduite");
 const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/rechercheTexte");
+const { reunir, defaire } = require("../services/identite");
 
 const router = express.Router();
 
@@ -525,6 +528,14 @@ function rienNeSepare(a, b) {
   if (ma && mb && ma !== mb) return false;
   const ta = telCompare(a.telephone), tb = telCompare(b.telephone);
   if (ta && tb && ta !== tb) return false;
+  /* Le genre et la tranche d'age decrivent la personne, pas ce qu'elle a
+     fait. Deux fiches qui les declarent de facon incompatible ne sont pas la
+     meme personne, meme si le nom est identique — un adulte et un enfant
+     peuvent porter le meme. Les listes d'ateliers pour enfants ne portent
+     souvent ni adresse ni numero : sans ce garde-fou, rien ne les separait
+     d'un homonyme adulte. */
+  if (genresIncompatibles(a.genre, b.genre)) return false;
+  if (agesIncompatibles(a.age_range, b.age_range)) return false;
   return true;
 }
 
@@ -925,13 +936,24 @@ function doublonsSurActivite(lignes) {
 
     const parents = new Map(fiches.map((f) => [f.id, f.id]));
 
-    /* Identites strictement identiques. */
+
+
+    /* Identites strictement identiques — mais pas contredites.
+
+       Le meme nom ecrit deux fois ne suffisait pas : il reunissait sans rien
+       verifier. Un enfant et un adulte qui portent le meme nom se
+       retrouvaient donc confondus, et sur les listes d'ateliers pour enfants,
+       ou ni adresse ni numero ne sont demandes, rien ne pouvait les separer.
+       On consulte les memes regles que partout ailleurs : une adresse ou un
+       numero qui different, un genre ou une tranche d'age incompatibles,
+       et ce sont deux personnes. */
     const parCle = new Map();
     for (const f of fiches) {
       const cle = clePersonne(f.nom, f.prenom);
       if (!cle) continue;
-      if (parCle.has(cle)) unir(parents, parCle.get(cle), f.id);
-      else parCle.set(cle, f.id);
+      const deja = parCle.get(cle);
+      if (deja === undefined) { parCle.set(cle, f.id); continue; }
+      if (rienNeSepare(act.fiches.get(deja), f)) unir(parents, deja, f.id);
     }
 
     /* Meme contact et nom compatible. */
@@ -966,6 +988,13 @@ function doublonsSurActivite(lignes) {
     for (const membres of parGroupe.values()) {
       if (membres.length < 2) continue;
 
+      /* Deja rapprochees : ces fiches designent la meme personne, le travail
+         est fait. Sans ce garde-fou le groupe restait propose apres coup, et
+         on pouvait le « nettoyer » indefiniment sans que rien ne change —
+         l'ecran annoncant a chaque fois des doublons a traiter. */
+      const identites = new Set(membres.map((f) => f.personne_id).filter(Boolean));
+      if (identites.size === 1 && membres.every((f) => f.personne_id)) continue;
+
       /* La fiche conservee est la mieux renseignee — celle dont on perd le
          moins en retirant les autres inscriptions. A egalite, celle qui figure
          sur le plus d'autres formations : son identifiant circule deja. Puis la
@@ -978,17 +1007,42 @@ function doublonsSurActivite(lignes) {
       const garder = ordre[0];
       const retirer = ordre.slice(1);
 
-      /* Les identites strictement identiques ne demandent pas d'arbitrage :
-         deux fois le meme nom sur une seule feuille, c'est la meme personne
-         inscrite deux fois. Les autres rapprochements se regardent. */
       const cles = new Set(membres.map((f) => clePersonne(f.nom, f.prenom)));
-      const certain = cles.size === 1 && !cles.has(null);
+      const nomsIdentiques = cles.size === 1 && !cles.has(null);
+
+      /* Sur quoi le rapprochement repose vraiment.
+
+         Une adresse ou un numero partage designe une personne : deux fiches
+         qui en portent le meme sont la meme, et le rapprochement se fait sans
+         arbitrage. Le nom, non. « Seynabou Ndiaye » peut etre deux femmes sur
+         une liste de trois cents, et sur les listes d'ateliers pour enfants —
+         ou ni adresse ni numero ne sont demandes — c'est le cas ordinaire,
+         pas l'exception.
+
+         Le nettoyage de septembre a retire 929 inscriptions dont 53 % ne
+         reposaient que sur le nom. Ces rapprochements-la ne s'appliquent plus
+         en masse : ils se proposent, et quelqu'un tranche. */
+      const partageUnContact = (() => {
+        const mails = new Set(membres.map((f) => mailCompare(f.email)).filter(Boolean));
+        const tels = new Set(membres.map((f) => telCompare(f.telephone)).filter(Boolean));
+        const avecMail = membres.filter((f) => mailCompare(f.email)).length;
+        const avecTel = membres.filter((f) => telCompare(f.telephone)).length;
+        return (mails.size === 1 && avecMail === membres.length)
+          || (tels.size === 1 && avecTel === membres.length);
+      })();
+
+      const preuve = partageUnContact ? "contact" : "nom_seul";
+      /* « Certain » veut dire : applicable sans que personne ne tranche. Le
+         nom identique n'y suffit plus. */
+      const certain = partageUnContact;
 
       groupes.push({
         cle: `${act.activite_id}:${garder.id}`,
         activite: { id: act.activite_id, titre: act.titre, date: act.date },
         certain,
-        motif: certain
+        preuve,
+        noms_identiques: nomsIdentiques,
+        motif: nomsIdentiques
           ? "identite_identique"
           : membres.every((f) => clePersonne(f.nom, f.prenom))
             ? "nom_plus_complet"
@@ -1019,6 +1073,10 @@ async function lignesInscrites(req) {
             to_char(a.activity_date, 'YYYY-MM-DD') AS date,
             p.id, p.nom, p.prenom, p.email, p.telephone,
             p.genre, p.age_range, p.statut, p.structure,
+            /* L'identite a laquelle la fiche est rattachee : deux fiches qui
+               la partagent sont deja reconnues comme une seule personne, et
+               n'ont plus rien a se voir proposer. */
+            p.personne_id,
             (SELECT COUNT(*) FROM activity_participants x WHERE x.participant_id = p.id)
               ::int AS total_activites
        ${baseFrom}
@@ -1038,8 +1096,12 @@ router.get("/doublons-activite", authMiddleware, async (req, res) => {
          effectifs comptent en double. */
       total: groupes.reduce((n, g) => n + g.retirer.length, 0),
       groupes_total: groupes.length,
+      /* « Certain » : adosse a une adresse ou un numero partage. Ceux-la
+         s'appliquent d'un bloc. Les autres ne reposent que sur le nom et
+         attendent une decision — ils ne partent jamais en masse. */
       certains: groupes.filter((g) => g.certain).length,
       a_regarder: groupes.filter((g) => !g.certain).length,
+      sur_nom_seul: groupes.filter((g) => g.preuve === "nom_seul").length,
       activites: new Set(groupes.map((g) => g.activite.id)).size,
       tronquee: groupes.length > MAX_GROUPES_DOUBLONS,
       groupes: groupes.slice(0, MAX_GROUPES_DOUBLONS),
@@ -1071,9 +1133,28 @@ router.post("/doublons-activite/retirer", authMiddleware, async (req, res) => {
     }
 
     const tous = doublonsSurActivite(await lignesInscrites(req));
-    const retenus = tout ? tous : tous.filter((g) => demandes.has(g.cle));
+
+    /* « Tout » ne veut pas dire « tout ce qui se ressemble ».
+
+       Un rapprochement adosse a une adresse ou un numero partage designe une
+       personne : il s'applique sans que personne n'ait a trancher. Un
+       rapprochement qui ne repose que sur le nom, non — et c'etait plus de la
+       moitie des 929 retraits de septembre. Celui-la ne part jamais en masse :
+       il faut le designer, groupe par groupe, apres l'avoir regarde.
+
+       Rien n'est interdit. On demande seulement de le dire. */
+    const surNomSeul = tous.filter((g) => !g.certain);
+    const retenus = tout
+      ? tous.filter((g) => g.certain)
+      : tous.filter((g) => demandes.has(g.cle));
+
     if (!retenus.length) {
-      return res.json({ retirees: 0, groupes: 0, activites: 0, deja_faites: 0 });
+      return res.json({
+        retirees: 0, groupes: 0, activites: 0, deja_faites: 0,
+        /* On dit ce qui a ete laisse de cote, sinon « 0 rapprochement » se
+           lit comme « il n'y avait rien a faire ». */
+        laisses_sur_nom_seul: tout ? surNomSeul.length : 0,
+      });
     }
 
     await client.query("BEGIN");
@@ -1084,31 +1165,72 @@ router.post("/doublons-activite/retirer", authMiddleware, async (req, res) => {
     const activitesTouchees = new Set();
     const traces = [];
 
+    /* On ne supprime plus l'inscription : on rattache la fiche a la meme
+       personne que celle qu'on garde.
+
+       La ligne de liste de presence reste — c'est un document, on ne reecrit
+       pas une feuille d'emargement signee. Le compte des personnes distinctes
+       baisse, celui des lignes ne bouge pas, et si le rapprochement etait
+       faux, personne n'a disparu d'une liste ou il figurait : il suffit de
+       separer a nouveau.
+
+       C'est la difference avec le nettoyage de septembre, qui a retire 929
+       inscriptions dont plus de la moitie sur le seul nom. */
     for (const g of retenus) {
+      const aRattacher = [];
       for (const f of g.retirer) {
-        const r = await client.query(
-          `DELETE FROM activity_participants
-            WHERE activity_id = $1 AND participant_id = $2`,
-          [g.activite.id, f.id]
+        const { rows } = await client.query(
+          `SELECT p.personne_id
+             FROM participants p
+             JOIN activity_participants ap ON ap.participant_id = p.id
+            WHERE p.id = $1 AND ap.activity_id = $2`,
+          [f.id, g.activite.id]
         );
-        if (!r.rowCount) { dejaFaites += 1; continue; }
+        /* Plus inscrite, ou deja rattachee a la meme personne : rien a faire. */
+        const garde = await client.query(
+          "SELECT personne_id FROM participants WHERE id = $1", [g.garder.id]
+        );
+        if (!rows.length || (rows[0].personne_id && rows[0].personne_id === garde.rows[0]?.personne_id)) {
+          dejaFaites += 1;
+          continue;
+        }
+        aRattacher.push(f);
+      }
+
+      if (!aRattacher.length) continue;
+
+      const { deplacees } = await reunir(
+        client, [g.garder.id, ...aRattacher.map((f) => f.id)]
+      );
+      const parFiche = new Map(deplacees.map((d) => [d.fiche, d.avant]));
+      for (const f of aRattacher) {
+        if (!parFiche.has(f.id)) { dejaFaites += 1; continue; }
         retirees += 1;
         activitesTouchees.add(g.activite.id);
-        traces.push({ groupe: g, fiche: f });
+        traces.push({ groupe: g, fiche: f, identiteAvant: parFiche.get(f.id) });
       }
     }
 
     await client.query("COMMIT");
     ouverte = false;
 
-    /* Une trace par inscription retiree : c'est elle qui permet de la remettre.
-       Elle porte de quoi reconstituer la ligne sans rien deviner. */
-    for (const { groupe, fiche } of traces) {
+    /* Une trace par rapprochement : c'est elle qui permet de le defaire.
+       Elle porte l'identite d'avant, ce qui rend le retour exact — la fiche
+       retrouve celle qu'elle avait, pas une equivalente.
+
+       L'action reste « DELETE » sur « activity_participants » : c'est ce que
+       l'ecran « Inscriptions retirees » interroge, et les traces d'avant, qui
+       supprimaient vraiment, doivent continuer de s'y lire. Le motif dit
+       laquelle des deux operations a eu lieu. */
+    for (const { groupe, fiche, identiteAvant } of traces) {
       await logAudit(
         req, "DELETE", "activity_participants", `${groupe.activite.id}:${fiche.id}`,
         `${fiche.prenom || ""} ${fiche.nom || ""}`.trim() || `fiche ${fiche.id}`,
         {
-          motif: "inscription en double sur la même activité",
+          motif: "doublon sur la même activité : fiche rattachée à la même personne",
+          /* Rien n'a ete supprime : la ligne de presence est toujours la. */
+          suppression: false,
+          identite_avant: identiteAvant ?? null,
           doublon_de: groupe.garder.id,
           rapprochement: groupe.motif,
           activite_id: groupe.activite.id,
@@ -1135,6 +1257,9 @@ router.post("/doublons-activite/retirer", authMiddleware, async (req, res) => {
       groupes: retenus.length,
       activites: activitesTouchees.size,
       deja_faites: dejaFaites,
+      /* Ce qui reste a regarder a la main. Le taire ferait croire le travail
+         fini alors que la moitie attend une decision. */
+      laisses_sur_nom_seul: tout ? surNomSeul.length : 0,
     });
   } catch (err) {
     if (ouverte) await client.query("ROLLBACK").catch(() => {});
@@ -1177,22 +1302,49 @@ router.get("/inscriptions-retirees", authMiddleware, async (req, res) => {
         participant_id: Number(d.participant_id),
         doublon_de: d.doublon_de ?? null,
         fiche: d.fiche || null,
+        /* Deux formes de traces coexistent. Les anciennes supprimaient
+           l'inscription ; les nouvelles rattachent la fiche a une autre
+           personne sans rien supprimer. Elles ne se defont pas de la meme
+           facon, et surtout ne se lisent pas de la meme facon. */
+        suppression: d.suppression !== false,
+        identite_avant: Number.isInteger(Number(d.identite_avant)) ? Number(d.identite_avant) : null,
       });
     }
 
-    /* Deja remise ? On le lit dans la base, pas dans le journal : la ligne
-       existe ou elle n'existe pas. */
-    if (lignes.length) {
+    /* Deja remise ? On le lit dans la base, pas dans le journal.
+
+       Pour une suppression d'autrefois : la ligne existe ou elle n'existe
+       pas. Pour un rattachement : la ligne n'est jamais partie, et la lire
+       conclurait toujours « deja remise » — ce qui rendrait les
+       rapprochements indefaisables. C'est l'identite de la fiche qu'il faut
+       regarder : elle a repris celle d'avant, ou elle porte encore celle de
+       la personne a laquelle on l'a rattachee. */
+    const suppressions = lignes.filter((l) => l.suppression);
+    if (suppressions.length) {
       const { rows: presentes } = await pool.query(
         `SELECT activity_id, participant_id FROM activity_participants
           WHERE (activity_id, participant_id) IN (
             SELECT unnest($1::int[]), unnest($2::int[])
           )`,
-        [lignes.map((l) => l.activite_id), lignes.map((l) => l.participant_id)]
+        [suppressions.map((l) => l.activite_id), suppressions.map((l) => l.participant_id)]
       );
       const vues = new Set(presentes.map((p) => `${p.activity_id}:${p.participant_id}`));
-      for (const l of lignes) {
+      for (const l of suppressions) {
         l.retablie = vues.has(`${l.activite_id}:${l.participant_id}`);
+      }
+    }
+
+    const rattachements = lignes.filter((l) => !l.suppression);
+    if (rattachements.length) {
+      const { rows: actuelles } = await pool.query(
+        "SELECT id, personne_id FROM participants WHERE id = ANY($1::int[])",
+        [rattachements.map((l) => l.participant_id)]
+      );
+      const identite = new Map(actuelles.map((r) => [r.id, r.personne_id]));
+      for (const l of rattachements) {
+        /* Defait : la fiche a retrouve l'identite qu'elle portait avant. */
+        l.retablie = l.identite_avant != null
+          && identite.get(l.participant_id) === l.identite_avant;
       }
     }
 
@@ -1238,6 +1390,26 @@ router.post("/inscriptions-retirees/retablir", authMiddleware, async (req, res) 
       const activiteId = Number(d.activite_id);
       const participantId = Number(d.participant_id);
       if (!activiteId || !participantId) continue;
+
+      /* Deux formes de traces coexistent, et il faut savoir les distinguer.
+
+         Les anciennes supprimaient vraiment l'inscription : les remettre,
+         c'est reinserer la ligne. Les nouvelles n'ont rien supprime — elles
+         ont rattache la fiche a une autre personne —, et la defaire, c'est
+         rendre a la fiche l'identite qu'elle portait. Reinserer une ligne qui
+         n'est jamais partie ne ferait rien, et l'ecran annoncerait un
+         retablissement qui n'a pas eu lieu. */
+      if (d.suppression === false) {
+        if (!Number.isInteger(Number(d.identite_avant))) { impossibles += 1; continue; }
+        const remises = await defaire(client, [
+          { fiche: participantId, avant: Number(d.identite_avant) },
+        ]);
+        if (!remises) { impossibles += 1; continue; }
+        retablies += 1;
+        activitesTouchees.add(activiteId);
+        traces.push({ journal: l.id, activiteId, participantId, d });
+        continue;
+      }
 
       /* L'activite ou la fiche a pu disparaitre depuis : on passe la ligne
          plutot que de faire echouer le reste. */

@@ -36,6 +36,7 @@ const { ensureAttestationsEnvoyees } = require("./migrations/attestationsEnvoyee
 const { ensureAttestationsTerminees } = require("./migrations/attestationsTerminees");
 const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
 const { ensureEmargementPartenaire } = require("./migrations/emargementPartenaire");
+const { ensureIdentitePersonnes } = require("./migrations/identitePersonnes");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -758,6 +759,22 @@ pool.query(`
     console.log("Migration OK: modeles d'attestation");
   } catch (e) {
     console.error("Migration modeles d'attestation ECHOUEE :", e.message);
+  }
+})();
+
+/* ── L'identite d'une personne, separee de la ligne qui la designe ──
+   Neutre au demarrage : chaque fiche recoit sa propre identite, aucun compte
+   ne bouge. C'est a partir de la qu'on peut reunir sans supprimer. */
+(async () => {
+  try {
+    const { fichesRattachees } = await ensureIdentitePersonnes();
+    console.log(
+      fichesRattachees
+        ? `Migration OK: identite des personnes (${fichesRattachees} fiches rattachees)`
+        : "Migration OK: identite des personnes"
+    );
+  } catch (e) {
+    console.error("Migration identite des personnes ECHOUEE :", e.message);
   }
 })();
 
