@@ -122,6 +122,7 @@ router.get("/", authMiddleware, async (req, res) => {
                 convention : il y reste ouvert. */
              COALESCE(p.emargement_actif, TRUE) AS emargement_actif,
              COALESCE(ap.participants_count, 0) AS participants_count,
+             COALESCE(ap.personnes_distinctes, 0) AS personnes_distinctes,
              COALESCE(ph.photo_count, 0) AS photo_count,
              /* Ou en est l'envoi des attestations, sans avoir a ouvrir
                 l'activite. Le denominateur est le nombre de personnes
@@ -134,10 +135,18 @@ router.get("/", authMiddleware, async (req, res) => {
       LEFT JOIN partners p ON a.partner_id = p.id
       LEFT JOIN devices d ON a.device_id = d.id
       LEFT JOIN users u ON a.coach_id = u.id
+      /* Deux chiffres, pas un. « participants_count » compte des lignes de
+         liste de presence ; « personnes_distinctes » compte des personnes.
+         Un seul chiffre portait les deux sens, et personne ne pouvait dire
+         lequel il lisait — c'est ce qui a rendu incomprehensible qu'une
+         activite passe de 302 a 279 sans que personne ne soit parti. */
       LEFT JOIN (
-        SELECT activity_id, COUNT(*)::int AS participants_count
-        FROM activity_participants
-        GROUP BY activity_id
+        SELECT ap0.activity_id,
+               COUNT(*)::int AS participants_count,
+               COUNT(DISTINCT COALESCE(pa0.personne_id, -pa0.id))::int AS personnes_distinctes
+        FROM activity_participants ap0
+        JOIN participants pa0 ON pa0.id = ap0.participant_id
+        GROUP BY ap0.activity_id
       ) ap ON ap.activity_id = a.id
       LEFT JOIN (
         SELECT ap2.activity_id, COUNT(*)::int AS participants_joignables

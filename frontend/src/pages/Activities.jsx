@@ -168,6 +168,10 @@ export default function Activities({
           date,
           duration_hours: a.duration_hours || "",
           participants: a.participants_count ?? 0,
+          /* Lignes de liste de présence d'un côté, personnes distinctes de
+             l'autre. Les deux comptent, et un seul chiffre ne pouvait pas
+             porter les deux sens. */
+          personnes_distinctes: a.personnes_distinctes ?? null,
           participants_manual: a.participants_manual ?? null,
           date_fin: a.date_fin ? String(a.date_fin).slice(0, 10) : null,
           report_filename: a.report_filename || null,
@@ -2544,9 +2548,22 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
               <>
                 <p className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
                   <Users className="h-5 w-5 text-orange-500" />
-                  {activity.participants}
+                  {activity.personnes_distinctes ?? activity.participants}
                 </p>
                 <p className="text-xs text-slate-500">Participants</p>
+                {/* L'écart se dit ici, et nulle part ailleurs : c'est le seul
+                    endroit où l'on regarde le chiffre en se demandant d'où il
+                    vient. Sans lui, une même personne comptée deux fois reste
+                    invisible jusqu'au jour où quelqu'un nettoie. */}
+                {activity.personnes_distinctes != null
+                  && activity.participants > activity.personnes_distinctes && (
+                  <p
+                    className="text-[11px] text-amber-600"
+                    title="Des lignes de la liste de présence désignent la même personne"
+                  >
+                    {activity.participants} lignes
+                  </p>
+                )}
               </>
             ) : activity.participants_manual != null ? (
               <>
