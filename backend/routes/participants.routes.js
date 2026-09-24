@@ -610,6 +610,14 @@ function analyserGroupes(fiches) {
   for (const membres of parCle.values()) {
     if (membres.length < 2) continue;
 
+    /* Deja rattachees : ces fiches designent la meme personne, le compte est
+       juste et il n'y a plus rien a decider. Les completer garde du sens —
+       une case vide se remplit toujours —, mais proposer a nouveau leur
+       rapprochement ferait croire a un travail en attente qui n'existe pas.
+       On ne les ecarte donc que si elles n'ont rien a se donner non plus. */
+    const identites = new Set(membres.map((f) => f.personne_id).filter(Boolean));
+    const dejaUneSeulePersonne = identites.size === 1 && membres.every((f) => f.personne_id);
+
     /* La fiche conservee est la mieux renseignee — c'est celle qui a le moins
        a recevoir, donc celle dont le moins de valeurs seront ecartees. A
        egalite, la plus ancienne : son identifiant circule deja ailleurs. */
@@ -668,7 +676,21 @@ function analyserGroupes(fiches) {
       }
     }
 
-    resultat.push({ garder, absorber, apport, conflits, noms_differents, partage });
+    /* Sur quoi le rapprochement repose vraiment, la meme regle que partout
+       ailleurs. Une adresse ou un numero partage designe une personne : le
+       rattachement peut se faire sans que personne ne tranche. Le nom, non —
+       et un desaccord sur un renseignement stable l'interdit de toute facon. */
+    const preuve = partage.length && !conflits.length ? "contact" : "nom_seul";
+
+    /* Rien a rattacher et rien a completer : le groupe n'a plus lieu d'etre
+       montre. Le garder ferait annoncer indefiniment un travail qui n'existe
+       plus — c'est ce qui est arrive avec les 518 fiches deja remises. */
+    if (dejaUneSeulePersonne && !apport.length) continue;
+
+    resultat.push({
+      garder, absorber, apport, conflits, noms_differents, partage, preuve,
+      deja_une_seule_personne: dejaUneSeulePersonne,
+    });
   }
 
   /* Les groupes qui apportent quelque chose d'abord : ce sont ceux qui
@@ -741,7 +763,7 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
     const { baseFrom, params } = buildFilters(req);
     const r = await pool.query(
       `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone,
-              p.genre, p.age_range, p.statut, p.structure ${baseFrom}
+              p.genre, p.age_range, p.statut, p.structure, p.personne_id ${baseFrom}
        ORDER BY p.id`,
       params
     );
@@ -800,6 +822,115 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
  * Les listes de presence gardent exactement les memes lignes ; seules les
  * cases vides se remplissent. Les comptes ne peuvent pas bouger.
  */
+/* ===== LES RATTACHEMENTS DE FICHES, ET LE MOYEN DE LES DEFAIRE =====
+ *
+ * Rattacher ne supprime rien : c'est ce qui permet de revenir en arriere sans
+ * perte. Encore faut-il pouvoir le faire, et voir ce qui a ete rattache — un
+ * geste reversible dont personne ne connait le chemin du retour n'est pas
+ * reversible.
+ */
+router.get("/fiches-rattachees", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const LIMITE = 1000;
+    const { rows } = await pool.query(
+      `SELECT id, resource_id, resource_label, details, created_at
+         FROM audit_logs
+        WHERE resource = 'participants' AND action = 'UPDATE'
+          AND details->>'identite_avant' IS NOT NULL
+        ORDER BY created_at DESC, id DESC
+        LIMIT $1`,
+      [LIMITE]
+    );
+
+    const lignes = [];
+    for (const l of rows) {
+      const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
+      const fiche = Number(l.resource_id);
+      const avant = Number(d.identite_avant);
+      if (!Number.isInteger(fiche) || !Number.isInteger(avant)) continue;
+      lignes.push({
+        journal: String(l.id),
+        fiche, identite_avant: avant,
+        nom: l.resource_label,
+        rattachee_avec: d.rattachee_avec ?? null,
+        reconnue_par: d.reconnue_par ?? null,
+        rattachee_le: l.created_at,
+      });
+    }
+
+    /* Deja defait ? La fiche porte de nouveau l'identite d'avant. On le lit
+       dans la base, pas dans le journal. */
+    if (lignes.length) {
+      const { rows: actuelles } = await pool.query(
+        "SELECT id, personne_id FROM participants WHERE id = ANY($1::int[])",
+        [lignes.map((l) => l.fiche)]
+      );
+      const identite = new Map(actuelles.map((r) => [r.id, r.personne_id]));
+      for (const l of lignes) l.defaite = identite.get(l.fiche) === l.identite_avant;
+    }
+
+    res.json({
+      total: lignes.length,
+      a_defaire: lignes.filter((l) => !l.defaite).length,
+      lignes,
+    });
+  } catch (err) {
+    console.error("[FICHES RATTACHEES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/fiches-rattachees/separer", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const journaux = Array.isArray(req.body?.journaux)
+      ? req.body.journaux.map(Number).filter(Number.isInteger) : [];
+    if (!journaux.length) return res.status(400).json({ error: "Aucun rattachement à défaire." });
+
+    const { rows } = await client.query(
+      `SELECT id, resource_id, details FROM audit_logs
+        WHERE id = ANY($1::int[]) AND resource = 'participants' AND action = 'UPDATE'
+          AND details->>'identite_avant' IS NOT NULL`,
+      [journaux]
+    );
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let defaites = 0;
+    let dejaFaites = 0;
+    for (const l of rows) {
+      const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details || {};
+      const remises = await defaire(client, [
+        { fiche: Number(l.resource_id), avant: Number(d.identite_avant) },
+      ]);
+      if (remises) defaites += 1;
+      else dejaFaites += 1;
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    logAudit(req, "UPDATE", "participants", null, `${defaites} rattachement(s) défait(s)`, {
+      motif: "rattachement défait",
+      fiches: rows.map((l) => Number(l.resource_id)),
+    });
+
+    res.json({ defaites, deja_faites: dejaFaites });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[FICHES RATTACHEES SEPARER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
 router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
   const client = await pool.connect();
   let ouverte = false;
@@ -813,7 +944,7 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
     const { baseFrom, params } = buildFilters(req);
     const portee = await client.query(
       `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone,
-              p.genre, p.age_range, p.statut, p.structure ${baseFrom} ORDER BY p.id`,
+              p.genre, p.age_range, p.statut, p.structure, p.personne_id ${baseFrom} ORDER BY p.id`,
       params
     );
 
@@ -829,10 +960,43 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
 
     let fichesCompletees = 0;
     let champsRemplis = 0;
+    let rattachees = 0;
+    let laisseesSurNomSeul = 0;
     const detail = [];
+    const rapprochements = [];
 
     for (const groupe of groupesRetenus) {
       const membres = [groupe.garder, ...groupe.absorber];
+
+      /* ── Rattacher, en plus de completer ──────────────────────────────
+         Completer remplit les cases vides ; cela ne dit toujours pas que ces
+         fiches designent une seule personne. Le compte continuait donc
+         d'annoncer deux beneficiaires pour quelqu'un qui n'est venu qu'une
+         fois, et rien ne pouvait le corriger sans supprimer.
+
+         Depuis que l'identite existe, le rattachement suffit : la ligne de
+         liste de presence reste, le compte des personnes se corrige, et on
+         peut revenir en arriere.
+
+         Comme partout, le nom seul ne decide pas. Les groupes adosses a une
+         adresse ou un numero partage sont rattaches ; les autres sont
+         completes mais laisses tels quels, et comptes a part. */
+      if (groupe.preuve === "contact") {
+        const { deplacees } = await reunir(client, membres.map((f) => f.id));
+        for (const dep of deplacees) {
+          rattachees += 1;
+          const f = membres.find((m) => m.id === dep.fiche);
+          rapprochements.push({
+            fiche: dep.fiche,
+            avant: dep.avant,
+            nom: f ? `${f.prenom || ""} ${f.nom || ""}`.trim() : null,
+            avec: groupe.garder.id,
+            preuve: groupe.partage.map((p) => p.libelle).join(" et "),
+          });
+        }
+      } else {
+        laisseesSurNomSeul += 1;
+      }
 
       /* La valeur retenue pour chaque champ : la seule connue du groupe. S'il
          y en a plusieurs qui different, on ne tranche pas — un desaccord se
@@ -876,10 +1040,31 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
         `${fichesCompletees} fiche(s) complétée(s)`, { champs_remplis: champsRemplis, detail });
     }
 
+    /* Une trace par fiche rattachee, portant l'identite d'avant : c'est elle
+       qui rend le retour exact. Une trace par groupe ne suffirait pas — on
+       veut pouvoir defaire une fiche sans defaire ses voisines. */
+    for (const r of rapprochements) {
+      await logAudit(
+        req, "UPDATE", "participants", String(r.fiche),
+        r.nom || `fiche ${r.fiche}`,
+        {
+          motif: "fiches de la même personne, rattachées",
+          suppression: false,
+          identite_avant: r.avant,
+          rattachee_avec: r.avec,
+          reconnue_par: r.preuve || null,
+        }
+      );
+    }
+
     res.json({
       fiches_completees: fichesCompletees,
       champs_remplis: champsRemplis,
       groupes: groupesRetenus.length,
+      /* Ce que le rattachement a corrige, et ce qu'il a laisse. Taire le
+         second ferait croire le travail fini. */
+      fiches_rattachees: rattachees,
+      groupes_sur_nom_seul: laisseesSurNomSeul,
     });
   } catch (err) {
     if (ouverte) await client.query("ROLLBACK").catch(() => {});
