@@ -757,7 +757,12 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
         `Import interrompu : ${toInsert.length} fiches a creer, ${crees.length} creees.`
       );
     }
-    crees.forEach((r, j) => { items[toInsertIdx[j]].resolvedId = r.id; });
+    crees.forEach((r, j) => {
+      items[toInsertIdx[j]].resolvedId = r.id;
+      /* Marquee comme nouvelle : la simulation doit pouvoir dire combien de
+         personnes la base ne connaissait pas. */
+      items[toInsertIdx[j]].creee = true;
+    });
   }
 
   /* Les lignes repetees dans le fichier reprennent l'identifiant de la
@@ -786,6 +791,12 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     imported, skippedMissingName, duplicatesInActivity,
     contactsIgnores, rattachements, champsCompletes, lignesIncompletes,
     doublonsReunis,
+    /* De quoi dire, avant d'ecrire, ce que le fichier va reellement produire :
+       des personnes que la base ne connaissait pas, ou des lignes qui
+       retombent sur des fiches deja la. C'est la difference entre une liste
+       nouvelle et une liste deja importee. */
+    fichesCreees: toInsert.length,
+    personnesConnues: items.filter((it) => it.resolvedId && !it.creee).length,
   };
 }
 
@@ -916,6 +927,10 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
       activity,
       participants_importes: stats.imported,
       total_lignes: rows.length,
+      /* Ce que l'import a vraiment produit : des personnes nouvelles, ou des
+         lignes qui retombent sur des fiches deja la. */
+      personnes_nouvelles: stats.fichesCreees,
+      personnes_connues: stats.personnesConnues,
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
       /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
@@ -949,6 +964,45 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
 });
 
 /* ===== IMPORTER PARTICIPANTS SUR ACTIVITÉ (avec vérification souple) ===== */
+/* ===== SIMULATION D'IMPORT =====
+ *
+ * « Le fichier a 36 lignes » ne dit pas ce qu'il va produire. Importe deux
+ * fois dans la meme activite, il n'ajoute personne de plus mais cree des
+ * fiches en double, et le nombre de beneficiaires grimpe sans qu'aucun
+ * beneficiaire de plus ne soit venu. C'est arrive : trois listes empilees sur
+ * une meme activite le meme jour, puis, un mois plus tard, un nettoyage qui a
+ * retire des inscriptions sur le seul nom pour reparer — au risque de
+ * confondre deux homonymes.
+ *
+ * On rejoue donc l'import reel — le meme code, pas une estimation — et on
+ * annule tout. Le compte rendu est exact parce qu'il a vraiment eu lieu.
+ */
+const estSimulation = (req) =>
+  req.body?.simulation === "1" || req.body?.simulation === "true" || req.body?.simulation === true;
+
+function compteRenduSimulation(activity, rows, stats, { recognizedColumns, unrecognizedColumns, headerRowIndex }) {
+  return {
+    simulation: true,
+    activite: activity.title,
+    date: activity.activity_date ?? null,
+    total_lignes: rows.length,
+    /* Les chiffres qui decident : ce qui s'ajoute vraiment, ce qui est deja
+       la, et combien de personnes la base ne connaissait pas. */
+    nouvelles_inscriptions: stats.imported,
+    deja_inscrites: stats.duplicatesInActivity,
+    personnes_nouvelles: stats.fichesCreees,
+    personnes_connues: stats.personnesConnues,
+    doublons_dans_le_fichier: stats.doublonsReunis.length,
+    doublons_reunis: stats.doublonsReunis,
+    lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
+    lignes_incompletes: stats.lignesIncompletes,
+    contacts_ignores: stats.contactsIgnores,
+    colonnes_reconnues: recognizedColumns,
+    colonnes_non_reconnues: unrecognizedColumns,
+    ligne_entete_detectee: headerRowIndex + 1,
+  };
+}
+
 router.post("/participants/:activityId", authMiddleware, upload.single("file"), async (req, res) => {
   const client = await pool.connect();
   let inTransaction = false;
@@ -976,10 +1030,20 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
+    const simulation = estSimulation(req);
+
     await client.query("BEGIN");
     inTransaction = true;
 
     const stats = await importParticipantsRowsBatch(client, rows, activityId);
+
+    if (simulation) {
+      await client.query("ROLLBACK");
+      inTransaction = false;
+      return res.json(compteRenduSimulation(activity, rows, stats, {
+        recognizedColumns, unrecognizedColumns, headerRowIndex,
+      }));
+    }
 
     await client.query("COMMIT");
     inTransaction = false;
@@ -987,6 +1051,11 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
     logAudit(req, "UPDATE", "activities", activityId, activity.title, {
       action: "import_participants",
       participants_importes: stats.imported,
+      /* Ce que l'import a vraiment fait, pas seulement combien de lignes il
+         a lues : un compte qui monte doit pouvoir s'expliquer plus tard. */
+      lignes_du_fichier: rows.length,
+      deja_inscrites: stats.duplicatesInActivity,
+      fiches_creees: stats.fichesCreees,
     });
     await computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
 
@@ -996,6 +1065,10 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
       date: activity.activity_date,
       participants_importes: stats.imported,
       total_lignes: rows.length,
+      /* Ce que l'import a vraiment produit : des personnes nouvelles, ou des
+         lignes qui retombent sur des fiches deja la. */
+      personnes_nouvelles: stats.fichesCreees,
+      personnes_connues: stats.personnesConnues,
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
       /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
@@ -1053,10 +1126,20 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
+    const simulation = estSimulation(req);
+
     await client.query("BEGIN");
     inTransaction = true;
 
     const stats = await importParticipantsRowsBatch(client, rows, activityId);
+
+    if (simulation) {
+      await client.query("ROLLBACK");
+      inTransaction = false;
+      return res.json(compteRenduSimulation(activity, rows, stats, {
+        recognizedColumns, unrecognizedColumns, headerRowIndex,
+      }));
+    }
 
     await client.query(
       "UPDATE activities SET participants_manual = NULL WHERE id = $1",
@@ -1077,6 +1160,10 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       activite: activity.title,
       participants_importes: stats.imported,
       total_lignes: rows.length,
+      /* Ce que l'import a vraiment produit : des personnes nouvelles, ou des
+         lignes qui retombent sur des fiches deja la. */
+      personnes_nouvelles: stats.fichesCreees,
+      personnes_connues: stats.personnesConnues,
       lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
       doublons_dans_activite: stats.duplicatesInActivity,
       /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit

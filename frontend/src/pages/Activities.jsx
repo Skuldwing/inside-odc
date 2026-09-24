@@ -76,6 +76,10 @@ export default function Activities({
   const [importDirectResult, setImportDirectResult] = useState(null);
   const [importDirectError, setImportDirectError] = useState("");
   const [importPreview, setImportPreview] = useState(null);   // données analyse
+  /* Le compte rendu de la simulation : ce que l'import produira réellement,
+     obtenu en le rejouant puis en l'annulant côté serveur. */
+  const [importSimulation, setImportSimulation] = useState(null);
+  const [simulating, setSimulating] = useState(false);
   const [importMapping, setImportMapping] = useState({});     // {original: field} overrides
   const [previewing, setPreviewing] = useState(false);
   const [createImportPreview, setCreateImportPreview] = useState(null);
@@ -389,6 +393,7 @@ export default function Activities({
       setImportDirectResult(null);
       setImportFile(null);
       setImportPreview(null);
+      setImportSimulation(null);
       setClearParticipantsConfirm(false);
       fetchActivities();
     } catch (err) {
@@ -470,6 +475,7 @@ export default function Activities({
     setPreviewing(true);
     setImportDirectError("");
     setImportPreview(null);
+    setImportSimulation(null);
     setImportMapping({});
     try {
       const fd = new FormData();
@@ -505,20 +511,44 @@ export default function Activities({
     }
   };
 
+  /* Ce que le fichier fera, avant qu'il le fasse.
+     Le nombre de lignes ne dit rien : une liste déjà importée en a autant et
+     n'ajoute personne. Le serveur rejoue l'import pour de vrai puis annule
+     tout, et renvoie le compte exact. */
+  const envoyerImport = async (simulation) => {
+    const fd = new FormData();
+    fd.append("file", importFile);
+    if (Object.keys(importMapping).length > 0)
+      fd.append("manual_mapping", JSON.stringify(importMapping));
+    if (simulation) fd.append("simulation", "1");
+    const res = await api.post(`/import/direct/${editForm.id}`, fd, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+  };
+
+  const handleSimuler = async () => {
+    if (!importFile) return;
+    setSimulating(true);
+    setImportDirectError("");
+    try {
+      setImportSimulation(await envoyerImport(true));
+    } catch (err) {
+      setImportDirectError(err?.response?.data?.error || "La vérification a échoué.");
+    } finally {
+      setSimulating(false);
+    }
+  };
+
   const handleDirectImport = async () => {
     if (!importFile) return;
     setImporting(true);
     setImportDirectError("");
     try {
-      const fd = new FormData();
-      fd.append("file", importFile);
-      if (Object.keys(importMapping).length > 0)
-        fd.append("manual_mapping", JSON.stringify(importMapping));
-      const res = await api.post(`/import/direct/${editForm.id}`, fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setImportDirectResult(res.data);
+      const data = await envoyerImport(false);
+      setImportDirectResult(data);
       setImportPreview(null);
+      setImportSimulation(null);
       setImportMapping({});
       setEditForm(f => ({ ...f, participants_manual: "" }));
       fetchActivities();
@@ -1261,6 +1291,7 @@ export default function Activities({
                     setImportFile(e.target.files[0] || null);
                     setImportDirectError("");
                     setImportPreview(null);
+                    setImportSimulation(null);
                     setImportMapping({});
                   }}
                   className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
@@ -1293,14 +1324,24 @@ export default function Activities({
                 )}
 
                 {/* Prévisualisation du mapping */}
-                {importPreview && (
+                {importPreview && !importSimulation && (
                   <ImportPreviewPanel
                     preview={importPreview}
                     mapping={importMapping}
                     onMappingChange={setImportMapping}
                     onReset={() => { setImportPreview(null); setImportMapping({}); }}
-                    onConfirm={handleDirectImport}
+                    onConfirm={handleSimuler}
+                    importing={simulating}
+                    libelleConfirmer="Vérifier ce que ça va faire"
+                    libelleEnCours="Vérification…"
+                  />
+                )}
+                {importSimulation && (
+                  <ResumeSimulation
+                    sim={importSimulation}
                     importing={importing}
+                    onAnnuler={() => setImportSimulation(null)}
+                    onImporter={handleDirectImport}
                   />
                 )}
               </div>
@@ -1715,7 +1756,99 @@ const FIELD_LABELS = {
   tranche_age: "Tranche d'âge", statut: "Statut", nom_complet: "Nom complet",
 };
 
-function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConfirm, importing, showConfirmButton = true }) {
+/**
+ * Ce que l'import va produire, avant qu'il le produise.
+ *
+ * Le nombre de lignes ne dit rien d'utile : une liste déjà importée en a
+ * autant et n'ajoute personne. Ce sont les trois autres chiffres qui
+ * décident, et le premier en particulier — si rien ne s'ajoute, il n'y a rien
+ * à importer, et insister ne ferait que créer des fiches en double que
+ * quelqu'un devra retirer un mois plus tard, sur le seul nom.
+ */
+function ResumeSimulation({ sim, importing, onAnnuler, onImporter }) {
+  const rien = (sim.nouvelles_inscriptions ?? 0) === 0;
+  const dejaLa = sim.deja_inscrites ?? 0;
+
+  const Chiffre = ({ valeur, libelle, fort }) => (
+    <div className={`rounded-xl border px-3 py-2 ${
+      fort ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-white"
+    }`}>
+      <p className={`text-xl font-semibold ${fort ? "text-orange-700" : "text-slate-800"}`}>{valeur}</p>
+      <p className="text-[11px] leading-tight text-slate-600">{libelle}</p>
+    </div>
+  );
+
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-300 bg-slate-50 p-4">
+      <p className="text-sm font-semibold text-slate-800">
+        Rien n&apos;a encore été enregistré. Voici ce que ce fichier ferait :
+      </p>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Chiffre valeur={sim.total_lignes} libelle="lignes dans le fichier" />
+        <Chiffre valeur={sim.nouvelles_inscriptions} libelle="inscriptions ajoutées" fort />
+        <Chiffre valeur={dejaLa} libelle="déjà inscrites" />
+        <Chiffre valeur={sim.personnes_nouvelles} libelle="personnes inconnues de la base" />
+      </div>
+
+      {rien && (
+        <div className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+          <span>
+            <strong>Tout le monde est déjà inscrit à cette activité.</strong> Importer
+            n&apos;ajouterait aucun bénéficiaire, mais pourrait créer des fiches en double
+            qu&apos;il faudra retirer plus tard. Vérifiez que c&apos;est bien la bonne activité.
+          </span>
+        </div>
+      )}
+
+      {dejaLa > 0 && !rien && (
+        <p className="text-xs text-slate-600">
+          {dejaLa} ligne{dejaLa > 1 ? "s" : ""} de ce fichier {dejaLa > 1 ? "correspondent" : "correspond"} à
+          quelqu&apos;un de déjà inscrit — {dejaLa > 1 ? "elles seront ignorées" : "elle sera ignorée"}.
+        </p>
+      )}
+
+      {sim.doublons_dans_le_fichier > 0 && (
+        <p className="text-xs text-slate-600">
+          {sim.doublons_dans_le_fichier} personne{sim.doublons_dans_le_fichier > 1 ? "s figurent" : " figure"} plusieurs
+          fois dans le fichier lui-même.
+        </p>
+      )}
+
+      {sim.lignes_ignorees_nom_prenom_manquants > 0 && (
+        <p className="text-xs text-amber-700">
+          {sim.lignes_ignorees_nom_prenom_manquants} ligne(s) vide(s) seront ignorées.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onImporter}
+          disabled={importing}
+          className={`text-sm ${rien ? "btn-ghost border border-slate-300" : "btn-primary"} disabled:opacity-50`}
+        >
+          {importing
+            ? "Import en cours…"
+            : rien
+              ? "Importer quand même"
+              : `Importer (${sim.nouvelles_inscriptions} inscription${sim.nouvelles_inscriptions > 1 ? "s" : ""})`}
+        </button>
+        <button
+          type="button"
+          onClick={onAnnuler}
+          disabled={importing}
+          className="btn-ghost border border-slate-300 text-sm disabled:opacity-50"
+        >
+          Revenir
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConfirm, importing, showConfirmButton = true, libelleConfirmer, libelleEnCours }) {
   const { columns = [], total_rows = 0, header_row = 1, available_fields = [] } = preview;
 
   const effectiveField = (col) => mapping[col.original] || col.field;
@@ -1820,7 +1953,9 @@ function ImportPreviewPanel({ preview, mapping, onMappingChange, onReset, onConf
           onClick={onConfirm}
           className="btn-primary text-sm w-full disabled:opacity-50"
         >
-          {importing ? "Import en cours..." : `Confirmer l'import (${total_rows} lignes)`}
+          {importing
+            ? (libelleEnCours || "Import en cours...")
+            : (libelleConfirmer || `Confirmer l'import (${total_rows} lignes)`)}
         </button>
       ) : (
         !hasName ? null : (
