@@ -826,10 +826,28 @@ export default function Participants() {
     setFusion(true);
     try {
       const res = await api.post("/participants/fiches-doublons/completer", { ids });
+      /* Deux effets désormais : les cases vides se remplissent, et les fiches
+         qu'une adresse ou un numéro rapproche sont rattachées à une même
+         personne — ce qui corrige enfin les comptes, sans rien supprimer. */
+      const rattachees = res.data.fiches_rattachees || 0;
+      const laisses = res.data.groupes_sur_nom_seul || 0;
+      const morceaux = [];
+      if (res.data.champs_remplis) {
+        morceaux.push(
+          `${res.data.champs_remplis} information${res.data.champs_remplis > 1 ? "s" : ""} complétée${res.data.champs_remplis > 1 ? "s" : ""} sur ${res.data.fiches_completees} fiche${res.data.fiches_completees > 1 ? "s" : ""}`
+        );
+      }
+      if (rattachees) {
+        morceaux.push(
+          `${rattachees} fiche${rattachees > 1 ? "s" : ""} rattachée${rattachees > 1 ? "s" : ""} à la même personne`
+        );
+      }
       toast.success(
-        res.data.champs_remplis
-          ? `${res.data.champs_remplis} information${res.data.champs_remplis > 1 ? "s" : ""} complétée${res.data.champs_remplis > 1 ? "s" : ""} sur ${res.data.fiches_completees} fiche${res.data.fiches_completees > 1 ? "s" : ""}.`
-          : "Rien à compléter : ces fiches portent déjà la même information."
+        (morceaux.length
+          ? morceaux.join(" · ") + ". Aucune fiche supprimée."
+          : "Rien à faire : ces fiches portent déjà la même information.") +
+        /* Taire ce qui reste ferait croire le travail fini. */
+        (laisses ? ` ${laisses} groupe${laisses > 1 ? "s" : ""} sur nom seul à regarder.` : "")
       );
       setFichesOuvertes(false);
       await chercherFiches();
@@ -1146,6 +1164,17 @@ export default function Participants() {
                   qui se contredisent et celles où deux fiches figurent sur la même formation
                   partent décochées.
                 </p>
+                {/* Ce que le bouton fait vraiment, maintenant qu'il fait deux
+                    choses. Sans cette phrase, « compléter » laisse croire que
+                    seules les cases vides bougent. */}
+                <p className="mb-2 text-xs text-slate-600">
+                  Les cases vides se remplissent avec ce que les autres fiches portent, et
+                  celles qu&apos;une <strong>adresse ou un numéro partagé</strong> rapproche sont
+                  rattachées à une même personne — le nombre de bénéficiaires se corrige,
+                  aucune ligne de présence ne bouge, et chaque rattachement se défait.
+                  Les groupes qui ne reposent que sur le nom sont complétés mais pas
+                  rattachés : deux personnes peuvent porter le même.
+                </p>
                 <button
                   type="button"
                   onClick={completerFiches}
@@ -1153,7 +1182,9 @@ export default function Participants() {
                   className="flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-60"
                 >
                   {fusion ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  {fusion ? "Complétion…" : `Compléter ${idsRetenus.length} fiche${idsRetenus.length > 1 ? "s" : ""}`}
+                  {fusion
+                    ? "En cours…"
+                    : `Compléter et rattacher ${idsRetenus.length} fiche${idsRetenus.length > 1 ? "s" : ""}`}
                 </button>
               </div>
             </div>
