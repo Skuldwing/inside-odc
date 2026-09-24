@@ -8,7 +8,9 @@ const {
 } = require("../services/nomsDoublons");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { trierAdresses } = require("../services/adressesValides");
-const { classerParAssiduite } = require("../services/assiduite");
+const {
+  classerParAssiduite, agesIncompatibles, genresIncompatibles,
+} = require("../services/assiduite");
 const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/rechercheTexte");
 const { reunir, defaire } = require("../services/identite");
 
@@ -526,6 +528,14 @@ function rienNeSepare(a, b) {
   if (ma && mb && ma !== mb) return false;
   const ta = telCompare(a.telephone), tb = telCompare(b.telephone);
   if (ta && tb && ta !== tb) return false;
+  /* Le genre et la tranche d'age decrivent la personne, pas ce qu'elle a
+     fait. Deux fiches qui les declarent de facon incompatible ne sont pas la
+     meme personne, meme si le nom est identique — un adulte et un enfant
+     peuvent porter le meme. Les listes d'ateliers pour enfants ne portent
+     souvent ni adresse ni numero : sans ce garde-fou, rien ne les separait
+     d'un homonyme adulte. */
+  if (genresIncompatibles(a.genre, b.genre)) return false;
+  if (agesIncompatibles(a.age_range, b.age_range)) return false;
   return true;
 }
 
@@ -928,13 +938,22 @@ function doublonsSurActivite(lignes) {
 
 
 
-    /* Identites strictement identiques. */
+    /* Identites strictement identiques — mais pas contredites.
+
+       Le meme nom ecrit deux fois ne suffisait pas : il reunissait sans rien
+       verifier. Un enfant et un adulte qui portent le meme nom se
+       retrouvaient donc confondus, et sur les listes d'ateliers pour enfants,
+       ou ni adresse ni numero ne sont demandes, rien ne pouvait les separer.
+       On consulte les memes regles que partout ailleurs : une adresse ou un
+       numero qui different, un genre ou une tranche d'age incompatibles,
+       et ce sont deux personnes. */
     const parCle = new Map();
     for (const f of fiches) {
       const cle = clePersonne(f.nom, f.prenom);
       if (!cle) continue;
-      if (parCle.has(cle)) unir(parents, parCle.get(cle), f.id);
-      else parCle.set(cle, f.id);
+      const deja = parCle.get(cle);
+      if (deja === undefined) { parCle.set(cle, f.id); continue; }
+      if (rienNeSepare(act.fiches.get(deja), f)) unir(parents, deja, f.id);
     }
 
     /* Meme contact et nom compatible. */
@@ -988,17 +1007,42 @@ function doublonsSurActivite(lignes) {
       const garder = ordre[0];
       const retirer = ordre.slice(1);
 
-      /* Les identites strictement identiques ne demandent pas d'arbitrage :
-         deux fois le meme nom sur une seule feuille, c'est la meme personne
-         inscrite deux fois. Les autres rapprochements se regardent. */
       const cles = new Set(membres.map((f) => clePersonne(f.nom, f.prenom)));
-      const certain = cles.size === 1 && !cles.has(null);
+      const nomsIdentiques = cles.size === 1 && !cles.has(null);
+
+      /* Sur quoi le rapprochement repose vraiment.
+
+         Une adresse ou un numero partage designe une personne : deux fiches
+         qui en portent le meme sont la meme, et le rapprochement se fait sans
+         arbitrage. Le nom, non. « Seynabou Ndiaye » peut etre deux femmes sur
+         une liste de trois cents, et sur les listes d'ateliers pour enfants —
+         ou ni adresse ni numero ne sont demandes — c'est le cas ordinaire,
+         pas l'exception.
+
+         Le nettoyage de septembre a retire 929 inscriptions dont 53 % ne
+         reposaient que sur le nom. Ces rapprochements-la ne s'appliquent plus
+         en masse : ils se proposent, et quelqu'un tranche. */
+      const partageUnContact = (() => {
+        const mails = new Set(membres.map((f) => mailCompare(f.email)).filter(Boolean));
+        const tels = new Set(membres.map((f) => telCompare(f.telephone)).filter(Boolean));
+        const avecMail = membres.filter((f) => mailCompare(f.email)).length;
+        const avecTel = membres.filter((f) => telCompare(f.telephone)).length;
+        return (mails.size === 1 && avecMail === membres.length)
+          || (tels.size === 1 && avecTel === membres.length);
+      })();
+
+      const preuve = partageUnContact ? "contact" : "nom_seul";
+      /* « Certain » veut dire : applicable sans que personne ne tranche. Le
+         nom identique n'y suffit plus. */
+      const certain = partageUnContact;
 
       groupes.push({
         cle: `${act.activite_id}:${garder.id}`,
         activite: { id: act.activite_id, titre: act.titre, date: act.date },
         certain,
-        motif: certain
+        preuve,
+        noms_identiques: nomsIdentiques,
+        motif: nomsIdentiques
           ? "identite_identique"
           : membres.every((f) => clePersonne(f.nom, f.prenom))
             ? "nom_plus_complet"
@@ -1052,8 +1096,12 @@ router.get("/doublons-activite", authMiddleware, async (req, res) => {
          effectifs comptent en double. */
       total: groupes.reduce((n, g) => n + g.retirer.length, 0),
       groupes_total: groupes.length,
+      /* « Certain » : adosse a une adresse ou un numero partage. Ceux-la
+         s'appliquent d'un bloc. Les autres ne reposent que sur le nom et
+         attendent une decision — ils ne partent jamais en masse. */
       certains: groupes.filter((g) => g.certain).length,
       a_regarder: groupes.filter((g) => !g.certain).length,
+      sur_nom_seul: groupes.filter((g) => g.preuve === "nom_seul").length,
       activites: new Set(groupes.map((g) => g.activite.id)).size,
       tronquee: groupes.length > MAX_GROUPES_DOUBLONS,
       groupes: groupes.slice(0, MAX_GROUPES_DOUBLONS),
@@ -1085,9 +1133,28 @@ router.post("/doublons-activite/retirer", authMiddleware, async (req, res) => {
     }
 
     const tous = doublonsSurActivite(await lignesInscrites(req));
-    const retenus = tout ? tous : tous.filter((g) => demandes.has(g.cle));
+
+    /* « Tout » ne veut pas dire « tout ce qui se ressemble ».
+
+       Un rapprochement adosse a une adresse ou un numero partage designe une
+       personne : il s'applique sans que personne n'ait a trancher. Un
+       rapprochement qui ne repose que sur le nom, non — et c'etait plus de la
+       moitie des 929 retraits de septembre. Celui-la ne part jamais en masse :
+       il faut le designer, groupe par groupe, apres l'avoir regarde.
+
+       Rien n'est interdit. On demande seulement de le dire. */
+    const surNomSeul = tous.filter((g) => !g.certain);
+    const retenus = tout
+      ? tous.filter((g) => g.certain)
+      : tous.filter((g) => demandes.has(g.cle));
+
     if (!retenus.length) {
-      return res.json({ retirees: 0, groupes: 0, activites: 0, deja_faites: 0 });
+      return res.json({
+        retirees: 0, groupes: 0, activites: 0, deja_faites: 0,
+        /* On dit ce qui a ete laisse de cote, sinon « 0 rapprochement » se
+           lit comme « il n'y avait rien a faire ». */
+        laisses_sur_nom_seul: tout ? surNomSeul.length : 0,
+      });
     }
 
     await client.query("BEGIN");
@@ -1190,6 +1257,9 @@ router.post("/doublons-activite/retirer", authMiddleware, async (req, res) => {
       groupes: retenus.length,
       activites: activitesTouchees.size,
       deja_faites: dejaFaites,
+      /* Ce qui reste a regarder a la main. Le taire ferait croire le travail
+         fini alors que la moitie attend une decision. */
+      laisses_sur_nom_seul: tout ? surNomSeul.length : 0,
     });
   } catch (err) {
     if (ouverte) await client.query("ROLLBACK").catch(() => {});

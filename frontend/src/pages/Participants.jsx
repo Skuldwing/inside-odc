@@ -267,8 +267,8 @@ function DoublonsActivite({ onChange }) {
     if (!combien) return;
     const ok = await confirm({
       title: `Ne compter qu'une fois ${combien > 1 ? `ces ${combien} inscriptions` : "cette inscription"} ?`,
-      body: "Aucune fiche n'est supprimée : seul le lien avec l'activité est retiré, et les fiches gardent toutes leurs autres formations. L'effectif des activités concernées baisse d'autant — c'est le but, il comptait la même personne deux fois. Une fiche qui n'a plus aucune activité disparaît de la liste des participants, qui n'affiche que les personnes rattachées à une activité : elle existe toujours, et revient dès qu'on remet l'inscription. Chaque retrait est inscrit au journal.",
-      confirmLabel: "Retirer les doublons",
+      body: "Rien n'est supprimé. Les fiches sont rattachées à une même personne : la ligne de la liste de présence reste telle qu'elle a été écrite, et c'est le nombre de personnes distinctes qui baisse — c'est le but, il comptait la même personne deux fois. Chaque rapprochement est inscrit au journal et se défait à l'identique. En masse, seuls les rapprochements adossés à une adresse ou un numéro partagé sont appliqués : ceux qui ne reposent que sur le nom attendent que vous les désigniez, car deux personnes peuvent porter le même.",
+      confirmLabel: "Rapprocher",
     });
     if (!ok) return;
     setEnCours(true);
@@ -277,9 +277,12 @@ function DoublonsActivite({ onChange }) {
         "/participants/doublons-activite/retirer",
         tout ? { tout: true } : { groupes: retenus.map((g) => g.cle) }
       );
+      const laisses = res.data.laisses_sur_nom_seul || 0;
       toast.success(
-        `${res.data.retirees} inscription${res.data.retirees > 1 ? "s" : ""} en double retirée${res.data.retirees > 1 ? "s" : ""} ` +
-        `sur ${res.data.activites} activité${res.data.activites > 1 ? "s" : ""}. Aucune fiche supprimée.`
+        `${res.data.retirees} fiche${res.data.retirees > 1 ? "s" : ""} rapprochée${res.data.retirees > 1 ? "s" : ""} ` +
+        `sur ${res.data.activites} activité${res.data.activites > 1 ? "s" : ""}. Aucune ligne de présence supprimée.` +
+        /* Taire ce qui reste ferait croire le travail fini. */
+        (laisses ? ` ${laisses} groupe${laisses > 1 ? "s" : ""} sur nom seul à regarder.` : "")
       );
       /* La liste et les compteurs de la page datent d'avant : sans ce
          rechargement, ils annonceraient encore les doublons qu'on vient de
@@ -327,9 +330,17 @@ function DoublonsActivite({ onChange }) {
             {data?.total > 0 ? (
               <>
                 La même personne compte deux fois sur la même liste de présence
-                {data.a_regarder > 0 && (
+                {/* Dire sur quoi repose chaque rapprochement, et combien
+                    n'ont que le nom pour eux : c'est la seule information qui
+                    permette de décider. */}
+                {data.certains > 0 && (
+                  <span className="text-emerald-700">
+                    {" "}· {data.certains} prouvé{data.certains > 1 ? "s" : ""} par une adresse ou un numéro
+                  </span>
+                )}
+                {data.sur_nom_seul > 0 && (
                   <span className="text-amber-700">
-                    {" "}· {data.a_regarder} à regarder, décoché{data.a_regarder > 1 ? "s" : ""} par précaution
+                    {" "}· {data.sur_nom_seul} sur le nom seul, à regarder
                   </span>
                 )}
               </>
@@ -372,6 +383,14 @@ function DoublonsActivite({ onChange }) {
                         >
                           {MOTIFS_RAPPROCHEMENT[g.motif] || g.motif}
                         </span>
+                        {/* Deux personnes peuvent porter le même nom. Sans
+                            coordonnée pour trancher, on le dit plutôt que de
+                            laisser croire que la machine a reconnu quelqu'un. */}
+                        {g.preuve === "nom_seul" && (
+                          <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+                            nom seul — à confirmer
+                          </span>
+                        )}
                       </span>
 
                       {/* Ce qui reste, et ce qui est retiré : la ligne conservée
@@ -429,7 +448,13 @@ function DoublonsActivite({ onChange }) {
                   className="flex items-center gap-1.5 rounded-xl bg-orange-600 px-3 py-2 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-60"
                 >
                   {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                  {enCours ? "Retrait…" : `Tout traiter (${data.total})`}
+                  {/* « Tout » ne veut pas dire « tout ce qui se ressemble » :
+                      le bouton n'emporte que ce qu'une adresse ou un numéro
+                      partagé prouve. Annoncer le total serait mentir sur ce
+                      qu'il fait. */}
+                  {enCours
+                    ? "Rapprochement…"
+                    : `Rapprocher les ${data.certains ?? 0} cas sûrs`}
                 </button>
                 {inscriptionsRetenues > 0 && inscriptionsRetenues < data.total && (
                   <button
