@@ -86,6 +86,10 @@ export default function Activities({
      règle ne peut deviner. L'activité passe alors sous réserve, et un
      administrateur tranche après coup. */
   const [importTelleQuelle, setImportTelleQuelle] = useState(false);
+  /* « Enregistrer » a sauvé les champs, mais la liste attend encore une
+     confirmation. Sans ce mot, la fiche qui reste ouverte passerait pour un
+     bouton qui n'a pas marché. */
+  const [listeEnAttente, setListeEnAttente] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [importMapping, setImportMapping] = useState({});     // {original: field} overrides
   const [previewing, setPreviewing] = useState(false);
@@ -350,6 +354,8 @@ export default function Activities({
     setImporting(false);
     setImportDirectResult(null);
     setImportDirectError("");
+    setListeEnAttente(false);
+    setImportTelleQuelle(false);
     setReportFile(null);
     setReportError("");
     setClearParticipantsConfirm(false);
@@ -578,6 +584,7 @@ export default function Activities({
       setImportPreview(null);
       setImportSimulation(null);
       setImportMapping({});
+      setListeEnAttente(false);
       setEditForm(f => ({ ...f, participants_manual: "" }));
       fetchActivities();
     } catch (err) {
@@ -622,6 +629,32 @@ export default function Activities({
           headers: { "Content-Type": "multipart/form-data" },
         });
         setReportFile(null);
+      }
+
+      /* La liste de présences choisie mais pas encore importée.
+       *
+       * Le rapport PDF est envoyé ici depuis longtemps, précisément pour
+       * éviter « un fichier choisi puis perdu parce qu'un second bouton
+       * n'avait pas été actionné ». La liste, elle, ne l'était pas : on
+       * enregistrait les champs, on fermait la fiche, et le fichier — avec
+       * l'option « garder la liste telle quelle » qu'on venait de cocher —
+       * disparaissait sans un mot. L'activité ne se mettait pas à jour, et
+       * rien ne disait pourquoi.
+       *
+       * On ne l'importe pas en silence pour autant : une liste qui entre sans
+       * qu'on ait vu ce qu'elle fait, c'est exactement ce que la simulation
+       * sert à empêcher. On la joue donc — rien n'est écrit —, on garde la
+       * fiche ouverte, et il ne reste qu'à confirmer. */
+      if (importFile && !importDirectResult) {
+        setListeEnAttente(true);
+        setImportDirectError("");
+        try {
+          setImportSimulation(await envoyerImport(true));
+        } catch (err) {
+          setImportDirectError(err?.response?.data?.error || "La vérification a échoué.");
+        }
+        fetchActivities();
+        return;
       }
 
       setEditOpen(false);
@@ -1321,6 +1354,10 @@ export default function Activities({
                     setImportPreview(null);
                     setImportSimulation(null);
                     setImportMapping({});
+                    /* Un autre fichier : le compte rendu et l'option d'avant
+                       ne le décrivent plus. */
+                    setListeEnAttente(false);
+                    setImportTelleQuelle(false);
                   }}
                   className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-orange-700 hover:file:bg-orange-100"
                 />
@@ -1331,11 +1368,28 @@ export default function Activities({
                 {importFile && !importPreview && (
                   <div className="flex items-start gap-2 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    {/* Cet avertissement disait l'inverse : « Enregistrer » ne
+                        traitait pas le fichier, et le perdait en fermant la
+                        fiche. Il l'emporte désormais — jusqu'à la
+                        confirmation, jamais au-delà. */}
                     <span>
-                      Fichier sélectionné mais pas encore importé. Cliquez sur <strong>« Analyser le fichier »</strong>{" "}
-                      ci-dessous — le bouton <strong>« Enregistrer »</strong> en bas de la fiche ne traite pas ce fichier.
+                      Fichier sélectionné, pas encore importé. Cliquez sur{" "}
+                      <strong>« Analyser le fichier »</strong> ci-dessous — ou sur{" "}
+                      <strong>« Enregistrer »</strong>, qui l&apos;emportera aussi et vous
+                      montrera ce qu&apos;il va faire avant d&apos;écrire quoi que ce soit.
                     </span>
                   </div>
+                )}
+
+                {/* L'option accompagne le fichier, pas une étape : on la
+                    proposait seulement après « Analyser », donc elle n'était
+                    pas là sur le chemin direct. Elle vient avant les boutons
+                    qui la consomment. */}
+                {importFile && !importSimulation && (
+                  <ChoixTelleQuelle
+                    valeur={importTelleQuelle}
+                    onChange={basculerTelleQuelle}
+                  />
                 )}
 
                 {/* Bouton Analyser */}
@@ -1354,10 +1408,6 @@ export default function Activities({
                 {/* Prévisualisation du mapping */}
                 {importPreview && !importSimulation && (
                   <>
-                    <ChoixTelleQuelle
-                      valeur={importTelleQuelle}
-                      onChange={basculerTelleQuelle}
-                    />
                     <ImportPreviewPanel
                       preview={importPreview}
                       mapping={importMapping}
@@ -1370,11 +1420,25 @@ export default function Activities({
                     />
                   </>
                 )}
+                {/* « Enregistrer » a sauvé les champs et joué la liste sans
+                    rien écrire. La fiche reste ouverte : il faut dire pourquoi,
+                    sinon elle passe pour un bouton qui n'a pas marché. */}
+                {listeEnAttente && importSimulation && (
+                  <div className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      <strong>Les modifications de l&apos;activité sont enregistrées.</strong> Il
+                      reste la liste de présences : voici ce qu&apos;elle va faire. Rien n&apos;est
+                      encore écrit — cliquez sur <strong>« Importer »</strong> pour la valider.
+                    </span>
+                  </div>
+                )}
+
                 {importSimulation && (
                   <ResumeSimulation
                     sim={importSimulation}
                     importing={importing}
-                    onAnnuler={() => setImportSimulation(null)}
+                    onAnnuler={() => { setImportSimulation(null); setListeEnAttente(false); }}
                     onImporter={handleDirectImport}
                   />
                 )}
