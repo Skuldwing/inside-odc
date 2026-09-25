@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -24,6 +24,8 @@ import {
   ZoomIn,
   AlertTriangle,
   ScanSearch,
+  Check,
+  Loader2,
 } from "lucide-react";
 import QRCode from "qrcode";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameMonth, isToday, parseISO } from "date-fns";
@@ -79,6 +81,11 @@ export default function Activities({
   /* Le compte rendu de la simulation : ce que l'import produira réellement,
      obtenu en le rejouant puis en l'annulant côté serveur. */
   const [importSimulation, setImportSimulation] = useState(null);
+  /* « Garder la liste telle quelle » : une ligne, une inscription. C'est le
+     responsable qui était en salle qui le demande — il sait ce qu'aucune
+     règle ne peut deviner. L'activité passe alors sous réserve, et un
+     administrateur tranche après coup. */
+  const [importTelleQuelle, setImportTelleQuelle] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [importMapping, setImportMapping] = useState({});     // {original: field} overrides
   const [previewing, setPreviewing] = useState(false);
@@ -180,6 +187,14 @@ export default function Activities({
              pas recopié ici n'existe pas pour les cartes, quoi que renvoie
              l'API. */
           emargement_actif: a.emargement_actif !== false,
+          /* La liste est-elle entrée telle qu'elle a été écrite, et quelqu'un
+             l'a-t-il regardée depuis ? Un effectif sous réserve doit se voir
+             sur la carte : sinon il finit dans un rapport comme s'il était
+             sûr. */
+          liste_telle_quelle: a.liste_telle_quelle === true,
+          liste_validee_le: a.liste_validee_le || null,
+          liste_validee_par: a.liste_validee_par_nom || null,
+          rapprochements_en_attente: a.rapprochements_en_attente ?? 0,
           mode: a.mode || "presentiel",
           reliability_score: a.reliability_score != null ? Number(a.reliability_score) : null,
           reliability_status: a.reliability_status || null,
@@ -525,10 +540,19 @@ export default function Activities({
     if (Object.keys(importMapping).length > 0)
       fd.append("manual_mapping", JSON.stringify(importMapping));
     if (simulation) fd.append("simulation", "1");
+    if (importTelleQuelle) fd.append("telle_quelle", "1");
     const res = await api.post(`/import/direct/${editForm.id}`, fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
+  };
+
+  const basculerTelleQuelle = (valeur) => {
+    setImportTelleQuelle(valeur);
+    /* Le compte rendu affiché ne vaut plus : il décrit l'autre mode. Le
+       laisser à l'écran ferait cliquer « Importer » sur un diagnostic
+       périmé. */
+    setImportSimulation(null);
   };
 
   const handleSimuler = async () => {
@@ -1329,16 +1353,22 @@ export default function Activities({
 
                 {/* Prévisualisation du mapping */}
                 {importPreview && !importSimulation && (
-                  <ImportPreviewPanel
-                    preview={importPreview}
-                    mapping={importMapping}
-                    onMappingChange={setImportMapping}
-                    onReset={() => { setImportPreview(null); setImportMapping({}); }}
-                    onConfirm={handleSimuler}
-                    importing={simulating}
-                    libelleConfirmer="Vérifier ce que ça va faire"
-                    libelleEnCours="Vérification…"
-                  />
+                  <>
+                    <ChoixTelleQuelle
+                      valeur={importTelleQuelle}
+                      onChange={basculerTelleQuelle}
+                    />
+                    <ImportPreviewPanel
+                      preview={importPreview}
+                      mapping={importMapping}
+                      onMappingChange={setImportMapping}
+                      onReset={() => { setImportPreview(null); setImportMapping({}); }}
+                      onConfirm={handleSimuler}
+                      importing={simulating}
+                      libelleConfirmer="Vérifier ce que ça va faire"
+                      libelleEnCours="Vérification…"
+                    />
+                  </>
                 )}
                 {importSimulation && (
                   <ResumeSimulation
@@ -1379,6 +1409,7 @@ export default function Activities({
                   )}
                 </div>
                 <DoublonsReunisInfo result={importDirectResult} />
+                <RapprochementsEcartesInfo result={importDirectResult} />
                 <ContactsIgnoresInfo result={importDirectResult} />
                 <ColumnMappingInfo result={importDirectResult} />
               </div>
@@ -1411,6 +1442,15 @@ export default function Activities({
               Voir / ajouter des photos
             </button>
           </div>
+
+          {/* La revue de la liste entrée telle quelle. Elle n'apparaît que
+              lorsqu'il y a quelque chose à trancher ou à signer. */}
+          {role === "admin" && activities.find((a) => a.id === editForm.id)?.liste_telle_quelle && (
+            <RevueListeTelleQuelle
+              activityId={editForm.id}
+              onChange={fetchActivities}
+            />
+          )}
         </ActivityModal>
       )}
 
@@ -1635,6 +1675,7 @@ function ImportResultSummary({ result }) {
         </div>
       )}
       <DoublonsReunisInfo result={result} />
+      <RapprochementsEcartesInfo result={result} />
       <ContactsIgnoresInfo result={result} />
       <ColumnMappingInfo result={result} />
     </div>
@@ -1655,7 +1696,241 @@ const MOTIFS_DOUBLON = {
   identite_identique: "même nom, et rien ne les sépare — ni contact, ni genre, ni âge",
   meme_contact: "même adresse ou même numéro, et un nom qui dit la même chose",
   identite_incomplete: "identité incomplète, identique à une ligne précédente",
+  /* Propre à la liste telle quelle : deux lignes du fichier retombaient sur
+     une même fiche déjà en base. Sans ce garde-fou, le fichier porterait deux
+     lignes et l'activité n'en compterait qu'une. */
+  meme_fiche_existante: "les deux lignes désignaient une même fiche déjà enregistrée",
 };
+
+/**
+ * La revue d'une liste entrée telle quelle.
+ *
+ * L'import n'a rien rapproché, sur demande. Ce qu'il aurait rapproché est
+ * consigné, et l'activité porte un badge tant que personne ne l'a regardé.
+ * Un administrateur tranche cas par cas — réunir ne supprime rien, les deux
+ * lignes de présence restent telles qu'elles ont été écrites — puis signe.
+ *
+ * Signer sans tout trancher est permis : quelqu'un qui connaît sa liste n'a
+ * pas à passer par chaque cas. Ce qui compte, c'est qu'une personne ait
+ * regardé, et que le journal dise ce que la signature couvrait.
+ */
+function RevueListeTelleQuelle({ activityId, onChange }) {
+  const toast = useToast();
+  const [data, setData] = useState(null);
+  const [enCours, setEnCours] = useState(null);
+
+  const charger = useCallback(async () => {
+    try {
+      const r = await api.get(`/activities/${activityId}/liste/rapprochements`);
+      setData(r.data);
+    } catch {
+      setData(null);   /* silencieux : c'est un complément, pas la fiche */
+    }
+  }, [activityId]);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  if (!data?.telle_quelle) return null;
+
+  const trancher = async (rapprochement, decision) => {
+    setEnCours(rapprochement.id);
+    try {
+      const r = await api.post(
+        `/activities/${activityId}/liste/rapprochements/${rapprochement.id}`,
+        { decision }
+      );
+      toast.success(
+        decision === "reuni"
+          ? (r.data.reunies
+              ? "Les deux fiches sont réunies. Aucune ligne de présence supprimée."
+              : "Ces fiches désignaient déjà la même personne.")
+          : "Noté : ce sont deux personnes."
+      );
+      await Promise.all([charger(), onChange?.()]);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La décision n'a pas été enregistrée.");
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  const valider = async () => {
+    setEnCours("valider");
+    try {
+      const r = await api.post(`/activities/${activityId}/liste/valider`);
+      toast.success(
+        r.data.non_tranches > 0
+          /* Taire ce qui reste ferait croire le travail fini. */
+          ? `Liste validée, ${r.data.non_tranches} cas laissé${r.data.non_tranches > 1 ? "s" : ""} sans décision.`
+          : "Liste validée."
+      );
+      await Promise.all([charger(), onChange?.()]);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La validation a échoué.");
+    } finally {
+      setEnCours(null);
+    }
+  };
+
+  const attente = data.rapprochements.filter((r) => !r.tranche);
+
+  return (
+    <div className="mt-5 border-t border-slate-200 pt-5">
+      <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700">
+        <AlertTriangle className="h-4 w-4 text-amber-500" />
+        Liste importée telle quelle
+      </p>
+      <p className="mb-3 text-xs text-slate-500">
+        Le fichier est entré tel qu&apos;il a été écrit : une ligne, une inscription.
+        Voici ce que la plateforme aurait rapproché et qu&apos;elle a laissé.
+        {data.validee_le && (
+          <span className="mt-1 block text-emerald-700">
+            Validée{data.validee_par ? ` par ${data.validee_par}` : ""} le{" "}
+            {new Date(data.validee_le).toLocaleDateString("fr-FR")}.
+          </span>
+        )}
+      </p>
+
+      {attente.length === 0 ? (
+        <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Rien n&apos;attend de décision.
+        </p>
+      ) : (
+        <ul className="divide-y divide-slate-100 rounded-xl border border-amber-200 bg-amber-50/40">
+          {attente.map((r) => (
+            <li key={r.id} className="px-3 py-2.5 text-xs">
+              <p className="font-medium text-slate-800">
+                {[r.prenom, r.nom].filter(Boolean).join(" ")}
+                {r.avec && <span className="font-normal text-slate-500"> · aurait rejoint {r.avec}</span>}
+              </p>
+              <p className="mt-0.5 text-slate-500">
+                {MOTIFS_DOUBLON[r.motif] || r.motif}
+                {(r.email || r.telephone) && ` · ${[r.email, r.telephone].filter(Boolean).join(" · ")}`}
+              </p>
+              {r.deja_reunies && (
+                /* Réunies depuis, par un autre écran : le dire évite de
+                   proposer un geste sans effet. */
+                <p className="mt-0.5 text-slate-400">Déjà réunies depuis, par ailleurs.</p>
+              )}
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={enCours === r.id}
+                  onClick={() => trancher(r, "reuni")}
+                  className="rounded-lg border border-orange-300 px-2 py-1 font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-60"
+                >
+                  {enCours === r.id ? "…" : "C'est la même personne"}
+                </button>
+                <button
+                  type="button"
+                  disabled={enCours === r.id}
+                  onClick={() => trancher(r, "distinct")}
+                  className="rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-700 hover:bg-white disabled:opacity-60"
+                >
+                  Ce sont deux personnes
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!data.validee_le && (
+        <button
+          type="button"
+          onClick={valider}
+          disabled={enCours === "valider"}
+          className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {enCours === "valider"
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Check className="h-4 w-4" />}
+          Valider la liste{attente.length > 0 && ` (${attente.length} cas non tranché${attente.length > 1 ? "s" : ""})`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * « Garder la liste telle quelle. »
+ *
+ * Aucune règle ne peut savoir si deux « Aissatou Diallo » sont une ou deux
+ * personnes. Le responsable qui était en salle, lui, le sait souvent. On lui
+ * donne donc le choix — et on lui dit ce qu'il coûte, avant qu'il coche, pas
+ * après.
+ */
+function ChoixTelleQuelle({ valeur, onChange }) {
+  return (
+    <label className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 text-xs transition-colors ${
+      valeur ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50 hover:bg-slate-100"
+    }`}>
+      <input
+        type="checkbox"
+        checked={valeur}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 accent-amber-600"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-slate-800">
+          Garder la liste telle quelle
+        </span>
+        <span className="mt-0.5 block text-slate-600">
+          Une ligne du fichier, une inscription. Aucun rapprochement ne sera fait
+          entre deux lignes — utile quand vous savez que deux personnes portent
+          vraiment le même nom.
+        </span>
+        {valeur && (
+          <span className="mt-1.5 block text-amber-800">
+            L&apos;activité passera <strong>sous réserve</strong> : ce que la plateforme
+            aurait rapproché sera consigné, elle portera un badge, et un administrateur
+            devra le trancher.
+          </span>
+        )}
+      </span>
+    </label>
+  );
+}
+
+/**
+ * Ce que l'import aurait réuni et qu'il laisse.
+ *
+ * Le prix de la liste telle quelle. Il doit être lu avant de cliquer, pas
+ * découvert après : sinon on échange une erreur silencieuse contre une autre.
+ */
+function RapprochementsEcartesInfo({ result }) {
+  const ecartes = result?.rapprochements_ecartes ?? [];
+  if (ecartes.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+      <p className="font-semibold">
+        {ecartes.length} rapprochement{ecartes.length > 1 ? "s" : ""} que la plateforme
+        aurait fait{ecartes.length > 1 ? "s" : ""} et qu&apos;elle laisse
+      </p>
+      <p className="mt-0.5 text-amber-800">
+        Ces lignes entreront séparément. Un administrateur les trancheront depuis
+        l&apos;activité : même personne, ou deux personnes.
+      </p>
+      <ul className="mt-1.5 space-y-0.5">
+        {ecartes.slice(0, 50).map((d, i) => (
+          <li key={i}>
+            <span className="font-medium">{[d.prenom, d.nom].filter(Boolean).join(" ")}</span>
+            {d.avec && <> — aurait rejoint <span className="font-medium">{d.avec}</span></>}
+            {" · "}
+            <span className="text-amber-700">
+              {MOTIFS_DOUBLON[d.motif] || d.motif}
+            </span>
+            {(d.email || d.telephone) && (
+              <span className="text-amber-700"> · {[d.email, d.telephone].filter(Boolean).join(" · ")}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+      {ecartes.length > 50 && <p className="mt-1">…et {ecartes.length - 50} autre(s).</p>}
+    </div>
+  );
+}
 
 function DoublonsReunisInfo({ result }) {
   const reunis = result?.doublons_reunis ?? [];
@@ -2536,6 +2811,35 @@ function ActivityCard({ activity, canEdit, onEdit, onDelete, onQrCode, onExport,
               {activity.description}
             </p>
           )}
+          {/* Sous réserve : la liste est entrée telle qu'elle a été écrite, et
+              personne n'a encore tranché ce que la plateforme aurait rapproché.
+              Le chiffre est dans le badge — « sous réserve » sans chiffre ne dit
+              pas s'il reste deux cas ou deux cents. */}
+          {activity.liste_telle_quelle && !activity.liste_validee_le && (
+            <p className="mt-2">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800"
+                title="Liste importée telle quelle : un administrateur doit la valider"
+              >
+                <AlertTriangle className="h-3 w-3" />
+                Liste sous réserve
+                {activity.rapprochements_en_attente > 0
+                  && ` — ${activity.rapprochements_en_attente} à trancher`}
+              </span>
+            </p>
+          )}
+          {activity.liste_telle_quelle && activity.liste_validee_le && (
+            <p className="mt-2">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700"
+                title={`Liste importée telle quelle, validée${activity.liste_validee_par ? ` par ${activity.liste_validee_par}` : ""}`}
+              >
+                <Check className="h-3 w-3" />
+                Liste validée
+              </span>
+            </p>
+          )}
+
           <p className="text-xs text-slate-500 mt-3 flex flex-wrap items-center gap-4">
             <span className="flex items-center gap-1">
               <MapPin size={14} />

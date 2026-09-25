@@ -13,6 +13,10 @@ const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
+const { ensureListeTelleQuelle } = require("../migrations/listeTelleQuelle");
+/* Reunir deux fiches sans rien supprimer : c'est la meme mecanique que la
+   revue des doublons, et elle doit le rester. */
+const { reunir } = require("../services/identite");
 
 const router = express.Router();
 
@@ -54,7 +58,12 @@ const ACTIVITY_COLUMNS = `
   a.device_id, a.partner_id, a.created_by, a.created_at, a.participants_manual,
   a.date_fin, a.coach_id, a.report_filename, a.mode, a.reliability_score,
   a.reliability_status, a.reliability_details, a.reliability_manual_override,
-  a.duplicate_of
+  a.duplicate_of,
+  /* La liste est-elle entree telle qu'elle a ete ecrite, et quelqu'un
+     l'a-t-il regardee depuis ? Un effectif sous reserve doit se voir des la
+     liste des activites : sinon il finit dans un rapport comme s'il etait
+     sur. */
+  a.liste_telle_quelle, a.liste_validee_le, a.liste_validee_par_nom
 `;
 
 /* Un administrateur peut confier une activite a un coach. On verifie que
@@ -130,7 +139,11 @@ router.get("/", authMiddleware, async (req, res) => {
                 adresse ne recevra jamais rien, et la compter ferait afficher
                 « 18 / 24 » pour un envoi pourtant termine. */
              COALESCE(att.attestations_envoyees, 0) AS attestations_envoyees,
-             COALESCE(joi.participants_joignables, 0) AS participants_joignables
+             COALESCE(joi.participants_joignables, 0) AS participants_joignables,
+             /* Combien de rapprochements attendent qu'un administrateur les
+                tranche. Le badge le porte : « sous reserve » sans chiffre ne
+                dit pas s'il reste deux cas ou deux cents. */
+             COALESCE(rap.rapprochements_en_attente, 0) AS rapprochements_en_attente
       FROM activities a
       LEFT JOIN partners p ON a.partner_id = p.id
       LEFT JOIN devices d ON a.device_id = d.id
@@ -165,6 +178,12 @@ router.get("/", authMiddleware, async (req, res) => {
         FROM activity_photos
         GROUP BY activity_id
       ) ph ON ph.activity_id = a.id
+      LEFT JOIN (
+        SELECT activity_id, COUNT(*)::int AS rapprochements_en_attente
+        FROM rapprochements_ecartes
+        WHERE tranche IS NULL
+        GROUP BY activity_id
+      ) rap ON rap.activity_id = a.id
     `;
 
     const params = [];
@@ -192,6 +211,7 @@ router.get("/", authMiddleware, async (req, res) => {
       if (!schemaIncomplet(err)) throw err;
       await ensureAttestationsEnvoyees();
       await ensureEmargementPartenaire();
+      await ensureListeTelleQuelle();
       result = await pool.query(query, params);
     }
     res.json(result.rows);
@@ -1014,6 +1034,162 @@ router.delete("/:id/photos/:photoId", authMiddleware, requireWriteAccess, async 
     res.json({ success: true });
   } catch (err) {
     console.error("[PHOTO DELETE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== LISTE IMPORTEE TELLE QUELLE : LE DOUTE, ET SA LEVEE =====
+ *
+ * Une liste entree telle quelle porte des rapprochements que l'import a vus
+ * et n'a pas faits. Tant que personne ne les a regardes, l'effectif de
+ * l'activite est sous reserve — il peut compter deux fois la meme personne,
+ * ou pas.
+ *
+ * Un administrateur tranche, cas par cas : « c'est la meme personne » reunit
+ * les deux fiches sans rien supprimer, « ce sont deux personnes » enregistre
+ * la decision pour qu'elle ne revienne pas. Quand plus rien n'attend, la
+ * liste peut etre validee et le badge tombe.
+ *
+ * On ne force pas le passage par la revue : un responsable peut valider une
+ * liste dont il est sur sans trancher chaque cas. Ce qui compte, c'est que
+ * quelqu'un ait regarde et signe.
+ */
+router.get("/:id/liste/rapprochements", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const { rows: act } = await pool.query(
+      `SELECT id, title, liste_telle_quelle, liste_validee_le, liste_validee_par_nom
+         FROM activities WHERE id = $1`,
+      [req.params.id]
+    );
+    if (!act.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    /* Les fiches sont relues au passage : le nom consigne a l'import dit ce
+       que le fichier portait, l'etat d'aujourd'hui dit si quelqu'un les a
+       deja reunies entre-temps par un autre ecran. */
+    const { rows } = await pool.query(
+      `SELECT r.id, r.fiche_id, r.avec_fiche_id, r.motif, r.nom, r.prenom,
+              r.email, r.telephone, r.avec, r.tranche, r.ecarte_le,
+              pa.personne_id AS personne, pb.personne_id AS personne_avec
+         FROM rapprochements_ecartes r
+         LEFT JOIN participants pa ON pa.id = r.fiche_id
+         LEFT JOIN participants pb ON pb.id = r.avec_fiche_id
+        WHERE r.activity_id = $1
+        ORDER BY r.tranche NULLS FIRST, r.id`,
+      [req.params.id]
+    );
+
+    res.json({
+      activite: act[0].title,
+      telle_quelle: act[0].liste_telle_quelle === true,
+      validee_le: act[0].liste_validee_le,
+      validee_par: act[0].liste_validee_par_nom,
+      en_attente: rows.filter((r) => !r.tranche).length,
+      rapprochements: rows.map((r) => ({
+        ...r,
+        /* Deja reunies ailleurs : le dire evite de proposer un geste sans
+           effet, et evite surtout de faire croire qu'il reste du travail. */
+        deja_reunies: r.personne != null && r.personne === r.personne_avec,
+      })),
+    });
+  } catch (err) {
+    if (err?.code === "42P01" || err?.code === "42703") {
+      await ensureListeTelleQuelle().catch(() => {});
+      return res.json({ telle_quelle: false, en_attente: 0, rapprochements: [] });
+    }
+    console.error("[LISTE RAPPROCHEMENTS]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/:id/liste/rapprochements/:rapprochementId", authMiddleware, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    const decision = req.body?.decision;
+    if (!["reuni", "distinct"].includes(decision)) {
+      return res.status(400).json({ error: "Décision inconnue." });
+    }
+
+    const { rows } = await client.query(
+      `SELECT id, fiche_id, avec_fiche_id FROM rapprochements_ecartes
+        WHERE id = $1 AND activity_id = $2`,
+      [req.params.rapprochementId, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Rapprochement introuvable" });
+    const r = rows[0];
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    let deplacees = [];
+    if (decision === "reuni" && r.fiche_id && r.avec_fiche_id) {
+      /* Reunir, pas supprimer : les deux lignes de presence restent telles
+         qu'elles ont ete ecrites, et c'est le nombre de personnes distinctes
+         qui baisse. On peut revenir en arriere exactement. */
+      const fait = await reunir(client, [r.fiche_id, r.avec_fiche_id]);
+      deplacees = fait.deplacees;
+    }
+
+    await client.query(
+      "UPDATE rapprochements_ecartes SET tranche = $1 WHERE id = $2",
+      [decision, r.id]
+    );
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    logAudit(req, "UPDATE", "rapprochements_ecartes", r.id, null, {
+      motif: decision === "reuni" ? "fiches réunies après revue" : "deux personnes distinctes",
+      activite_id: Number(req.params.id),
+      fiches: [r.fiche_id, r.avec_fiche_id],
+      deplacees,
+    });
+
+    res.json({ decision, reunies: deplacees.length });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[LISTE RAPPROCHEMENT DECISION]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/:id/liste/valider", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    /* Le nom de celui qui signe : req.user ne porte que l'identifiant, et une
+       validation anonyme ne vaut pas grand-chose six mois plus tard. */
+    const { rows: qui } = await pool.query(
+      "SELECT full_name FROM users WHERE id = $1", [req.user.id]
+    );
+    const { rows } = await pool.query(
+      `UPDATE activities
+          SET liste_validee_le = NOW(), liste_validee_par = $1, liste_validee_par_nom = $2
+        WHERE id = $3
+        RETURNING id, title, liste_validee_le, liste_validee_par_nom`,
+      [req.user.id, qui[0]?.full_name || null, req.params.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Activité introuvable" });
+
+    const { rows: reste } = await pool.query(
+      "SELECT COUNT(*)::int AS n FROM rapprochements_ecartes WHERE activity_id = $1 AND tranche IS NULL",
+      [req.params.id]
+    );
+
+    logAudit(req, "UPDATE", "activities", req.params.id, rows[0].title, {
+      action: "validation_liste_telle_quelle",
+      /* Valider en laissant des cas ouverts est permis — mais ca se lit dans
+         le journal, sinon la signature ne dirait pas ce qu'elle couvre. */
+      rapprochements_non_tranches: reste[0].n,
+    });
+
+    res.json({
+      validee_le: rows[0].liste_validee_le,
+      validee_par: rows[0].liste_validee_par_nom,
+      non_tranches: reste[0].n,
+    });
+  } catch (err) {
+    console.error("[LISTE VALIDER]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });

@@ -349,7 +349,13 @@ async function insertParticipant(client, payload) {
   return res.rows[0]?.id || null;
 }
 
-async function importParticipantsRowsBatch(client, rows, activityId) {
+/**
+ * @param {boolean} [options.telleQuelle] n'applique aucun rapprochement entre
+ *   lignes du fichier : une ligne, une inscription. Ce que l'import aurait
+ *   reuni est rendu dans « rapprochementsEcartes » plutot que d'etre tu.
+ */
+async function importParticipantsRowsBatch(client, rows, activityId, options = {}) {
+  const telleQuelle = options.telleQuelle === true;
   let skippedMissingName = 0;
 
   /* 1. Lecture de toutes les lignes.
@@ -404,7 +410,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     return {
       imported: 0, skippedMissingName, duplicatesInActivity: 0,
       contactsIgnores, rattachements: 0, champsCompletes: 0, lignesIncompletes,
-      doublonsReunis: [],
+      doublonsReunis: [], rapprochementsEcartes: [],
     };
   }
 
@@ -644,6 +650,12 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
      doit pouvoir dire lesquelles, et pourquoi. */
   const doublonsReunis = [];
 
+  /* Et, en liste telle quelle, celles qu'on aurait reunies et qu'on laisse :
+     le diagnostic que l'administrateur tranchera. */
+  const rapprochementsEcartes = [];
+  /* Quelle ligne a deja pris quelle fiche de la base. */
+  const fichesPrises = new Map();
+
   const signaler = (it, champ, valeur, motif, detenteur) => {
     contactsIgnores.push({
       nom: it.nom, prenom: it.prenom, champ, valeur, motif,
@@ -671,7 +683,29 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
       if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
     }
 
+    /* Deux lignes du fichier qui tombent sur la meme fiche deja en base.
+     *
+     * Le rapprochement se fait une ligne a la fois, et chacune pouvait donc
+     * designer la meme personne sans que l'autre le sache. En temps normal
+     * c'est sans consequence : deux lignes, une inscription, la personne n'est
+     * comptee qu'une fois. En liste telle quelle, c'est la garantie qui tombe
+     * — le fichier a beau porter deux lignes, l'activite n'en compterait
+     * qu'une, et on aurait promis l'inverse. Elle repart donc sur une fiche
+     * neuve, et le doute est consigne comme les autres. */
+    if (ex && telleQuelle && fichesPrises.has(ex.id)) {
+      rapprochementsEcartes.push({
+        indice: i, avecIndice: fichesPrises.get(ex.id), motif: "meme_fiche_existante",
+        nom: it.nom, prenom: it.prenom,
+        email: it.email || null, telephone: it.telephone || null,
+        avec: `${ex.prenom || ""} ${ex.nom || ""}`.trim(),
+      });
+      enregistrer(i, true);
+      items[i].aInserer = true;
+      continue;
+    }
+
     if (ex) {
+      fichesPrises.set(ex.id, i);
       items[i].resolvedId = ex.id;
 
       /* Tout ce que cette liste apporte et qui manque a la fiche. Une personne
@@ -709,6 +743,29 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     /* Deja rencontree plus haut dans ce meme fichier : une seule fiche, qui
        recoit ce que cette ligne-ci apporte en plus. */
     const jumelle = jumelleDe(it);
+
+    /* Sauf si on a demande la liste telle quelle.
+     *
+     * Aucune regle ne peut savoir si deux « Aissatou Diallo » sont une ou deux
+     * personnes. Le responsable qui etait en salle, lui, le sait souvent. Il
+     * peut donc demander que le fichier entre tel qu'il a ete ecrit : une
+     * ligne, une inscription.
+     *
+     * Ce que l'import aurait reuni n'est pas perdu : on le consigne, et un
+     * administrateur le tranchera en connaissance de cause. Ne rien dire
+     * reviendrait a echanger une erreur silencieuse contre une autre. */
+    if (jumelle && telleQuelle) {
+      rapprochementsEcartes.push({
+        indice: i, avecIndice: jumelle.indice, motif: jumelle.motif,
+        nom: it.nom, prenom: it.prenom,
+        email: it.email || null, telephone: it.telephone || null,
+        avec: `${items[jumelle.indice].prenom || ""} ${items[jumelle.indice].nom || ""}`.trim(),
+      });
+      enregistrer(i, true);
+      items[i].aInserer = true;
+      continue;
+    }
+
     if (jumelle) {
       const premier = items[jumelle.indice];
       const ajoutes = completerDepuis(premier, it);
@@ -819,6 +876,14 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     }
   }
 
+  /* Le diagnostic n'est utile que s'il designe des fiches : « deux Aissatou
+     Diallo » ne se tranche pas, « la fiche 9840 et la fiche 9912 » si. Les
+     identifiants n'existent qu'ici, une fois les creations faites. */
+  for (const r of rapprochementsEcartes) {
+    r.fiche_id = items[r.indice]?.resolvedId ?? null;
+    r.avec_fiche_id = items[r.avecIndice]?.resolvedId ?? null;
+  }
+
   // 5. Rattachement a l'activite
   const validIds = [...new Set(items.filter(it => it.resolvedId).map(it => it.resolvedId))];
   let imported = 0, duplicatesInActivity = 0;
@@ -837,6 +902,9 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     imported, skippedMissingName, duplicatesInActivity,
     contactsIgnores, rattachements, champsCompletes, lignesIncompletes,
     doublonsReunis,
+    /* Ce qu'on aurait reuni et qu'on a laisse : vide hors liste telle
+       quelle. C'est le diagnostic que l'administrateur tranchera. */
+    rapprochementsEcartes,
     /* De quoi dire, avant d'ecrire, ce que le fichier va reellement produire :
        des personnes que la base ne connaissait pas, ou des lignes qui
        retombent sur des fiches deja la. C'est la difference entre une liste
@@ -944,6 +1012,8 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
+    const telleQuelle = estTelleQuelle(req);
+
     await client.query("BEGIN");
     inTransaction = true;
 
@@ -955,7 +1025,9 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
     );
 
     const activity = activityResult.rows[0];
-    const stats = await importParticipantsRowsBatch(client, rows, activity.id);
+    const stats = await importParticipantsRowsBatch(client, rows, activity.id, { telleQuelle });
+
+    if (telleQuelle) await consignerLeDoute(client, activity.id, stats.rapprochementsEcartes);
 
     await client.query("COMMIT");
     inTransaction = false;
@@ -1025,6 +1097,48 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
 const estSimulation = (req) =>
   req.body?.simulation === "1" || req.body?.simulation === "true" || req.body?.simulation === true;
 
+/* « Garder la liste telle quelle » : une ligne, une inscription, aucun
+   rapprochement entre lignes du fichier. C'est le responsable qui etait en
+   salle qui le demande — il sait souvent ce qu'aucune regle ne peut deviner.
+   Le doute n'est pas efface pour autant : il est consigne, et l'activite
+   attend qu'un administrateur l'ait regarde. */
+const estTelleQuelle = (req) =>
+  req.body?.telle_quelle === "1" || req.body?.telle_quelle === "true" || req.body?.telle_quelle === true;
+
+/* Consigne ce que l'import aurait reuni, et met l'activite sous reserve.
+   Rien n'est ecrit quand il n'y a rien a trancher : une liste telle quelle
+   sans le moindre doute est une liste ordinaire, et la faire valider pour
+   rien userait la validation. */
+async function consignerLeDoute(client, activityId, ecartes) {
+  await client.query(
+    `UPDATE activities
+        SET liste_telle_quelle = TRUE, liste_validee_le = NULL,
+            liste_validee_par = NULL, liste_validee_par_nom = NULL
+      WHERE id = $1`,
+    [activityId]
+  );
+  if (!ecartes.length) return 0;
+  await client.query(
+    `INSERT INTO rapprochements_ecartes
+       (activity_id, fiche_id, avec_fiche_id, motif, nom, prenom, email, telephone, avec)
+     SELECT $1, unnest($2::int[]), unnest($3::int[]), unnest($4::text[]),
+            unnest($5::text[]), unnest($6::text[]), unnest($7::text[]),
+            unnest($8::text[]), unnest($9::text[])`,
+    [
+      activityId,
+      ecartes.map((r) => r.fiche_id ?? null),
+      ecartes.map((r) => r.avec_fiche_id ?? null),
+      ecartes.map((r) => r.motif),
+      ecartes.map((r) => r.nom || null),
+      ecartes.map((r) => r.prenom || null),
+      ecartes.map((r) => r.email || null),
+      ecartes.map((r) => r.telephone || null),
+      ecartes.map((r) => r.avec || null),
+    ]
+  );
+  return ecartes.length;
+}
+
 function compteRenduSimulation(activity, rows, stats, { recognizedColumns, unrecognizedColumns, headerRowIndex }) {
   return {
     simulation: true,
@@ -1039,6 +1153,11 @@ function compteRenduSimulation(activity, rows, stats, { recognizedColumns, unrec
     personnes_connues: stats.personnesConnues,
     doublons_dans_le_fichier: stats.doublonsReunis.length,
     doublons_reunis: stats.doublonsReunis,
+    /* En liste telle quelle : ce que l'import aurait reuni et qu'il laisse.
+       C'est le prix a payer, et il doit etre affiche avant de cliquer, pas
+       decouvert apres. */
+    telle_quelle: stats.rapprochementsEcartes.length > 0 || undefined,
+    rapprochements_ecartes: stats.rapprochementsEcartes,
     lignes_ignorees_nom_prenom_manquants: stats.skippedMissingName,
     lignes_incompletes: stats.lignesIncompletes,
     contacts_ignores: stats.contactsIgnores,
@@ -1076,11 +1195,12 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
     const simulation = estSimulation(req);
+    const telleQuelle = estTelleQuelle(req);
 
     await client.query("BEGIN");
     inTransaction = true;
 
-    const stats = await importParticipantsRowsBatch(client, rows, activityId);
+    const stats = await importParticipantsRowsBatch(client, rows, activityId, { telleQuelle });
 
     if (simulation) {
       await client.query("ROLLBACK");
@@ -1089,6 +1209,8 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
         recognizedColumns, unrecognizedColumns, headerRowIndex,
       }));
     }
+
+    if (telleQuelle) await consignerLeDoute(client, activityId, stats.rapprochementsEcartes);
 
     await client.query("COMMIT");
     inTransaction = false;
@@ -1172,11 +1294,12 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
     if (rows.length === 0) return res.status(400).json({ error: "Fichier Excel vide ou aucune donnée reconnue" });
 
     const simulation = estSimulation(req);
+    const telleQuelle = estTelleQuelle(req);
 
     await client.query("BEGIN");
     inTransaction = true;
 
-    const stats = await importParticipantsRowsBatch(client, rows, activityId);
+    const stats = await importParticipantsRowsBatch(client, rows, activityId, { telleQuelle });
 
     if (simulation) {
       await client.query("ROLLBACK");
@@ -1190,6 +1313,8 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       "UPDATE activities SET participants_manual = NULL WHERE id = $1",
       [activityId]
     );
+
+    if (telleQuelle) await consignerLeDoute(client, activityId, stats.rapprochementsEcartes);
 
     await client.query("COMMIT");
     inTransaction = false;

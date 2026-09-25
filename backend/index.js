@@ -38,6 +38,7 @@ const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
 const { ensureEmargementPartenaire } = require("./migrations/emargementPartenaire");
 const { ensureIdentitePersonnes } = require("./migrations/identitePersonnes");
 const { ensureIdentitesDistinctes } = require("./migrations/identitesDistinctes");
+const { ensureListeTelleQuelle } = require("./migrations/listeTelleQuelle");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -787,6 +788,16 @@ pool.query(`
     console.log("Migration OK: identites distinctes");
   } catch (e) {
     console.error("Migration identites distinctes ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Listes importees telles quelles, et le doute consigne ── */
+(async () => {
+  try {
+    await ensureListeTelleQuelle();
+    console.log("Migration OK: listes telles quelles");
+  } catch (e) {
+    console.error("Migration listes telles quelles ECHOUEE :", e.message);
   }
 })();
 
