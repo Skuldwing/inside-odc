@@ -13,6 +13,7 @@ const {
 } = require("../services/assiduite");
 const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/rechercheTexte");
 const { reunir, defaire } = require("../services/identite");
+const { contactsCollectifs } = require("../services/contactsCollectifs");
 
 const router = express.Router();
 
@@ -553,10 +554,18 @@ function rienNeSepare(a, b) {
  * pas une seconde personne.
  */
 function unirParContact(parents, fiches) {
+  /* Un contact collectif ne rapproche personne : le telephone d'un directeur
+     d'ecole figure sur la liste de vingt enfants, et deux d'entre eux peuvent
+     porter le meme nom de famille — « Diop » et « Awa Diop » seraient alors
+     tenus pour compatibles, et reunis sur la foi d'un numero qui n'est ni a
+     l'un ni a l'autre. */
+  const collectifs = contactsCollectifs(fiches);
+
   const parContact = new Map();
   for (const f of fiches) {
-    for (const contact of [mailCompare(f.email), telCompare(f.telephone)]) {
-      if (!contact) continue;
+    const m = mailCompare(f.email), t = telCompare(f.telephone);
+    for (const [contact, partage] of [[m, collectifs.mails], [t, collectifs.tels]]) {
+      if (!contact || partage.has(contact)) continue;
       if (!parContact.has(contact)) parContact.set(contact, []);
       parContact.get(contact).push(f);
     }
@@ -586,8 +595,32 @@ function unirParContact(parents, fiches) {
  * Le second reunit ce que le premier manquait sans confondre deux personnes qui
  * partagent une boite ou un telephone de famille.
  */
-function analyserGroupes(fiches) {
+/* Les paires que quelqu'un a declarees distinctes, prêtes a etre consultees
+   par analyserGroupes. La cle « a:b » range toujours le plus petit d'abord,
+   comme la table. */
+async function paresDistinctes() {
+  try {
+    const { rows } = await pool.query("SELECT fiche_a, fiche_b FROM identites_distinctes");
+    return new Set(rows.map((r) => `${r.fiche_a}:${r.fiche_b}`));
+  } catch (err) {
+    /* La table n'existe pas encore : aucune decision n'a ete prise, et la
+       detection doit continuer de fonctionner. */
+    if (err?.code === "42P01") return new Set();
+    throw err;
+  }
+}
+
+/**
+ * @param {Array} fiches
+ * @param {Set<string>} [distinctes]  paires « a:b » dont quelqu'un a constate,
+ *   en les regardant, qu'elles designent deux personnes.
+ */
+function analyserGroupes(fiches, distinctes = new Set()) {
   const parents = new Map(fiches.map((f) => [f.id, f.id]));
+  /* Calcule sur tout le lot, pas groupe par groupe : c'est le nombre de
+     personnes que le contact accompagne dans la base qui dit s'il est
+     collectif, pas ce qu'on en voit dans un groupe de deux. */
+  const contactsPartout = contactsCollectifs(fiches);
 
   const premiereDeLaCle = new Map();
   for (const f of fiches) {
@@ -609,6 +642,27 @@ function analyserGroupes(fiches) {
   const resultat = [];
   for (const membres of parCle.values()) {
     if (membres.length < 2) continue;
+
+    /* Quelqu'un a deja regarde ce groupe et dit que ce n'etait pas la meme
+       personne. On ne le repropose pas : sans cela il revenait a chaque
+       visite, et une revue de plusieurs centaines de cas ne se terminait
+       jamais — on retranchait indefiniment les memes.
+
+       Une seule paire tranchee suffit a ecarter le groupe. C'est volontaire
+       et conservateur : si quelqu'un a separe deux de ces fiches, le groupe
+       tel qu'il est propose ne tient plus, et le repropose entier reviendrait
+       a reposer une question deja tranchee. */
+    if (distinctes.size) {
+      let tranche = false;
+      for (let i = 0; i < membres.length && !tranche; i++) {
+        for (let j = i + 1; j < membres.length; j++) {
+          const [a, b] = membres[i].id < membres[j].id
+            ? [membres[i].id, membres[j].id] : [membres[j].id, membres[i].id];
+          if (distinctes.has(`${a}:${b}`)) { tranche = true; break; }
+        }
+      }
+      if (tranche) continue;
+    }
 
     /* Deja rattachees : ces fiches designent la meme personne, le compte est
        juste et il n'y a plus rien a decider. Les completer garde du sens —
@@ -665,13 +719,20 @@ function analyserGroupes(fiches) {
     /* Sur quoi il a ete reconnu, pour que l'ecran le dise plutot que de laisser
        deviner pourquoi deux noms differents sont dans le meme groupe. */
     const partage = [];
-    for (const [champ, comparer] of [["email", mailCompare], ["telephone", telCompare]]) {
+    for (const [champ, comparer, collectifs] of [
+      ["email", mailCompare, contactsPartout.mails],
+      ["telephone", telCompare, contactsPartout.tels],
+    ]) {
       const vus = new Map();
       for (const f of membres) {
         const v = comparer(f[champ]);
         if (v && !vus.has(v)) vus.set(v, String(f[champ]).trim());
       }
-      if (vus.size === 1 && membres.filter((f) => comparer(f[champ])).length > 1) {
+      /* Un contact collectif — le telephone d'une ecole, l'adresse d'un
+         service — est partage par des gens differents : il ne prouve pas
+         qu'il s'agit de la meme personne. */
+      const seul = vus.size === 1 && !collectifs.has([...vus.keys()][0]);
+      if (seul && membres.filter((f) => comparer(f[champ])).length > 1) {
         partage.push({ champ, libelle: LIBELLES_CHAMPS[champ], valeur: [...vus.values()][0] });
       }
     }
@@ -768,7 +829,7 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
       params
     );
 
-    const groupes = analyserGroupes(r.rows);
+    const groupes = analyserGroupes(r.rows, await paresDistinctes());
     await attacherActivites(groupes);
     res.json({
       /* Le nombre de fiches en trop, pas le nombre de groupes : c'est ce qui
@@ -829,6 +890,192 @@ router.get("/fiches-doublons", authMiddleware, async (req, res) => {
  * geste reversible dont personne ne connait le chemin du retour n'est pas
  * reversible.
  */
+/* ===== LA REVUE, GROUPE PAR GROUPE =====
+ *
+ * Les groupes qu'une adresse ou un numero prouve sont rattaches d'un bloc.
+ * Restent ceux qui ne tiennent qu'au nom : la plateforme refuse de trancher a
+ * la place de quelqu'un, et c'est juste — mais refuser de trancher sans donner
+ * de quoi le faire revient a ne rien proposer du tout. Plusieurs centaines de
+ * decisions qu'on ne peut pas prendre ne valent pas mieux que zero.
+ *
+ * Cette route sert donc un groupe a la fois, avec ce qui permet de decider :
+ * ce qui decrit la personne — genre, tranche d'age, structure — et les
+ * activites de chaque fiche. Ces dernieres pesent lourd : deux fiches sur la
+ * MEME formation sont le cas le plus probable d'homonymes, tandis que deux
+ * formations differentes decrivent quelqu'un qui est revenu.
+ */
+router.get("/fiches-doublons/revue", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const { baseFrom, params } = buildFilters(req);
+    const r = await pool.query(
+      `SELECT DISTINCT p.id, p.nom, p.prenom, p.email, p.telephone,
+              p.genre, p.age_range, p.statut, p.structure, p.personne_id ${baseFrom}
+       ORDER BY p.id`,
+      params
+    );
+
+    const tous = analyserGroupes(r.rows, await paresDistinctes());
+    /* Seuls ceux qui attendent une decision humaine. Les autres sont traites
+       par le bouton de la page, sans qu'on ait a les regarder. */
+    const aRevoir = tous.filter((g) => g.preuve === "nom_seul");
+
+    /* Les plus renseignes d'abord : ce sont ceux qu'on peut trancher, et
+       commencer par des cas decidables evite de se decourager sur une file
+       de fiches muettes. */
+    const renseignement = (g) => [g.garder, ...g.absorber]
+      .reduce((n, f) => n + CHAMPS_FICHE.filter((c) => valeurNormalisee(c, f[c]) !== null).length, 0);
+    aRevoir.sort((a, b) => renseignement(b) - renseignement(a) || a.garder.id - b.garder.id);
+
+    const position = Math.max(0, parseInt(req.query.position, 10) || 0);
+    const groupe = aRevoir[position] || null;
+    if (groupe) await attacherActivites([groupe]);
+
+    res.json({
+      total: aRevoir.length,
+      position,
+      /* Ce qui ne demande aucune decision : le dire evite de croire que la
+         file represente tout le travail. */
+      traites_automatiquement: tous.length - aRevoir.length,
+      groupe: groupe && {
+        fiches: [groupe.garder, ...groupe.absorber],
+        conflits: groupe.conflits,
+        noms_differents: groupe.noms_differents,
+        /* Deux fiches sur une meme activite : le signe le plus fort
+           d'homonymie, et celui qu'il faut voir en premier. */
+        activite_partagee: (() => {
+          const vues = new Set();
+          for (const f of [groupe.garder, ...groupe.absorber]) {
+            for (const a of f.activites || []) {
+              if (vues.has(a.id)) return true;
+              vues.add(a.id);
+            }
+          }
+          return false;
+        })(),
+      },
+    });
+  } catch (err) {
+    console.error("[FICHES DOUBLONS REVUE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* La decision prise sur un groupe.
+ *
+ * Trois issues, pas deux. « Je ne sais pas » compte autant que les autres :
+ * forcer un choix binaire sur des fiches qui ne portent rien produit des
+ * decisions au hasard, c'est-a-dire exactement ce qu'on cherche a eviter. On
+ * passe, et le groupe restera propose.
+ */
+router.post("/fiches-doublons/decision", authMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+
+    const ids = Array.isArray(req.body?.fiches)
+      ? [...new Set(req.body.fiches.map(Number).filter(Number.isInteger))] : [];
+    const decision = String(req.body?.decision || "");
+    if (ids.length < 2) return res.status(400).json({ error: "Il faut au moins deux fiches." });
+    if (!["meme_personne", "deux_personnes"].includes(decision)) {
+      return res.status(400).json({ error: "Décision inconnue." });
+    }
+
+    /* Le perimetre s'applique : on ne decide pas sur des fiches qu'on n'a pas
+       le droit de voir. */
+    const { baseFrom, params } = buildFilters(req);
+    const { rows: visibles } = await client.query(
+      `SELECT DISTINCT p.id ${baseFrom}`, params
+    );
+    const permis = new Set(visibles.map((v) => v.id));
+    if (!ids.every((i) => permis.has(i))) {
+      return res.status(403).json({ error: "Certaines de ces fiches ne vous sont pas accessibles." });
+    }
+
+    const auteur = await client.query("SELECT full_name FROM users WHERE id = $1", [req.user.id]);
+    const nomAuteur = auteur.rows[0]?.full_name || null;
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    if (decision === "meme_personne") {
+      const { deplacees } = await reunir(client, ids);
+      await client.query("COMMIT");
+      ouverte = false;
+
+      for (const dep of deplacees) {
+        await logAudit(req, "UPDATE", "participants", String(dep.fiche), null, {
+          motif: "fiches de la même personne, rattachées",
+          suppression: false,
+          identite_avant: dep.avant,
+          rattachee_avec: ids[0],
+          reconnue_par: "décision à la revue",
+        });
+      }
+      return res.json({ decision, rattachees: deplacees.length });
+    }
+
+    /* « Deux personnes » : on enregistre chaque paire du groupe. Une paire
+       plutot qu'un groupe, parce que les groupes se recalculent a chaque
+       affichage et qu'une decision attachee a l'un ne survivrait pas au
+       suivant. */
+    let paires = 0;
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const [a, b] = ids[i] < ids[j] ? [ids[i], ids[j]] : [ids[j], ids[i]];
+        const r = await client.query(
+          `INSERT INTO identites_distinctes (fiche_a, fiche_b, decide_par, decide_par_nom)
+           VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+          [a, b, req.user.id, nomAuteur]
+        );
+        paires += r.rowCount;
+      }
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    await logAudit(req, "CREATE", "identites_distinctes", null,
+      `${ids.length} fiches déclarées distinctes`, {
+        motif: "ces fiches ne désignent pas la même personne",
+        fiches: ids, paires,
+      });
+
+    res.json({ decision, paires });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[FICHES DOUBLONS DECISION]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+/* Revenir sur un « deux personnes » : on retire la paire, le groupe
+   redevient proposable. Se tromper ne doit pas etre definitif. */
+router.post("/fiches-doublons/decision/annuler", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
+    const ids = Array.isArray(req.body?.fiches)
+      ? [...new Set(req.body.fiches.map(Number).filter(Number.isInteger))] : [];
+    if (ids.length < 2) return res.status(400).json({ error: "Il faut au moins deux fiches." });
+
+    const { rowCount } = await pool.query(
+      `DELETE FROM identites_distinctes
+        WHERE fiche_a = ANY($1::int[]) AND fiche_b = ANY($1::int[])`,
+      [ids]
+    );
+    await logAudit(req, "DELETE", "identites_distinctes", null,
+      `${rowCount} décision(s) annulée(s)`, { fiches: ids });
+    res.json({ annulees: rowCount });
+  } catch (err) {
+    console.error("[FICHES DOUBLONS DECISION ANNULER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 router.get("/fiches-rattachees", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
@@ -951,7 +1198,7 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
     /* Les groupes se recalculent sur l'etat courant. L'appelant designe les
        fiches du groupe ; on complete le groupe entier, pas une fiche isolee. */
     const demandes = new Set(ids);
-    const groupesRetenus = analyserGroupes(portee.rows).filter((g) =>
+    const groupesRetenus = analyserGroupes(portee.rows, await paresDistinctes()).filter((g) =>
       g.absorber.some((f) => demandes.has(f.id)) || demandes.has(g.garder.id)
     );
 
@@ -1104,6 +1351,13 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
  *    mots, a condition que rien ne les separe.
  */
 function doublonsSurActivite(lignes) {
+  /* Sur tout le lot : c'est le nombre de personnes que le contact accompagne
+     dans la base qui dit s'il est collectif, pas ce qu'on en voit sur une
+     activite. Les lignes portent une fiche par inscription, donc la meme
+     fiche plusieurs fois ; on ne la compte qu'une. */
+  const fichesUniques = [...new Map(lignes.map((l) => [l.id, l])).values()];
+  const collectifsIci = contactsCollectifs(fichesUniques);
+
   const parActivite = new Map();
   for (const l of lignes) {
     if (!parActivite.has(l.activite_id)) {
@@ -1212,8 +1466,12 @@ function doublonsSurActivite(lignes) {
         const tels = new Set(membres.map((f) => telCompare(f.telephone)).filter(Boolean));
         const avecMail = membres.filter((f) => mailCompare(f.email)).length;
         const avecTel = membres.filter((f) => telCompare(f.telephone)).length;
-        return (mails.size === 1 && avecMail === membres.length)
-          || (tels.size === 1 && avecTel === membres.length);
+        /* Un contact collectif ne prouve rien : vingt enfants portent le
+           telephone de leur directeur d'ecole. */
+        const mailPropre = mails.size === 1 && !collectifsIci.mails.has([...mails][0]);
+        const telPropre = tels.size === 1 && !collectifsIci.tels.has([...tels][0]);
+        return (mailPropre && avecMail === membres.length)
+          || (telPropre && avecTel === membres.length);
       })();
 
       const preuve = partageUnContact ? "contact" : "nom_seul";

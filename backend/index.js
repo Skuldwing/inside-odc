@@ -37,6 +37,7 @@ const { ensureAttestationsTerminees } = require("./migrations/attestationsTermin
 const { ensureModelesAttestation } = require("./migrations/modelesAttestation");
 const { ensureEmargementPartenaire } = require("./migrations/emargementPartenaire");
 const { ensureIdentitePersonnes } = require("./migrations/identitePersonnes");
+const { ensureIdentitesDistinctes } = require("./migrations/identitesDistinctes");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -775,6 +776,17 @@ pool.query(`
     );
   } catch (e) {
     console.error("Migration identite des personnes ECHOUEE :", e.message);
+  }
+})();
+
+/* ── « Ces deux fiches ne sont pas la meme personne » ──
+   La decision humaine qui empeche un groupe de revenir indefiniment. */
+(async () => {
+  try {
+    await ensureIdentitesDistinctes();
+    console.log("Migration OK: identites distinctes");
+  } catch (e) {
+    console.error("Migration identites distinctes ECHOUEE :", e.message);
   }
 })();
 
