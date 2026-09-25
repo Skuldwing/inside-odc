@@ -1647,8 +1647,12 @@ function ImportResultSummary({ result }) {
    prénom la seconde fois. L'import n'en fait plus deux bénéficiaires — mais il
    ne peut pas le faire en silence : un import qui ramène 18 lignes pour 20 doit
    dire lesquelles, sinon le doute porte sur tout le reste. */
+/* Ce qui a servi de preuve, dit en toutes lettres. « La même identité figure
+   plus haut » ne disait pas sur quoi on s'était fondé — et on s'était fondé
+   sur le nom seul, ce qui a fait disparaître 170 personnes d'une liste de
+   1825. Le nom ne suffit plus : il faut que rien ne les sépare. */
 const MOTIFS_DOUBLON = {
-  identite_identique: "la même identité figure déjà plus haut",
+  identite_identique: "même nom, et rien ne les sépare — ni contact, ni genre, ni âge",
   meme_contact: "même adresse ou même numéro, et un nom qui dit la même chose",
   identite_incomplete: "identité incomplète, identique à une ligne précédente",
 };
@@ -1816,7 +1820,13 @@ function ResumeSimulation({ sim, importing, onAnnuler, onImporter }) {
       {sim.doublons_dans_le_fichier > 0 && (
         <p className="text-xs text-slate-600">
           {sim.doublons_dans_le_fichier} personne{sim.doublons_dans_le_fichier > 1 ? "s figurent" : " figure"} plusieurs
-          fois dans le fichier lui-même.
+          fois dans le fichier lui-même.{" "}
+          {/* Sans cette phrase, le chiffre ne se vérifie pas : on lit « 170
+              ignorées » sans pouvoir dire lesquelles ni pourquoi. Le détail
+              ligne par ligne est juste en dessous. */}
+          <span className="text-slate-500">
+            Le détail ci-dessous dit, pour chacune, ce qui a servi de preuve.
+          </span>
         </p>
       )}
 
