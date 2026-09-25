@@ -431,7 +431,16 @@ export default function Partenaires() {
           {filteredPartners.map((p) => {
             const objective = Number(p.objective_beneficiaries || 0);
             const activities = Number(p.activities_count || 0);
+            /* Deux chiffres différents, à ne pas confondre : « beneficiaries »
+               compte des participations — quatre modules suivis par la même
+               personne en font quatre — et « personnes » compte des gens.
+               L'objectif du partenaire se mesure en participations, comme
+               depuis toujours ; le nombre de personnes est affiché à côté pour
+               qu'on sache combien de gens ces participations représentent. */
             const beneficiaries = Number(p.beneficiaries_count || 0);
+            const personnes = p.personnes_distinctes == null
+              ? null
+              : Number(p.personnes_distinctes);
             const pct =
               objective > 0
                 ? Math.min(100, Math.round((beneficiaries / objective) * 100))
@@ -508,15 +517,29 @@ export default function Partenaires() {
                   {p.description || "Aucune description"}
                 </p>
 
-                <div className="grid grid-cols-2 gap-3">
+                {/* « Bénéficiaires » disait deux choses à la fois et n'en
+                    montrait qu'une. Les deux sont là, nommés. Tant que le
+                    serveur ne renvoie pas le compte des personnes, on garde
+                    l'affichage d'avant plutôt que d'annoncer un zéro faux. */}
+                <div className={`grid gap-3 ${personnes == null ? "grid-cols-2" : "grid-cols-3"}`}>
                   <div className="rounded-xl border border-slate-100 p-3">
                     <p className="text-xs text-slate-500 mb-1">Activités</p>
                     <p className="text-xl font-semibold text-slate-900">
                       {activities}
                     </p>
                   </div>
+                  {personnes != null && (
+                    <div className="rounded-xl border border-slate-100 p-3">
+                      <p className="text-xs text-slate-500 mb-1">Personnes</p>
+                      <p className="text-xl font-semibold text-slate-900">
+                        {personnes}
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-xl border border-slate-100 p-3">
-                    <p className="text-xs text-slate-500 mb-1">Bénéficiaires</p>
+                    <p className="text-xs text-slate-500 mb-1">
+                      {personnes == null ? "Bénéficiaires" : "Participations"}
+                    </p>
                     <p className="text-xl font-semibold text-slate-900">
                       {beneficiaries}
                     </p>
@@ -539,8 +562,16 @@ export default function Partenaires() {
                       style={{ width: `${pct}%` }}
                     />
                   </div>
-                  <div className="text-right text-xs text-orange-600 mt-1">
-                    {pct}%
+                  {/* Maintenant que les deux chiffres sont là, il faut dire
+                      lequel la barre suit — sinon la carte se contredit :
+                      « 312 personnes » d'un côté, « 2025 / 400 » de l'autre.
+                      C'est le compte des participations, comme depuis
+                      toujours. */}
+                  <div className="flex items-center justify-between text-xs mt-1">
+                    {personnes != null && (
+                      <span className="text-slate-400">en participations</span>
+                    )}
+                    <span className="text-orange-600 ml-auto">{pct}%</span>
                   </div>
                 </div>
 
@@ -680,7 +711,13 @@ function PartnersKanban({ partners, draggedId, setDraggedId, onStageChange }) {
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     {Number(p.activities_count || 0)} activité{Number(p.activities_count || 0) !== 1 ? "s" : ""} ·{" "}
-                    {Number(p.beneficiaries_count || 0)} bénéficiaires
+                    {/* Sur une vignette il n'y a de place que pour un chiffre :
+                        c'est celui des personnes qu'on garde, parce que
+                        « combien de gens » est la question que le pipeline
+                        pose. Le détail des participations est sur la carte. */}
+                    {p.personnes_distinctes == null
+                      ? `${Number(p.beneficiaries_count || 0)} bénéficiaires`
+                      : `${Number(p.personnes_distinctes)} personne${Number(p.personnes_distinctes) !== 1 ? "s" : ""}`}
                   </p>
                 </div>
               ))}

@@ -246,7 +246,15 @@ export default function PartenaireDetail() {
   }
 
   const objective = Number(partner.objective_beneficiaries || 0);
+  /* Deux chiffres, pas un : « beneficiaries » compte des participations — la
+     même personne revenue sur quatre modules en fait quatre — et « personnes »
+     compte des gens. Un seul nombre portait les deux sens et donnait le
+     premier en laissant lire le second. L'objectif reste mesuré en
+     participations, comme il l'a toujours été. */
   const beneficiaries = Number(partner.beneficiaries_count || 0);
+  const personnes = partner.personnes_distinctes == null
+    ? null
+    : Number(partner.personnes_distinctes);
   const pct = objective > 0 ? Math.min(100, Math.round((beneficiaries / objective) * 100)) : 0;
 
   const activityScores = timeline
@@ -309,17 +317,33 @@ export default function PartenaireDetail() {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={`mt-5 grid grid-cols-2 gap-3 ${personnes == null ? "sm:grid-cols-4" : "sm:grid-cols-5"}`}>
           <div className="rounded-xl border border-slate-100 p-3">
             <p className="text-xs text-slate-500 mb-1">Activités</p>
             <p className="text-xl font-semibold text-slate-900">{Number(partner.activities_count || 0)}</p>
           </div>
+          {/* Tant que le serveur ne renvoie pas le compte des personnes, on
+              garde le libellé d'avant : mieux vaut l'ancien mot qu'un zéro. */}
+          {personnes != null && (
+            <div className="rounded-xl border border-slate-100 p-3">
+              <p className="text-xs text-slate-500 mb-1">Personnes</p>
+              <p className="text-xl font-semibold text-slate-900">{personnes}</p>
+            </div>
+          )}
           <div className="rounded-xl border border-slate-100 p-3">
-            <p className="text-xs text-slate-500 mb-1">Bénéficiaires</p>
+            <p className="text-xs text-slate-500 mb-1">
+              {personnes == null ? "Bénéficiaires" : "Participations"}
+            </p>
             <p className="text-xl font-semibold text-slate-900">{beneficiaries}</p>
           </div>
           <div className="rounded-xl border border-slate-100 p-3">
-            <p className="text-xs text-slate-500 mb-1 flex items-center gap-1"><Target className="w-3 h-3" />Objectif</p>
+            {/* Lequel des deux chiffres la barre suit-il ? Les participations,
+                comme depuis toujours — il faut le dire maintenant que le
+                compte des personnes est affiché juste à côté. */}
+            <p className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+              <Target className="w-3 h-3" />
+              {personnes == null ? "Objectif" : "Objectif (particip.)"}
+            </p>
             <p className="text-xl font-semibold text-slate-900">{pct}%</p>
           </div>
           <div className="rounded-xl border border-slate-100 p-3">

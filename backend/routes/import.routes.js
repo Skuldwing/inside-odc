@@ -12,6 +12,7 @@ const {
   repetitionsDans, normaliser, compacterNom,
   clePersonne, cleApprochee, nomsCompatibles, memePersonne,
 } = require("../services/nomsDoublons");
+const { construireModeleListePresence } = require("../services/modeleListePresence");
 
 const router = express.Router();
 
@@ -857,17 +858,16 @@ router.post("/preview", authMiddleware, upload.single("file"), async (req, res) 
 });
 
 /* ===== DOWNLOAD TEMPLATE XLSX ===== */
-router.get("/template", authMiddleware, (req, res) => {
-  const wb = xlsx.utils.book_new();
-  const headers = ["Activite", "Date_activite", "Nom", "Prenom", "Genre", "Tranche_age", "Email", "Telephone", "Statut", "Structure"];
-  const example = ["Nom de l activite", "2025-01-15", "Diallo", "Aminata", "F", "18-25", "aminata@example.com", "770000000", "Participant", "Universite Cheikh Anta Diop"];
-  const ws = xlsx.utils.aoa_to_sheet([headers, example]);
-  ws["!cols"] = headers.map(() => ({ wch: 22 }));
-  xlsx.utils.book_append_sheet(wb, ws, "Liste de presences");
-  const buffer = xlsx.write(wb, { type: "buffer", bookType: "xlsx" });
-  res.setHeader("Content-Disposition", 'attachment; filename="template_liste_presences.xlsx"');
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-  res.send(buffer);
+router.get("/template", authMiddleware, async (req, res) => {
+  try {
+    const buffer = await construireModeleListePresence();
+    res.setHeader("Content-Disposition", 'attachment; filename="template_liste_presences.xlsx"');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+  } catch (err) {
+    console.error("[MODELE LISTE PRESENCE]", err);
+    res.status(500).json({ error: "Le modèle n'a pas pu être généré." });
+  }
 });
 
 /* ===== CRÉER ACTIVITÉ + IMPORTER PARTICIPANTS ===== */

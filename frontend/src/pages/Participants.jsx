@@ -249,8 +249,13 @@ function DoublonsActivite({ onChange }) {
   useEffect(() => { charger(); }, [charger]);
 
   const groupes = data?.groupes || [];
+  /* Le serveur n'envoie plus que ce qui reste à faire, et il dit combien il y
+     en a au total : la liste s'arrête à 500 lignes, le compte non. Confondre
+     les deux laissait 429 retraits hors d'atteinte. */
   const aRetablir = (retirees?.lignes || []).filter((l) => !l.retablie);
-  if (!groupes.length && !aRetablir.length) return null;
+  const nbARetablir = retirees?.a_retablir ?? aRetablir.length;
+  const parActivite = retirees?.par_activite || [];
+  if (!groupes.length && !nbARetablir) return null;
 
   const retenus = groupes.filter((g) => !ecartes.has(g.cle));
   const inscriptionsRetenues = retenus.reduce((n, g) => n + g.retirer.length, 0);
@@ -295,14 +300,23 @@ function DoublonsActivite({ onChange }) {
     }
   };
 
-  const retablir = async () => {
+  /* Sans argument : tout le journal. Avec une activité : elle seule.
+     On n'envoie plus la liste des lignes affichées — c'est ce qui bornait la
+     remise en place aux 500 que l'écran avait eu la place de charger. */
+  const retablir = async (activite = null) => {
     setEnCours(true);
     try {
-      const res = await api.post("/participants/inscriptions-retirees/retablir", {
-        journaux: aRetablir.map((l) => l.journal),
-      });
+      const res = await api.post(
+        "/participants/inscriptions-retirees/retablir",
+        activite ? { activite_id: activite.activite_id } : { tout: true }
+      );
+      const n = res.data.retablies;
       toast.success(
-        `${res.data.retablies} inscription${res.data.retablies > 1 ? "s" : ""} remise${res.data.retablies > 1 ? "s" : ""} en place.`
+        n > 0
+          ? `${n} inscription${n > 1 ? "s" : ""} remise${n > 1 ? "s" : ""} en place` +
+            (res.data.activites > 1 ? ` sur ${res.data.activites} activités.` : ".")
+          /* Ne rien dire quand rien ne bouge laisserait croire à une panne. */
+          : "Rien à remettre : ces inscriptions sont déjà en place."
       );
       await Promise.all([charger(), onChange?.()]);
     } catch (err) {
@@ -345,7 +359,7 @@ function DoublonsActivite({ onChange }) {
                 )}
               </>
             ) : (
-              `${aRetablir.length} retrait${aRetablir.length > 1 ? "s" : ""} au journal, à remettre en place si besoin`
+              `${nbARetablir} retrait${nbARetablir > 1 ? "s" : ""} au journal, à remettre en place si besoin`
             )}
           </span>
         </span>
@@ -474,24 +488,51 @@ function DoublonsActivite({ onChange }) {
 
           {/* Le retour en arrière, au même endroit que l'action : c'est là qu'on
               le cherche quand on s'aperçoit qu'un retrait était faux. */}
-          {aRetablir.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="max-w-xl text-xs text-slate-500">
-                {aRetablir.length} inscription{aRetablir.length > 1 ? "s" : ""} retirée
-                {aRetablir.length > 1 ? "s" : ""} par cet écran
-                {aRetablir.length > 1 ? " peuvent" : " peut"} être remise
-                {aRetablir.length > 1 ? "s" : ""} en place :{" "}
-                {aRetablir.slice(0, 4).map((l) => `${l.nom} (${l.activite})`).join(", ")}
-                {aRetablir.length > 4 && `, et ${aRetablir.length - 4} autre(s)`}.
-              </p>
-              <button
-                type="button"
-                onClick={retablir}
-                disabled={enCours}
-                className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-60"
-              >
-                Tout remettre en place
-              </button>
+          {nbARetablir > 0 && (
+            <div className="space-y-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="max-w-xl text-xs text-slate-500">
+                  {nbARetablir} inscription{nbARetablir > 1 ? "s" : ""} retirée
+                  {nbARetablir > 1 ? "s" : ""} par cet écran
+                  {nbARetablir > 1 ? " peuvent" : " peut"} être remise
+                  {nbARetablir > 1 ? "s" : ""} en place.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => retablir()}
+                  disabled={enCours}
+                  className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-60"
+                >
+                  {enCours ? "Remise en place…" : `Tout remettre en place (${nbARetablir})`}
+                </button>
+              </div>
+
+              {/* Par activité, parce que c'est la question qu'on se pose :
+                  on ne cherche pas « 429 inscriptions », on cherche pourquoi
+                  une activité précise affiche 1655 au lieu de 1828. Et on
+                  peut la réparer seule, sans toucher aux autres. */}
+              {parActivite.length > 0 && (
+                <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+                  {parActivite.map((a) => (
+                    <li key={a.activite_id} className="flex items-center gap-3 px-3 py-2 text-xs">
+                      <span className="min-w-0 flex-1 truncate text-slate-700" title={a.activite}>
+                        {a.activite}
+                      </span>
+                      <span className="flex-shrink-0 font-medium text-slate-500">
+                        {a.a_retablir} à remettre
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => retablir(a)}
+                        disabled={enCours}
+                        className="flex-shrink-0 rounded-lg border border-slate-300 px-2 py-1 font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Remettre
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
