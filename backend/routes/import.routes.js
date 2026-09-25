@@ -13,6 +13,11 @@ const {
   clePersonne, cleApprochee, nomsCompatibles, memePersonne,
 } = require("../services/nomsDoublons");
 const { construireModeleListePresence } = require("../services/modeleListePresence");
+/* Les regles qui disent que deux fiches ne peuvent pas designer la meme
+   personne. Elles vivent la-bas et servent partout : une regle d'identite
+   ecrite en deux exemplaires finirait par diverger, et l'import ne dirait
+   plus la meme chose que le reste de la plateforme. */
+const { genresIncompatibles, agesIncompatibles } = require("../services/assiduite");
 
 const router = express.Router();
 
@@ -485,6 +490,11 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   const riensOppose = (fiche, ligne) => {
     if (ligne.email && fiche.email && normalizeEmail(fiche.email) !== ligne.email) return false;
     if (ligne.telephone && fiche.telephone && normalizePhone(fiche.telephone) !== ligne.telephone) return false;
+    /* Le genre et la tranche d'age separent aussi deux personnes : c'est ce
+       qui distingue un enfant de Kids Tech d'un adulte de Tech Academy quand
+       ni l'un ni l'autre ne porte de coordonnees. */
+    if (genresIncompatibles(normalizeGender(fiche.genre), ligne.normalizedGender)) return false;
+    if (agesIncompatibles(fiche.age_range, ligne.ageRange)) return false;
     return true;
   };
 
@@ -540,7 +550,10 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
      puis le meme contact avec un nom compatible, puis — pour les lignes dont le
      nom est a moitie vide, qui n'ont donc pas d'identite — les memes mots sans
      rien qui les oppose. */
-  const dejaVu = new Map();          // cle personne → indice dans items[]
+  /* Plusieurs indices par nom, et non un seul : deux homonymes que leurs
+     numeros separent sont deux personnes, et la troisieme ligne du meme nom
+     doit pouvoir se reconnaitre dans l'une ou dans l'autre. */
+  const dejaVu = new Map();          // cle personne → [indices dans items]
   const parContactLigne = new Map(); // email ou telephone → [indices]
   const parApprochee = new Map();    // cle approchee → [indices]
 
@@ -550,18 +563,45 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
     carte.get(cle).push(i);
   };
 
-  /* Ce qui separe deux lignes : toutes deux portent une adresse, ou toutes deux
-     un numero, et ce n'est pas le meme. Une information absente ne contredit
-     rien — c'est justement le cas qu'on veut rattraper. */
+  /* Ce qui separe deux lignes.
+   *
+   * Toutes deux portent une adresse, ou toutes deux un numero, et ce n'est pas
+   * le meme. Ou elles decrivent deux personnes differentes : un homme et une
+   * femme, un enfant et un adulte. Une information absente ne contredit rien —
+   * c'est justement le cas qu'on veut rattraper.
+   *
+   * Le genre et la tranche d'age comptent au meme titre que les coordonnees.
+   * Les regles viennent d'assiduite.js plutot que d'etre reecrites ici : une
+   * regle d'identite qui existerait en deux exemplaires finirait par diverger,
+   * et l'import ne dirait plus la meme chose que le reste de la plateforme. */
   const seContredisent = (a, b) =>
     Boolean(
       (a.email && b.email && a.email !== b.email) ||
-      (a.telephone && b.telephone && a.telephone !== b.telephone)
+      (a.telephone && b.telephone && a.telephone !== b.telephone) ||
+      genresIncompatibles(a.normalizedGender, b.normalizedGender) ||
+      agesIncompatibles(a.ageRange, b.ageRange)
     );
 
   const jumelleDe = (it) => {
-    if (it.cle && dejaVu.has(it.cle)) {
-      return { indice: dejaVu.get(it.cle), motif: "identite_identique" };
+    /* Le meme nom, deux fois sur la meme feuille.
+     *
+     * L'import y voyait une seule personne, sans rien verifier d'autre. Sur
+     * une liste de 1825 inscrits a une journee scientifique, 170 lignes ont
+     * ainsi disparu : 147 noms differents, et 171 numeros de telephone
+     * distincts — autant de personnes reelles fondues en une seule parce
+     * qu'elles s'appelaient comme quelqu'un d'autre. A cette echelle, quatre
+     * « Aissatou Diallo » ne sont pas une erreur de saisie, c'est ce que
+     * donnent les noms les plus portes du pays.
+     *
+     * Le nom seul ne suffit donc plus. Il faut qu'il ne reste rien pour les
+     * separer : ni deux numeros differents, ni deux adresses differentes, ni
+     * deux genres, ni deux tranches d'age qui ne peuvent designer la meme
+     * personne. C'est la regle appliquee partout ailleurs depuis qu'on a vu
+     * ce que l'autre coutait. */
+    for (const j of dejaVu.get(it.cle) || []) {
+      if (!seContredisent(items[j], it)) {
+        return { indice: j, motif: "identite_identique" };
+      }
     }
 
     for (const contact of [it.email, it.telephone].filter(Boolean)) {
@@ -587,9 +627,14 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
   };
 
   /* Ce que cette ligne apporte pour reconnaitre les suivantes. */
-  const enregistrer = (i) => {
+  const enregistrer = (i, distincte) => {
     const it = items[i];
-    if (it.cle && !dejaVu.has(it.cle)) dejaVu.set(it.cle, i);
+    /* Seules les lignes qui designent une personne de plus entrent dans
+       l'index des noms : une ligne reunie a une autre n'est pas quelqu'un
+       qu'une troisieme pourrait reconnaitre, et la designer comme jumelle
+       ferait pointer les rapprochements sur un doublon plutot que sur
+       l'originale. Les contacts, eux, s'enregistrent toujours. */
+    if (distincte) noter(dejaVu, it.cle, i);
     noter(parContactLigne, it.email, i);
     noter(parContactLigne, it.telephone, i);
     noter(parApprochee, it.approchee, i);
@@ -657,7 +702,7 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
         signaler(it, "email", it.email, "adresse_differente", ex);
       }
 
-      enregistrer(i);
+      enregistrer(i, true);
       continue;
     }
 
@@ -691,11 +736,11 @@ async function importParticipantsRowsBatch(client, rows, activityId) {
         motif: jumelle.motif,
         avec: `${premier.prenom || ""} ${premier.nom || ""}`.trim(),
       });
-      enregistrer(i);
+      enregistrer(i, false);
       continue;
     }
 
-    enregistrer(i);
+    enregistrer(i, true);
     items[i].aInserer = true;
   }
 
