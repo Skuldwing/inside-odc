@@ -1720,7 +1720,20 @@ router.get("/inscriptions-retirees", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
-    const LIMITE = 500;
+    /* Deux plafonds, et ils ne servent pas a la meme chose.
+     *
+     * L'ecran n'affiche qu'une page de lignes — au-dela, la liste devient
+     * illisible et le navigateur peine. Mais le decompte, lui, doit porter
+     * sur tout le journal : un seul plafond a 500 avait un effet qu'on n'a
+     * vu qu'apres coup. Le journal comptait 929 retraits ; les 500 les plus
+     * recents s'arretaient a 12h17, et les 429 d'avant — dont les 173 de
+     * « AASTIC - Journee Scientifique » — n'apparaissaient nulle part. Le
+     * bouton « tout remettre » ne remettait que ce que l'ecran avait charge,
+     * et l'activite restait a 1655 quel que soit le nombre de clics.
+     *
+     * On lit donc large, on affiche une page, et on compte sur l'ensemble. */
+    const LIMITE_LECTURE = 20000;
+    const LIMITE_AFFICHEE = 500;
     const total = await pool.query(
       `SELECT COUNT(*)::int AS n FROM audit_logs
         WHERE resource = 'activity_participants' AND action = 'DELETE'`
@@ -1729,7 +1742,7 @@ router.get("/inscriptions-retirees", authMiddleware, async (req, res) => {
       `SELECT id, resource_label, details, created_at FROM audit_logs
         WHERE resource = 'activity_participants' AND action = 'DELETE'
         ORDER BY created_at DESC LIMIT $1`,
-      [LIMITE]
+      [LIMITE_LECTURE]
     );
 
     const lignes = [];
@@ -1791,12 +1804,31 @@ router.get("/inscriptions-retirees", authMiddleware, async (req, res) => {
       }
     }
 
+    const aRetablir = lignes.filter((l) => !l.retablie);
+
+    /* Le detail par activite : c'est la question qu'on se pose vraiment. On
+       ne lit pas « 429 inscriptions manquent », on lit « la Journee
+       Scientifique est a 1655 au lieu de 1828 ». Sans cette ventilation il
+       faut derouler des centaines de lignes pour retrouver une activite. */
+    const parActivite = new Map();
+    for (const l of aRetablir) {
+      const e = parActivite.get(l.activite_id)
+        || { activite_id: l.activite_id, activite: l.activite, a_retablir: 0 };
+      e.a_retablir += 1;
+      parActivite.set(l.activite_id, e);
+    }
+
     res.json({
       total: lignes.length,
-      a_retablir: lignes.filter((l) => !l.retablie).length,
-      tronquee: total.rows[0].n > LIMITE,
+      a_retablir: aRetablir.length,
+      /* « Tronquee » ne parle que de l'affichage : le decompte et le bouton
+         « tout remettre » portent sur la totalite du journal. */
+      tronquee: aRetablir.length > LIMITE_AFFICHEE,
       total_journal: total.rows[0].n,
-      lignes,
+      par_activite: [...parActivite.values()].sort((a, b) => b.a_retablir - a.a_retablir),
+      /* On n'envoie que ce qui reste a faire : afficher les lignes deja
+         remises en place occupait la page avec du travail termine. */
+      lignes: aRetablir.slice(0, LIMITE_AFFICHEE),
     });
   } catch (err) {
     console.error("[INSCRIPTIONS RETIREES]", err);
@@ -1812,20 +1844,45 @@ router.post("/inscriptions-retirees/retablir", authMiddleware, async (req, res) 
 
     const journaux = Array.isArray(req.body?.journaux)
       ? req.body.journaux.map(Number).filter(Number.isInteger) : [];
-    if (!journaux.length) return res.status(400).json({ error: "Aucune inscription à rétablir." });
+    /* « Tout » doit vouloir dire tout le journal, pas tout ce que l'ecran a
+       eu la place de charger. C'est cette difference qui laissait 429
+       retraits — dont les 173 de la Journee Scientifique — hors d'atteinte :
+       le bouton renvoyait la liste affichee, et cette liste s'arretait a la
+       500e ligne. Le serveur sait, lui, ce qu'il y a dans le journal.
+       Une activite peut aussi etre visee seule : c'est ainsi qu'on repare
+       une activite precise sans toucher aux autres. */
+    const tout = req.body?.tout === true;
+    const surActivite = Number(req.body?.activite_id);
+    const cible = Number.isInteger(surActivite) && surActivite > 0 ? surActivite : null;
+    if (!journaux.length && !tout && !cible) {
+      return res.status(400).json({ error: "Aucune inscription à rétablir." });
+    }
 
-    const r = await client.query(
-      `SELECT id, details FROM audit_logs
-        WHERE id = ANY($1::int[])
-          AND resource = 'activity_participants' AND action = 'DELETE'`,
-      [journaux]
-    );
+    const r = journaux.length
+      ? await client.query(
+          `SELECT id, details FROM audit_logs
+            WHERE id = ANY($1::bigint[])
+              AND resource = 'activity_participants' AND action = 'DELETE'`,
+          [journaux]
+        )
+      : await client.query(
+          `SELECT id, details FROM audit_logs
+            WHERE resource = 'activity_participants' AND action = 'DELETE'
+              AND ($1::text IS NULL OR details->>'activite_id' = $1::text)
+            ORDER BY created_at ASC`,
+          [cible === null ? null : String(cible)]
+        );
 
     await client.query("BEGIN");
     ouverte = true;
 
     let retablies = 0;
     let impossibles = 0;
+    /* Distinct de « impossible » : quand le bouton porte sur tout le journal,
+       la plupart des lignes sont deja en place. Les compter comme des echecs
+       ferait annoncer « 756 impossibles » apres une remise en place reussie,
+       et ferait croire a une panne. */
+    let dejaEnPlace = 0;
     const activitesTouchees = new Set();
     const traces = [];
     for (const l of r.rows) {
@@ -1847,12 +1904,24 @@ router.post("/inscriptions-retirees/retablir", authMiddleware, async (req, res) 
         const remises = await defaire(client, [
           { fiche: participantId, avant: Number(d.identite_avant) },
         ]);
-        if (!remises) { impossibles += 1; continue; }
+        /* « defaire » ne touche rien si la fiche porte deja son identite
+           d'avant : le rapprochement est donc deja defait. */
+        if (!remises) { dejaEnPlace += 1; continue; }
         retablies += 1;
         activitesTouchees.add(activiteId);
         traces.push({ journal: l.id, activiteId, participantId, d });
         continue;
       }
+
+      /* Deja remise ? Il faut le savoir avant d'inserer : « ON CONFLICT DO
+         NOTHING » rend la meme chose — zero ligne — que l'activite ou la
+         fiche disparue, et on ne saurait pas distinguer un travail deja fait
+         d'un echec. */
+      const { rowCount: presente } = await client.query(
+        "SELECT 1 FROM activity_participants WHERE activity_id = $1 AND participant_id = $2",
+        [activiteId, participantId]
+      );
+      if (presente) { dejaEnPlace += 1; continue; }
 
       /* L'activite ou la fiche a pu disparaitre depuis : on passe la ligne
          plutot que de faire echouer le reste. */
@@ -1893,7 +1962,13 @@ router.post("/inscriptions-retirees/retablir", authMiddleware, async (req, res) 
       );
     }
 
-    res.json({ retablies, impossibles, activites: activitesTouchees.size });
+    res.json({
+      retablies,
+      impossibles,
+      deja_en_place: dejaEnPlace,
+      examinees: r.rows.length,
+      activites: activitesTouchees.size,
+    });
   } catch (err) {
     if (ouverte) await client.query("ROLLBACK").catch(() => {});
     console.error("[INSCRIPTIONS RETIREES RETABLIR]", err);
