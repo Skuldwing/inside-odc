@@ -13,6 +13,7 @@ const {
 } = require("../services/assiduite");
 const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/rechercheTexte");
 const { reunir, defaire } = require("../services/identite");
+const { contactsCollectifs } = require("../services/contactsCollectifs");
 
 const router = express.Router();
 
@@ -553,10 +554,18 @@ function rienNeSepare(a, b) {
  * pas une seconde personne.
  */
 function unirParContact(parents, fiches) {
+  /* Un contact collectif ne rapproche personne : le telephone d'un directeur
+     d'ecole figure sur la liste de vingt enfants, et deux d'entre eux peuvent
+     porter le meme nom de famille — « Diop » et « Awa Diop » seraient alors
+     tenus pour compatibles, et reunis sur la foi d'un numero qui n'est ni a
+     l'un ni a l'autre. */
+  const collectifs = contactsCollectifs(fiches);
+
   const parContact = new Map();
   for (const f of fiches) {
-    for (const contact of [mailCompare(f.email), telCompare(f.telephone)]) {
-      if (!contact) continue;
+    const m = mailCompare(f.email), t = telCompare(f.telephone);
+    for (const [contact, partage] of [[m, collectifs.mails], [t, collectifs.tels]]) {
+      if (!contact || partage.has(contact)) continue;
       if (!parContact.has(contact)) parContact.set(contact, []);
       parContact.get(contact).push(f);
     }
@@ -608,6 +617,10 @@ async function paresDistinctes() {
  */
 function analyserGroupes(fiches, distinctes = new Set()) {
   const parents = new Map(fiches.map((f) => [f.id, f.id]));
+  /* Calcule sur tout le lot, pas groupe par groupe : c'est le nombre de
+     personnes que le contact accompagne dans la base qui dit s'il est
+     collectif, pas ce qu'on en voit dans un groupe de deux. */
+  const contactsPartout = contactsCollectifs(fiches);
 
   const premiereDeLaCle = new Map();
   for (const f of fiches) {
@@ -706,13 +719,20 @@ function analyserGroupes(fiches, distinctes = new Set()) {
     /* Sur quoi il a ete reconnu, pour que l'ecran le dise plutot que de laisser
        deviner pourquoi deux noms differents sont dans le meme groupe. */
     const partage = [];
-    for (const [champ, comparer] of [["email", mailCompare], ["telephone", telCompare]]) {
+    for (const [champ, comparer, collectifs] of [
+      ["email", mailCompare, contactsPartout.mails],
+      ["telephone", telCompare, contactsPartout.tels],
+    ]) {
       const vus = new Map();
       for (const f of membres) {
         const v = comparer(f[champ]);
         if (v && !vus.has(v)) vus.set(v, String(f[champ]).trim());
       }
-      if (vus.size === 1 && membres.filter((f) => comparer(f[champ])).length > 1) {
+      /* Un contact collectif — le telephone d'une ecole, l'adresse d'un
+         service — est partage par des gens differents : il ne prouve pas
+         qu'il s'agit de la meme personne. */
+      const seul = vus.size === 1 && !collectifs.has([...vus.keys()][0]);
+      if (seul && membres.filter((f) => comparer(f[champ])).length > 1) {
         partage.push({ champ, libelle: LIBELLES_CHAMPS[champ], valeur: [...vus.values()][0] });
       }
     }
@@ -1331,6 +1351,13 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
  *    mots, a condition que rien ne les separe.
  */
 function doublonsSurActivite(lignes) {
+  /* Sur tout le lot : c'est le nombre de personnes que le contact accompagne
+     dans la base qui dit s'il est collectif, pas ce qu'on en voit sur une
+     activite. Les lignes portent une fiche par inscription, donc la meme
+     fiche plusieurs fois ; on ne la compte qu'une. */
+  const fichesUniques = [...new Map(lignes.map((l) => [l.id, l])).values()];
+  const collectifsIci = contactsCollectifs(fichesUniques);
+
   const parActivite = new Map();
   for (const l of lignes) {
     if (!parActivite.has(l.activite_id)) {
@@ -1439,8 +1466,12 @@ function doublonsSurActivite(lignes) {
         const tels = new Set(membres.map((f) => telCompare(f.telephone)).filter(Boolean));
         const avecMail = membres.filter((f) => mailCompare(f.email)).length;
         const avecTel = membres.filter((f) => telCompare(f.telephone)).length;
-        return (mails.size === 1 && avecMail === membres.length)
-          || (tels.size === 1 && avecTel === membres.length);
+        /* Un contact collectif ne prouve rien : vingt enfants portent le
+           telephone de leur directeur d'ecole. */
+        const mailPropre = mails.size === 1 && !collectifsIci.mails.has([...mails][0]);
+        const telPropre = tels.size === 1 && !collectifsIci.tels.has([...tels][0]);
+        return (mailPropre && avecMail === membres.length)
+          || (telPropre && avecTel === membres.length);
       })();
 
       const preuve = partageUnContact ? "contact" : "nom_seul";

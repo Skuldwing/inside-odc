@@ -1,4 +1,5 @@
-const { clePersonne, normaliser } = require("./nomsDoublons");
+const { clePersonne, normaliser, nomsCompatibles, nomsProches } = require("./nomsDoublons");
+const { contactsCollectifs } = require("./contactsCollectifs");
 
 /**
  * Assiduite : combien de modules une personne a suivis, et lesquels.
@@ -151,16 +152,49 @@ function classerParAssiduite(lignes) {
   const liste = [...fiches.values()];
   const union = creerUnion(liste.length);
 
-  /* 1. L'adresse et le numero designent une personne : on rapproche sans
-        reserve. */
+  /* Les contacts qui n'appartiennent a personne en particulier : le telephone
+     d'un directeur d'ecole porte sur la liste de vingt enfants, l'adresse
+     d'un service, celle d'un parent pour plusieurs enfants. Ils ne prouvent
+     rien, et les tenir pour une preuve faisait d'une classe entiere une seule
+     personne — un seul beneficiaire pour vingt, une seule attestation. */
+  const collectifs = contactsCollectifs(liste);
+
+  /* 1. L'adresse et le numero rapprochent — quand ils sont a la personne, et
+        que le nom ne s'y oppose pas.
+
+        Le contact seul ne suffit pas, et c'est ce qui manquait : deux freres
+        sur l'adresse de famille, « Ibrahima Ba » et « Aissatou Ba »,
+        devenaient une seule personne. Les deux ensemble, si : le meme contact
+        et un nom qui dit la meme chose en plus court ou en plus long
+        (« Diop » et « Awa Diop »), ou mal orthographie sur l'une des listes
+        (« Fatou Ndiaye » et « Fatou Ndiay »). C'est precisement ce que le
+        rapprochement par contact sert a rattraper.
+
+        Une fiche sans nom exploitable fait exception : le contact est alors la
+        seule chose qui la designe, et refuser de la rapprocher la laisserait
+        seule pour toujours. */
+  const sansNom = (f) => !clePersonne(f.nom, f.prenom);
+  const nomNeSOppose = (a, b) =>
+    sansNom(a) || sansNom(b) || nomsCompatibles(a, b) || nomsProches(a, b);
+
   for (const champ of ["mail", "tel"]) {
-    const vus = new Map();
+    const partages = champ === "mail" ? collectifs.mails : collectifs.tels;
+    const parContact = new Map();
     liste.forEach((f, i) => {
       const v = f[champ];
-      if (!v) return;
-      if (vus.has(v)) union.unir(vus.get(v), i);
-      else vus.set(v, i);
+      if (!v || partages.has(v)) return;
+      if (!parContact.has(v)) parContact.set(v, []);
+      parContact.get(v).push(i);
     });
+    for (const indices of parContact.values()) {
+      for (let x = 0; x < indices.length; x++) {
+        for (let y = x + 1; y < indices.length; y++) {
+          if (nomNeSOppose(liste[indices[x]], liste[indices[y]])) {
+            union.unir(indices[x], indices[y]);
+          }
+        }
+      }
+    }
   }
 
   /* 2. Le nom ne designe pas une personne. On ne rapproche deux fiches de meme
