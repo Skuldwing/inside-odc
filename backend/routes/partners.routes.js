@@ -6,34 +6,67 @@ const requireAdminPin = require("../middleware/pin.middleware");
 const { logAudit } = require("../services/audit");
 
 const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
+const { ensureIdentitePersonnes } = require("../migrations/identitePersonnes");
 
 const router = express.Router();
 
-/* Si la migration de demarrage a echoue, enregistrer un partenaire echouerait
-   sur « colonne inconnue » sans rien expliquer. On la rejoue une fois, comme
+/* Si une migration de demarrage a echoue, ces ecrans tomberaient sur
+   « colonne inconnue » sans rien expliquer. On les rejoue une fois, comme
    ailleurs dans la plateforme. */
 let schemaRejoue = false;
-async function avecEmargement(travail) {
+async function avecSchema(travail) {
   try {
     return await travail();
   } catch (err) {
-    if (err?.code !== "42703" || schemaRejoue) throw err;
+    const incomplet = err?.code === "42703" || err?.code === "42P01";
+    if (!incomplet || schemaRejoue) throw err;
     schemaRejoue = true;
-    console.warn("[PARTENAIRES] colonne emargement_actif absente, migration rejouée");
+    console.warn("[PARTENAIRES] schéma incomplet, migrations rejouées");
     await ensureEmargementPartenaire();
+    await ensureIdentitePersonnes();
     return travail();
   }
 }
 
+/* Deux chiffres, pas un.
+ *
+ * « beneficiaries_count » compte des lignes de liste de presence : une
+ * personne revenue sur quatre modules du partenaire en fait quatre. C'est le
+ * bon chiffre pour « combien de seances ont ete suivies ».
+ *
+ * « personnes_distinctes » compte des personnes. C'est le bon chiffre pour
+ * « combien de gens avons-nous formes ».
+ *
+ * Un seul nombre portait les deux sens, et il donnait le second en laissant
+ * lire le premier. C'est la meme confusion qui a rendu incomprehensible
+ * qu'une activite passe de 302 a 279 sans que personne ne soit parti ; elle
+ * est levee pour les activites, elle l'est ici aussi.
+ *
+ * L'agregation passe par une sous-requete plutot que par des jointures a plat
+ * pour que le compte des activites ne soit pas gonfle par celui des
+ * inscriptions, et inversement. */
+const COMPTES_PAR_PARTENAIRE = `
+  SELECT a.partner_id,
+         COUNT(DISTINCT a.id)::int AS activites,
+         COUNT(ap.participant_id)::int AS participations,
+         COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id))::int AS personnes
+  FROM activities a
+  LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+  LEFT JOIN participants pa ON pa.id = ap.participant_id
+  WHERE a.partner_id IS NOT NULL
+  GROUP BY a.partner_id
+`;
+
 /* ===== GET ALL PARTNERS ===== */
 router.get("/", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await avecSchema(() => pool.query(
       `
       SELECT
         p.*,
-        COUNT(DISTINCT a.id)::int AS activities_count,
-        COUNT(ap.participant_id)::int AS beneficiaries_count,
+        COALESCE(c.activites, 0) AS activities_count,
+        COALESCE(c.participations, 0) AS beneficiaries_count,
+        COALESCE(c.personnes, 0) AS personnes_distinctes,
         COALESCE((
           SELECT SUM(u.objective_beneficiaries)
           FROM users u
@@ -45,12 +78,10 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
           WHERE u.partner_id = p.id AND u.role = 'coach'
         )::int AS coaches_count
       FROM partners p
-      LEFT JOIN activities a ON a.partner_id = p.id
-      LEFT JOIN activity_participants ap ON ap.activity_id = a.id
-      GROUP BY p.id
+      LEFT JOIN (${COMPTES_PAR_PARTENAIRE}) c ON c.partner_id = p.id
       ORDER BY p.name
       `
-    );
+    ));
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -61,20 +92,19 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
 /* ===== GET ONE PARTNER ===== */
 router.get("/:id", authMiddleware, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(
+    const result = await avecSchema(() => pool.query(
       `
       SELECT
         p.*,
-        COUNT(DISTINCT a.id)::int AS activities_count,
-        COUNT(ap.participant_id)::int AS beneficiaries_count
+        COALESCE(c.activites, 0) AS activities_count,
+        COALESCE(c.participations, 0) AS beneficiaries_count,
+        COALESCE(c.personnes, 0) AS personnes_distinctes
       FROM partners p
-      LEFT JOIN activities a ON a.partner_id = p.id
-      LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+      LEFT JOIN (${COMPTES_PAR_PARTENAIRE}) c ON c.partner_id = p.id
       WHERE p.id = $1
-      GROUP BY p.id
       `,
       [req.params.id]
-    );
+    ));
     if (!result.rows.length) return res.status(404).json({ error: "Partenaire introuvable" });
     res.json(result.rows[0]);
   } catch (err) {
@@ -299,7 +329,7 @@ router.post("/", authMiddleware, requireAdmin, requireAdminPin, async (req, res)
       return res.status(400).json({ error: "Nom requis" });
     }
 
-    const result = await avecEmargement(() => pool.query(
+    const result = await avecSchema(() => pool.query(
       `
       INSERT INTO partners
       (name, description, contact_email, contact_phone, objective_beneficiaries, status, emargement_actif)
@@ -344,7 +374,7 @@ router.put("/:id", authMiddleware, requireAdmin, requireAdminPin, async (req, re
       return res.status(400).json({ error: "Nom requis" });
     }
 
-    const result = await avecEmargement(() => pool.query(
+    const result = await avecSchema(() => pool.query(
       `
       UPDATE partners
       SET name = $1,
