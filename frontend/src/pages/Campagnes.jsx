@@ -1850,6 +1850,9 @@ function ParParticipant() {
 function AttestationsTab({ activities, onEnvoye }) {
   const toast = useToast();
   const [ouverte, setOuverte] = useState(null);   // id de l'activité dépliée
+  /* Un centre sert des dizaines de partenaires : servir les attestations de
+     l'un d'eux obligeait à le repérer à l'œil dans toute la liste. */
+  const [partenaire, setPartenaire] = useState("");
   const [intitule, setIntitule] = useState("");
   const [confirme, setConfirme] = useState(false);
   const [envoi, setEnvoi] = useState(false);
@@ -1947,6 +1950,38 @@ function AttestationsTab({ activities, onEnvoye }) {
     .filter((a) => (a.participants_count ?? 0) > 0)
     .sort((a, b) => String(b.activity_date || "").localeCompare(String(a.activity_date || "")));
 
+  /* Les partenaires sont tirés des activités elles-mêmes plutôt que demandés
+     au serveur : la liste ne propose alors que ceux qui ont vraiment une
+     activité à servir, et choisir un partenaire ne peut pas donner une liste
+     vide. Les activités sans partenaire ont leur propre entrée — sans elle,
+     filtrer les ferait disparaître sans qu'on puisse les retrouver. */
+  const SANS_PARTENAIRE = "__sans__";
+  const partenaires = (() => {
+    const vus = new Map();
+    let sansPartenaire = 0;
+    for (const a of avecParticipants) {
+      if (a.partner_id == null) { sansPartenaire += 1; continue; }
+      const cle = String(a.partner_id);
+      vus.set(cle, {
+        id: cle,
+        nom: a.partner_name || `Partenaire ${a.partner_id}`,
+        combien: (vus.get(cle)?.combien || 0) + 1,
+      });
+    }
+    const liste = [...vus.values()].sort((x, y) => x.nom.localeCompare(y.nom, "fr"));
+    if (sansPartenaire) {
+      liste.push({ id: SANS_PARTENAIRE, nom: "Sans partenaire", combien: sansPartenaire });
+    }
+    return liste;
+  })();
+
+  const listees = partenaire
+    ? avecParticipants.filter((a) =>
+        partenaire === SANS_PARTENAIRE
+          ? a.partner_id == null
+          : String(a.partner_id) === partenaire)
+    : avecParticipants;
+
   const ouvrir = (a) => {
     const ferme = a.id === ouverte;
     setOuverte(ferme ? null : a.id);
@@ -1999,7 +2034,58 @@ function AttestationsTab({ activities, onEnvoye }) {
         email sont ignorées.
       </p>
 
-      {avecParticipants.map((a) => {
+      {/* Le filtre n'apparaît que s'il y a de quoi filtrer : un sélecteur à
+          une seule entrée n'aide personne et encombre. */}
+      {partenaires.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-xs text-slate-500" htmlFor="filtre-partenaire">
+            Partenaire
+          </label>
+          <select
+            id="filtre-partenaire"
+            className="select text-sm max-w-xs"
+            value={partenaire}
+            onChange={(e) => {
+              setPartenaire(e.target.value);
+              /* L'activité dépliée peut ne plus être dans la liste : la
+                 laisser ouverte garderait à l'écran un panneau d'envoi qui
+                 ne correspond plus à rien de visible. */
+              setOuverte(null);
+              setParticipants(null);
+              setResultat(null);
+            }}
+          >
+            <option value="">Tous les partenaires ({avecParticipants.length})</option>
+            {partenaires.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nom} ({p.combien})
+              </option>
+            ))}
+          </select>
+          {partenaire && (
+            <button
+              type="button"
+              onClick={() => { setPartenaire(""); setOuverte(null); setParticipants(null); setResultat(null); }}
+              className="text-xs font-medium text-orange-600 hover:text-orange-700"
+            >
+              Tout afficher
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Un filtre qui ne rend rien doit le dire lui-même : l'écran vide
+          d'origine parle d'importer une liste, ce qui n'a rien à voir. */}
+      {listees.length === 0 && (
+        <EmptyState
+          icon={Award}
+          compact
+          title="Aucune activité pour ce partenaire"
+          description="Aucune de ses activités n'a de liste de présences importée."
+        />
+      )}
+
+      {listees.map((a) => {
         const depliee = ouverte === a.id;
         const etat = etatAttestations(a);
         return (
