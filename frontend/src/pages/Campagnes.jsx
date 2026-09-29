@@ -1264,6 +1264,12 @@ function ParParticipant() {
   const [intitules, setIntitules] = useState({}); // clé module → intitulé réécrit
   const [enEdition, setEnEdition] = useState(null);
   const [adresse, setAdresse] = useState("");
+  /* L'identité en cours de correction. Une liste de présence est remplie à la
+     main, souvent debout : « NDIAYE Ndiaye Fatou », « fatou », un prénom pour
+     un autre. L'attestation portera exactement ce qui est écrit, et l'erreur
+     ne se rattrape pas après l'envoi. */
+  const [identite, setIdentite] = useState(null);   // { nom, prenom }
+  const [corrige, setCorrige] = useState(false);
   const [envoi, setEnvoi] = useState(false);
   /* La fiche dont la marque est en cours d'écriture : sa case se fige le temps
      de l'aller-retour, pour qu'un double clic n'envoie pas deux ordres
@@ -1276,6 +1282,10 @@ function ParParticipant() {
      du premier tiers. */
   const [page, setPage] = useState(1);
   const [parPage, setParPage] = useState(25);
+  /* Après une correction, la liste est relue et les clés de regroupement ont
+     pu changer. On retrouve la personne par une de ses fiches — celles-là ne
+     bougent pas — pour ne pas renvoyer l'utilisateur en haut de la page. */
+  const [rouvrir, setRouvrir] = useState(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -1292,6 +1302,20 @@ function ParParticipant() {
 
   useEffect(() => { charger(); }, [charger]);
 
+  /* La liste vient d'être relue après une correction : on rouvre la personne
+     là où elle est désormais, plutôt que de refermer tout et de renvoyer
+     l'utilisateur en haut de la page. */
+  useEffect(() => {
+    if (rouvrir == null || !data?.liste) return;
+    const p = data.liste.find((x) => (x.fiches || []).includes(rouvrir));
+    setRouvrir(null);
+    if (!p) return;   /* elle a pu être réunie à une autre : on ne force rien */
+    setOuverte(p.cle);
+    setChoix(Object.fromEntries(p.modules.map((m) => [`${m.id}:${m.fiche_id}`, m.suggere])));
+    setIntitules(Object.fromEntries(p.modules.map((m) => [`${m.id}:${m.fiche_id}`, m.titre])));
+    setAdresse(p.adresses[0] || p.email || "");
+  }, [data, rouvrir]);
+
   const cle = (m) => `${m.id}:${m.fiche_id}`;
 
   /* Ouvrir une fiche applique la proposition du serveur : une attestation par
@@ -1303,7 +1327,47 @@ function ParParticipant() {
     setChoix(Object.fromEntries(p.modules.map((m) => [cle(m), m.suggere])));
     setIntitules(Object.fromEntries(p.modules.map((m) => [cle(m), m.titre])));
     setEnEdition(null);
+    setIdentite(null);
     setAdresse(p.adresses[0] || p.email || "");
+  };
+
+  /* La correction porte sur toutes les fiches de la personne, pas seulement
+     sur la première. Cet écran réunit plusieurs fiches sous une identité, et
+     l'attestation est composée à partir de la base au moment de l'envoi :
+     n'en corriger qu'une laisserait le document tirer son nom de l'une ou de
+     l'autre, sans qu'on puisse dire laquelle. */
+  const enregistrerIdentite = async (p) => {
+    const nom = (identite?.nom || "").trim();
+    const prenom = (identite?.prenom || "").trim();
+    if (!nom || !prenom) {
+      toast.error("Le nom et le prénom sont tous deux requis.");
+      return;
+    }
+    if (nom === p.nom && prenom === p.prenom) { setIdentite(null); return; }
+
+    setCorrige(true);
+    try {
+      const res = await api.patch(`/participants/${p.fiches[0]}`, {
+        nom, prenom, fiches: p.fiches,
+      });
+      const combien = res.data?.fiches_corrigees ?? 1;
+      toast.success(
+        combien > 1
+          ? `Identité corrigée sur ses ${combien} fiches.`
+          : "Identité corrigée."
+      );
+      setIdentite(null);
+      /* Le regroupement des personnes se fait sur le nom : le corriger peut
+         réunir cette personne avec une autre, ou la détacher. On relit donc
+         la liste plutôt que de retoucher la ligne à l'écran, et on rouvre la
+         fiche par un identifiant qui, lui, ne bouge pas. */
+      await charger();
+      setRouvrir(p.fiches[0]);
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La correction n'a pas été enregistrée.");
+    } finally {
+      setCorrige(false);
+    }
   };
 
   /* Calculé une fois par chargement : le parcours d'une personne ne change pas
@@ -1773,6 +1837,77 @@ function ParParticipant() {
                     </li>
                   ))}
                 </ul>
+
+                {/* Le nom tel qu'il sera écrit sur le document. Il se relit
+                    ici, au moment où on l'envoie — c'est le seul instant où
+                    quelqu'un le regarde vraiment, et le dernier où l'erreur
+                    se rattrape. */}
+                <div className="border-t border-slate-100 pt-3">
+                  {identite ? (
+                    <div className="space-y-2 rounded-xl border border-orange-200 bg-orange-50/50 p-3">
+                      <p className="text-xs font-medium text-slate-700">
+                        Tel que ce sera écrit sur l&apos;attestation
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          type="text"
+                          value={identite.prenom}
+                          onChange={(e) => setIdentite((i) => ({ ...i, prenom: e.target.value }))}
+                          placeholder="Prénom"
+                          className="input min-w-0 flex-1 text-sm sm:max-w-[12rem]"
+                          aria-label="Prénom"
+                        />
+                        <input
+                          type="text"
+                          value={identite.nom}
+                          onChange={(e) => setIdentite((i) => ({ ...i, nom: e.target.value }))}
+                          placeholder="Nom"
+                          className="input min-w-0 flex-1 text-sm sm:max-w-[12rem]"
+                          aria-label="Nom"
+                        />
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        La correction est enregistrée dans la base
+                        {p.fiches.length > 1
+                          ? `, sur les ${p.fiches.length} fiches de cette personne.`
+                          : "."}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => enregistrerIdentite(p)}
+                          disabled={corrige}
+                          className="flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-60"
+                        >
+                          {corrige ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                          Enregistrer la correction
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIdentite(null)}
+                          disabled={corrige}
+                          className="rounded-xl border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-white disabled:opacity-60"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-600">
+                      Sur l&apos;attestation :{" "}
+                      <span className="font-medium text-slate-800">
+                        {[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIdentite({ nom: p.nom || "", prenom: p.prenom || "" })}
+                        className="ml-2 font-medium text-orange-600 hover:text-orange-700"
+                      >
+                        Corriger
+                      </button>
+                    </p>
+                  )}
+                </div>
 
                 <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
                   <input
