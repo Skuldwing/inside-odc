@@ -403,6 +403,103 @@ router.get("/doublons-nom", authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * Corriger l'identite d'une fiche, avant d'envoyer son attestation.
+ *
+ * Une liste de presence est remplie a la main, souvent debout, parfois par
+ * quelqu'un d'autre que l'interesse. « NDIAYE Ndiaye Fatou », « fatou »,
+ * « Mouhamadou » pour « Mouhamed » : l'attestation portera exactement ce qui
+ * est ecrit. C'est un document nominatif remis a une personne — l'erreur se
+ * voit, et elle ne se rattrape pas apres l'envoi.
+ *
+ * L'ecran de correction existait deja, et il appelait cette route. Elle
+ * n'existait pas : chaque correction repondait 404 et affichait « la
+ * correction n'a pas ete enregistree ». Personne ne pouvait donc rien
+ * corriger, ni par activite, ni ailleurs.
+ *
+ * « fiches » permet de corriger d'un coup toutes celles d'une meme personne.
+ * L'ecran par participant regroupe plusieurs fiches sous une seule identite,
+ * et l'attestation est composee a partir de la base au moment de l'envoi :
+ * n'en corriger qu'une laisserait le document tirer son nom de l'une ou de
+ * l'autre, sans qu'on puisse dire laquelle.
+ */
+router.patch("/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+
+    const principal = Number(req.params.id);
+    if (!Number.isInteger(principal)) return res.status(400).json({ error: "Fiche inconnue." });
+
+    const autres = Array.isArray(req.body?.fiches)
+      ? req.body.fiches.map(Number).filter(Number.isInteger) : [];
+    const ids = [...new Set([principal, ...autres])];
+    if (ids.length > 200) return res.status(400).json({ error: "Trop de fiches en une fois." });
+
+    /* Le nom et le prenom ne s'effacent pas : une fiche sans nom ne designe
+       plus personne, et l'attestation partirait a blanc. L'adresse, si. */
+    const texte = (v) => (typeof v === "string" ? v.trim() : undefined);
+    const nom = texte(req.body?.nom);
+    const prenom = texte(req.body?.prenom);
+    const email = req.body?.email === null ? null : texte(req.body?.email);
+
+    if (nom !== undefined && !nom) return res.status(400).json({ error: "Le nom ne peut pas être vide." });
+    if (prenom !== undefined && !prenom) return res.status(400).json({ error: "Le prénom ne peut pas être vide." });
+    if (nom === undefined && prenom === undefined && email === undefined) {
+      return res.status(400).json({ error: "Rien à corriger." });
+    }
+
+    /* Le perimetre s'applique : on ne corrige pas une fiche qu'on n'a pas le
+       droit de voir. */
+    const { baseFrom, params } = buildFilters(req);
+    const { rows: visibles } = await pool.query(`SELECT DISTINCT p.id ${baseFrom}`, params);
+    const permis = new Set(visibles.map((v) => v.id));
+    if (!permis.has(principal)) return res.status(404).json({ error: "Fiche introuvable." });
+    const retenues = ids.filter((i) => permis.has(i));
+
+    const { rows: avant } = await pool.query(
+      "SELECT id, nom, prenom, email FROM participants WHERE id = ANY($1::int[])",
+      [retenues]
+    );
+    if (!avant.length) return res.status(404).json({ error: "Fiche introuvable." });
+
+    const colonnes = [];
+    const valeurs = [];
+    if (nom !== undefined) { colonnes.push(`nom = $${colonnes.length + 1}`); valeurs.push(nom); }
+    if (prenom !== undefined) { colonnes.push(`prenom = $${colonnes.length + 1}`); valeurs.push(prenom); }
+    if (email !== undefined) { colonnes.push(`email = $${colonnes.length + 1}`); valeurs.push(email || null); }
+
+    const { rows: apres } = await pool.query(
+      `UPDATE participants SET ${colonnes.join(", ")}
+        WHERE id = ANY($${valeurs.length + 1}::int[])
+        RETURNING id, nom, prenom, email, telephone, genre, structure, age_range, statut`,
+      [...valeurs, avant.map((f) => f.id)]
+    );
+
+    /* Une trace par fiche, avec l'avant : c'est ce qui permet de revenir en
+       arriere, et de repondre a « qui a change ce nom ? ». */
+    const parId = new Map(avant.map((f) => [f.id, f]));
+    for (const f of apres) {
+      const ancien = parId.get(f.id) || {};
+      logAudit(req, "UPDATE", "participants", f.id, `${f.prenom || ""} ${f.nom || ""}`.trim(), {
+        motif: "identité corrigée avant envoi",
+        avant: `${ancien.prenom || ""} ${ancien.nom || ""}`.trim() || null,
+        apres: `${f.prenom || ""} ${f.nom || ""}`.trim() || null,
+        email_avant: ancien.email || null,
+        email_apres: f.email || null,
+        /* Corrigee avec d'autres fiches de la meme personne : sans cette
+           mention, chaque ligne du journal semblerait une correction isolee. */
+        avec: retenues.length > 1 ? retenues.filter((i) => i !== f.id) : undefined,
+      });
+    }
+
+    const principale = apres.find((f) => f.id === principal) || apres[0];
+    res.json({ ...principale, fiches_corrigees: apres.length });
+  } catch (err) {
+    console.error("[PARTICIPANT CORRIGER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* La correction s'applique aux identifiants transmis, jamais « a tout ce qui
    correspond » : l'appelant a vu la liste, il corrige ce qu'il a vu. Entre
    l'affichage et le clic, la base a pu changer — on reverifie donc chaque
