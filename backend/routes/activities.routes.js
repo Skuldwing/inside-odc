@@ -845,12 +845,50 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           [id, participant.id, participant.email, intitule]
         );
 
+        /* Une trace par destinataire, au journal.
+         *
+         * Elle manquait. Une beneficiaire a ecrit qu'elle avait recu une
+         * attestation pour une session qu'elle n'avait pas suivie : impossible
+         * de retrouver cet envoi, ni de savoir qui d'autre etait dans le meme
+         * lot. L'ecran par participant journalisait ses envois depuis
+         * toujours ; celui-ci, jamais — et c'est pourtant lui qui sert pour
+         * une seance entiere, donc celui qui touche le plus de monde d'un
+         * coup.
+         *
+         * L'adresse figure dans la trace parce que c'est elle qu'on cherche
+         * quand quelqu'un ecrit : on part d'une adresse, pas d'un numero de
+         * fiche. */
+        logAudit(
+          req, "SEND", "attestations_envoyees", participant.id,
+          `${fullName} — ${participant.email}`,
+          {
+            motif: "attestation envoyée depuis l'activité",
+            activite_id: Number(id),
+            activite: activity.title,
+            module: intitule,
+            adresse_utilisee: participant.email,
+          }
+        );
+
         sent++;
       } catch (err) {
         console.error(`Attestation error for ${participant.email}:`, err.message);
         errors.push(participant.email);
       }
     }
+
+    /* Et un releve du lot : « qui a lance cet envoi, quand, sur quelle
+       activite, combien de personnes ». Sans lui, il faudrait recoller les
+       traces individuelles une par une pour repondre a cette question. */
+    logAudit(req, "SEND", "activities", Number(id), activity.title, {
+      motif: "envoi groupé d'attestations",
+      module: intitule,
+      envoyees: sent,
+      sans_adresse: withoutEmail.length,
+      deja_recues: dejaEnvoyees,
+      injoignables: injoignables.length,
+      echecs: errors.length,
+    });
 
     res.json({
       sent,
