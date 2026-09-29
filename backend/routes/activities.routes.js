@@ -635,6 +635,91 @@ router.delete("/:id/attestations-envoyees/:participantId", authMiddleware, requi
   }
 });
 
+/**
+ * Retirer une personne d'une activite.
+ *
+ * Signale depuis le terrain : quelqu'un a recu une attestation pour une
+ * session qu'il n'a jamais suivie. Un nom porte par deux femmes, une ligne de
+ * feuille de presence sans coordonnees, et l'import a reconnu la fiche deja
+ * enregistree de l'autre. Le document est parti a son adresse, sous son nom.
+ *
+ * Il fallait pouvoir la sortir de cette activite. On ne le pouvait pas : la
+ * seule route qui supprimait des inscriptions les supprimait toutes. Reparer
+ * une ligne demandait de vider la liste entiere et de la reimporter — ce qui
+ * recreait le meme rattachement.
+ *
+ * La fiche n'est pas touchee : elle garde ses autres formations. Seule la
+ * ligne de presence de cette activite-ci s'en va, et le journal en garde de
+ * quoi la remettre — la trace a la meme forme que celle des retraits de
+ * doublons, donc le panneau « inscriptions retirees » la propose deja.
+ */
+router.delete("/:id/participants/:participantId", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const { id, participantId } = req.params;
+
+    const actRes = await pool.query(
+      `SELECT ${ACTIVITY_COLUMNS} FROM activities a WHERE a.id = $1`,
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    /* On relit la fiche avant de la detacher : le journal doit porter de quoi
+       reconnaitre la personne, pas seulement un numero. */
+    const { rows: fiches } = await pool.query(
+      "SELECT id, nom, prenom, email, telephone, structure FROM participants WHERE id = $1",
+      [participantId]
+    );
+    if (!fiches.length) return res.status(404).json({ error: "Fiche introuvable." });
+    const fiche = fiches[0];
+
+    const r = await pool.query(
+      "DELETE FROM activity_participants WHERE activity_id = $1 AND participant_id = $2",
+      [id, participantId]
+    );
+    if (!r.rowCount) {
+      return res.status(404).json({ error: "Cette personne n'est pas inscrite à cette activité." });
+    }
+
+    /* Le motif vient de l'appelant : « ne s'est jamais inscrite » et
+       « inscription en double » ne se relisent pas de la meme facon six mois
+       plus tard. */
+    const motif = String(req.body?.motif || "").trim()
+      || "retirée de l'activité à la main";
+
+    logAudit(
+      req, "DELETE", "activity_participants", `${id}:${participantId}`,
+      `${fiche.prenom || ""} ${fiche.nom || ""}`.trim() || null,
+      {
+        motif,
+        activite_id: Number(id),
+        activite: actRes.rows[0].title,
+        participant_id: Number(participantId),
+        fiche: {
+          nom: fiche.nom, prenom: fiche.prenom,
+          email: fiche.email, telephone: fiche.telephone,
+        },
+      }
+    );
+
+    /* L'effectif a change : le score de fiabilite le suit. */
+    computeAndStoreReliability(id).catch((e) =>
+      console.warn("[RETRAIT INSCRIPTION] fiabilité:", e.message)
+    );
+
+    res.json({
+      retiree: true,
+      participant: `${fiche.prenom || ""} ${fiche.nom || ""}`.trim(),
+      /* La fiche existe toujours : le dire evite la crainte d'avoir supprime
+         quelqu'un de la base. */
+      fiche_conservee: true,
+    });
+  } catch (err) {
+    console.error("[RETRAIT INSCRIPTION]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== SEND ATTESTATIONS ===== */
 router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async (req, res) => {
   try {

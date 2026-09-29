@@ -25,7 +25,7 @@ import {
   Undo2, Redo2, RemoveFormatting, Minus, Quote,
   Superscript as SuperscriptIcon, Subscript as SubscriptIcon,
   Table as TableIcon, Columns2, Rows3, Trash2, LayoutGrid,
-  Send, Eye, X, Loader2, Pencil, Users,
+  Send, Eye, X, Loader2, Pencil, Users, UserMinus,
   Square, Play, ListChecks, AlertTriangle, BellOff, Award,
 } from "lucide-react";
 import api from "../api";
@@ -1984,6 +1984,7 @@ function ParParticipant() {
 
 function AttestationsTab({ activities, onEnvoye }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [ouverte, setOuverte] = useState(null);   // id de l'activité dépliée
   /* Un centre sert des dizaines de partenaires : servir les attestations de
      l'un d'eux obligeait à le repérer à l'œil dans toute la liste. */
@@ -1998,6 +1999,9 @@ function AttestationsTab({ activities, onEnvoye }) {
   const [chargeListe, setChargeListe] = useState(false);
   const [edite, setEdite] = useState(null);        // { id, nom, prenom, email, dejaRecue, renvoyer }
   const [enregistre, setEnregistre] = useState(false);
+  /* La fiche en cours de retrait : son bouton se fige le temps de
+     l'aller-retour, pour qu'un double clic n'envoie pas deux ordres. */
+  const [retrait, setRetrait] = useState(null);
 
   const chargerParticipants = useCallback(async (activityId) => {
     setChargeListe(true);
@@ -2045,6 +2049,40 @@ function AttestationsTab({ activities, onEnvoye }) {
     setCorrigeTout(false);
     if (faits) toast.success(`${faits} nom${faits > 1 ? "s" : ""} corrigé${faits > 1 ? "s" : ""}.`);
     if (faits < aCorriger.length) toast.error(`${aCorriger.length - faits} correction(s) ont échoué.`);
+  };
+
+  /* Retirer quelqu'un d'une activité. La fiche est conservée avec toutes ses
+     autres formations : seule la ligne de présence de cette séance-ci s'en
+     va, et elle se remet en place depuis le panneau des participants. */
+  const retirerDeActivite = async (activite, p) => {
+    const qui = `${p.prenom || ""} ${p.nom || ""}`.trim() || "cette personne";
+    const ok = await confirm({
+      title: `Retirer ${qui} de cette activité ?`,
+      body:
+        "Sa fiche n'est pas supprimée : elle garde toutes ses autres formations. " +
+        "Seule sa ligne de présence sur cette séance est retirée, l'effectif baisse d'une personne, " +
+        "et le retrait s'inscrit au journal — il se défait depuis la page Participants." +
+        (p.attestation_envoyee_le
+          ? " Attention : une attestation lui a déjà été envoyée. La retirer d'ici n'annule pas cet envoi."
+          : ""),
+      confirmLabel: "Retirer",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    setRetrait(p.id);
+    try {
+      await api.delete(`/activities/${activite.id}/participants/${p.id}`, {
+        data: { motif: "retirée après signalement : n'a pas suivi cette session" },
+      });
+      toast.success(`${qui} ne figure plus dans cette activité. Sa fiche est conservée.`);
+      await chargerParticipants(activite.id);
+      await onEnvoye?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Le retrait a échoué.");
+    } finally {
+      setRetrait(null);
+    }
   };
 
   const enregistrerIdentite = async (activityId) => {
@@ -2416,6 +2454,22 @@ function AttestationsTab({ activities, onEnvoye }) {
                                   title="Corriger le nom ou l'adresse"
                                 >
                                   <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                                </button>
+                                {/* Quelqu'un qui n'a jamais suivi cette
+                                    session. C'est ici qu'on s'en aperçoit —
+                                    en relisant la liste avant d'envoyer — et
+                                    il fallait pouvoir le retirer sans vider
+                                    la liste entière. */}
+                                <button
+                                  type="button"
+                                  onClick={() => retirerDeActivite(a, p)}
+                                  disabled={retrait === p.id}
+                                  className="flex-shrink-0 text-slate-400 hover:text-red-600 disabled:opacity-50"
+                                  title="Retirer cette personne de l'activité"
+                                >
+                                  {retrait === p.id
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                                    : <UserMinus className="h-3.5 w-3.5" aria-hidden="true" />}
                                 </button>
                               </div>
 
