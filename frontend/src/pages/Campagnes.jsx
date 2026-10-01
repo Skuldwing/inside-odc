@@ -2002,25 +2002,13 @@ function AttestationsTab({ activities, onEnvoye }) {
   /* La fiche en cours de retrait : son bouton se fige le temps de
      l'aller-retour, pour qu'un double clic n'envoie pas deux ordres. */
   const [retrait, setRetrait] = useState(null);
-  /* Ce que la liste ne dit pas d'elle-même : qui, parmi les inscrits, portait
-     déjà une fiche avant cette activité et vient d'un autre programme. Deux
-     bénéficiaires l'ont découvert en lisant leur courrier ; il faut pouvoir
-     le voir avant d'envoyer, pas après. */
-  const [aVerifier, setAVerifier] = useState(null);
-  const [verifOuverte, setVerifOuverte] = useState(false);
 
   const chargerParticipants = useCallback(async (activityId) => {
     setChargeListe(true);
     setParticipants(null);
-    setAVerifier(null);
-    setVerifOuverte(false);
     try {
       const res = await api.get(`/activities/${activityId}/participants`);
       setParticipants(res.data || []);
-      /* Le relevé est un complément : s'il échoue, la liste reste utilisable. */
-      api.get(`/activities/${activityId}/inscriptions-a-verifier`)
-        .then((r) => setAVerifier(r.data))
-        .catch(() => setAVerifier(null));
     } catch {
       setParticipants([]);
       toast.error("Impossible de charger la liste des participants.");
@@ -2368,62 +2356,6 @@ function AttestationsTab({ activities, onEnvoye }) {
                   ) : !participants?.length ? (
                     <p className="px-3 py-3 text-xs text-slate-500">Aucun participant enregistré.</p>
                   ) : (
-                    <>
-                    {/* Ce que la liste ne dit pas d'elle-même. Deux
-                        bénéficiaires ont découvert en lisant leur courrier
-                        qu'ils figuraient dans une session qu'ils n'avaient
-                        pas suivie : il faut pouvoir le voir avant d'envoyer. */}
-                    {aVerifier?.a_verifier > 0 && (
-                      <div className="border-b border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
-                        <button
-                          type="button"
-                          onClick={() => setVerifOuverte((o) => !o)}
-                          className="flex w-full items-start gap-2 text-left"
-                        >
-                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-semibold">
-                              {aVerifier.a_verifier} inscrit{aVerifier.a_verifier > 1 ? "s" : ""} à relire
-                              {aVerifier.deja_servies > 0
-                                && ` — ${aVerifier.deja_servies} ${aVerifier.deja_servies > 1 ? "ont" : "a"} déjà reçu son attestation`}
-                            </span>
-                            <span className="mt-0.5 block font-normal text-amber-800">
-                              Leur fiche existait avant cette activité et porte d&apos;autres
-                              formations. Ce n&apos;est pas une preuve — beaucoup de gens reviennent —
-                              mais c&apos;est ainsi qu&apos;un rattachement erroné se repère.
-                            </span>
-                          </span>
-                          <ChevronDown
-                            className={`mt-0.5 h-3.5 w-3.5 flex-shrink-0 transition-transform ${verifOuverte ? "rotate-180" : ""}`}
-                            aria-hidden="true"
-                          />
-                        </button>
-                        {verifOuverte && (
-                          <ul className="mt-2 space-y-1.5 border-t border-amber-200 pt-2">
-                            {aVerifier.lignes.map((l) => (
-                              <li key={l.id}>
-                                <span className="font-medium">{l.prenom} {l.nom}</span>
-                                {l.email && <span className="text-amber-700"> · {l.email}</span>}
-                                {l.attestation_envoyee_le && (
-                                  <span className="ml-1.5 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-medium">
-                                    attestation envoyée
-                                  </span>
-                                )}
-                                <span className="mt-0.5 block text-amber-800">
-                                  {/* D'où vient cette personne : c'est ce qui a
-                                      permis de repérer les deux cas signalés. */}
-                                  vient de :{" "}
-                                  {[...new Set((l.autres_formations || [])
-                                    .map((f) => f.dispositif || f.titre))].slice(0, 3).join(" · ")}
-                                  {(l.autres_formations || []).length > 3
-                                    && ` · +${l.autres_formations.length - 3}`}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
                     <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto">
                       {participants.map((p) => (
                         <li key={p.id} className="px-3 py-2 text-xs">
@@ -2568,7 +2500,6 @@ function AttestationsTab({ activities, onEnvoye }) {
                         </li>
                       ))}
                     </ul>
-                    </>
                   )}
 
                   <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
