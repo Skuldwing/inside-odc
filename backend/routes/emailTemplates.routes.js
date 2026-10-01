@@ -56,11 +56,15 @@ const DEFAULTS = {
     <p>Bonjour {{nom}},</p>
     <p>Veuillez trouver ci-joint votre attestation de participation à l'activité :</p>
     <p style="background:#FFF3E0;border-left:4px solid #FF6600;padding:12px;font-weight:bold">{{activite}}</p>
+    {{organisateur}}
     <p>Nous vous remercions de votre participation et espérons vous revoir prochainement.</p>
     <p style="color:#64748B;font-size:13px">— L'équipe Inside ODC Sénégal</p>
   </div>
 </div>`,
-    variables: ["{{nom}}", "{{activite}}", "{{date}}", "{{partenaire}}", "{{dispositif}}", "{{duree}}"],
+    /* « organisateur » est une phrase toute faite, pas un nom : le gabarit
+       ne sait pas poser de condition, et « Formation animée par . » sur une
+       activité sans partenaire se lirait mal. Vide quand il n'y en a pas. */
+    variables: ["{{nom}}", "{{activite}}", "{{date}}", "{{partenaire}}", "{{organisateur}}", "{{dispositif}}", "{{duree}}"],
   },
 };
 
@@ -77,6 +81,25 @@ async function getTemplate(slug) {
     }
   } catch {}
   return DEFAULTS[slug] || null;
+}
+
+/**
+ * La phrase qui dit qui a animé la formation.
+ *
+ * Un bénéficiaire formé par un partenaire recevait un message signé « Inside
+ * ODC Sénégal » qui ne nommait que l'intitulé de la séance. Deux personnes
+ * ont écrit pour dire qu'elles n'avaient jamais suivi cette formation — elles
+ * l'avaient suivie, mais chez le partenaire, et rien dans le message ne
+ * permettait de faire le lien.
+ *
+ * Le gabarit ne sait pas poser de condition : on compose donc la phrase ici,
+ * et elle est vide quand l'activité n'a ni partenaire ni formateur.
+ */
+function phraseOrganisateur(partenaire) {
+  const nom = String(partenaire || "").trim();
+  if (!nom) return "";
+  return `<p style="color:#475569">Cette formation a été animée par <strong>${nom}</strong>, ` +
+    `en partenariat avec Orange Digital Center.</p>`;
 }
 
 function renderTemplate(html, vars) {
@@ -135,4 +158,4 @@ router.delete("/:slug/reset", authMiddleware, requireAdmin, async (req, res) => 
   }
 });
 
-module.exports = { router, getTemplate, renderTemplate };
+module.exports = { router, getTemplate, renderTemplate, phraseOrganisateur };

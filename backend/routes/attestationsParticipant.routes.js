@@ -7,7 +7,7 @@ const { trierAdresses } = require("../services/adressesValides");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
 const { classerParAssiduite } = require("../services/assiduite");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
-const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, phraseOrganisateur } = require("./emailTemplates.routes");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 const { ensureAttestationsTerminees } = require("../migrations/attestationsTerminees");
 
@@ -462,6 +462,8 @@ router.post("/envoyer", authMiddleware, async (req, res) => {
       activite: liste.join(", "),
       date: new Date().toLocaleDateString("fr-FR"),
       partenaire: autorisees.rows[0].partner_name || autorisees.rows[0].coach_name || "",
+      organisateur: phraseOrganisateur(
+        autorisees.rows[0].partner_name || autorisees.rows[0].coach_name),
       dispositif: autorisees.rows[0].device_name || "",
       duree: "",
     };
