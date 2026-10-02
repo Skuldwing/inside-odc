@@ -7,7 +7,7 @@ const { trierAdresses } = require("../services/adressesValides");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
 const { classerParAssiduite } = require("../services/assiduite");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
-const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, phraseOrganisateur } = require("./emailTemplates.routes");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 const { ensureAttestationsTerminees } = require("../migrations/attestationsTerminees");
 
@@ -125,6 +125,13 @@ async function etatDesPersonnes(req) {
         deja_envoyee: Boolean(trace),
         envoyee_le: trace?.envoye_le || null,
         envoyee_a: trace?.email || null,
+        /* L'intitule reellement imprime sur le document. Il est saisi au
+           moment de l'envoi et remplace le titre de la seance : l'ecran
+           affichait le titre, la personne recevait l'autre, et rien ne
+           montrait l'ecart. Une beneficiaire a ainsi recu son attestation de
+           gestion financiere sous l'intitule « Outils digitaux &
+           Communication » sans que la plateforme en laisse rien paraitre. */
+        envoyee_sous: trace?.module || null,
         /* Un meme intitule suivi plusieurs fois. */
         repete: (parTitre.get(c) || 0) > 1,
         /* Proposee a l'envoi : jamais recue, et pas deja couverte par une
@@ -462,6 +469,8 @@ router.post("/envoyer", authMiddleware, async (req, res) => {
       activite: liste.join(", "),
       date: new Date().toLocaleDateString("fr-FR"),
       partenaire: autorisees.rows[0].partner_name || autorisees.rows[0].coach_name || "",
+      organisateur: phraseOrganisateur(
+        autorisees.rows[0].partner_name || autorisees.rows[0].coach_name),
       dispositif: autorisees.rows[0].device_name || "",
       duree: "",
     };

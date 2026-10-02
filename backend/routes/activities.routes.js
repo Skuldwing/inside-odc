@@ -7,7 +7,7 @@ const { sendEmail } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
 
-const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, phraseOrganisateur } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
@@ -817,6 +817,11 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           activite: intitule,
           date: activity.activity_date ? new Date(activity.activity_date).toLocaleDateString("fr-FR") : "",
           partenaire: activity.partner_name || activity.coach_name || "",
+          /* Qui a animé. Sans cette phrase, quelqu'un formé par un partenaire
+             reçoit un message d'Orange Digital Center pour une séance qu'il
+             n'associe à personne — c'est exactement ce qui a fait écrire deux
+             bénéficiaires persuadés de n'avoir jamais suivi la formation. */
+          organisateur: phraseOrganisateur(activity.partner_name || activity.coach_name),
           dispositif: activity.device_name || "",
           duree: activity.duration_hours ? `${activity.duration_hours}h` : "",
         };
@@ -826,7 +831,13 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           toName: fullName,
           subject: renderTemplate(tpl.subject, tplVars),
           html: renderTemplate(tpl.body_html, tplVars),
-          text: `Bonjour ${fullName},\n\nVeuillez trouver ci-joint votre attestation de participation à "${intitule}".\n\n— ODC Sénégal`,
+          text:
+            `Bonjour ${fullName},\n\n` +
+            `Veuillez trouver ci-joint votre attestation de participation à "${intitule}".\n` +
+            ((activity.partner_name || activity.coach_name)
+              ? `Cette formation a été animée par ${activity.partner_name || activity.coach_name}, en partenariat avec Orange Digital Center.\n`
+              : "") +
+            `\n— ODC Sénégal`,
           attachments: [
             {
               filename: `attestation_${safeName}.pdf`,
@@ -845,12 +856,50 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           [id, participant.id, participant.email, intitule]
         );
 
+        /* Une trace par destinataire, au journal.
+         *
+         * Elle manquait. Une beneficiaire a ecrit qu'elle avait recu une
+         * attestation pour une session qu'elle n'avait pas suivie : impossible
+         * de retrouver cet envoi, ni de savoir qui d'autre etait dans le meme
+         * lot. L'ecran par participant journalisait ses envois depuis
+         * toujours ; celui-ci, jamais — et c'est pourtant lui qui sert pour
+         * une seance entiere, donc celui qui touche le plus de monde d'un
+         * coup.
+         *
+         * L'adresse figure dans la trace parce que c'est elle qu'on cherche
+         * quand quelqu'un ecrit : on part d'une adresse, pas d'un numero de
+         * fiche. */
+        logAudit(
+          req, "SEND", "attestations_envoyees", participant.id,
+          `${fullName} — ${participant.email}`,
+          {
+            motif: "attestation envoyée depuis l'activité",
+            activite_id: Number(id),
+            activite: activity.title,
+            module: intitule,
+            adresse_utilisee: participant.email,
+          }
+        );
+
         sent++;
       } catch (err) {
         console.error(`Attestation error for ${participant.email}:`, err.message);
         errors.push(participant.email);
       }
     }
+
+    /* Et un releve du lot : « qui a lance cet envoi, quand, sur quelle
+       activite, combien de personnes ». Sans lui, il faudrait recoller les
+       traces individuelles une par une pour repondre a cette question. */
+    logAudit(req, "SEND", "activities", Number(id), activity.title, {
+      motif: "envoi groupé d'attestations",
+      module: intitule,
+      envoyees: sent,
+      sans_adresse: withoutEmail.length,
+      deja_recues: dejaEnvoyees,
+      injoignables: injoignables.length,
+      echecs: errors.length,
+    });
 
     res.json({
       sent,

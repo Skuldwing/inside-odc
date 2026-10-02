@@ -1244,6 +1244,19 @@ function dispositifPrincipal(liste) {
 
 const nomDispositif = (nom) => (nom === SANS_DISPOSITIF ? "Sans dispositif" : nom);
 
+/* Le titre de la séance et l'intitulé imprimé ne coïncident pas toujours, et
+   c'est voulu : « Tech Academy S4 - Outils collaboratifs » devient « Outils
+   collaboratifs » sur le document. Ce qui se signale, c'est l'intitulé qui ne
+   se retrouve pas du tout dans le titre — celui qu'on a saisi par erreur. */
+function intituleDiverge(m) {
+  const plat = (v) => String(v || "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/\s+/g, " ").trim();
+  const envoye = plat(m.envoyee_sous);
+  if (!envoye) return false;
+  return !plat(m.titre).includes(envoye);
+}
+
 function ParParticipant() {
   const toast = useToast();
   const [data, setData] = useState(null);
@@ -1829,6 +1842,21 @@ function ParParticipant() {
                               <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                                 reçue le {new Date(m.envoyee_le).toLocaleDateString("fr-FR")}
                                 {m.envoyee_a ? ` — ${m.envoyee_a}` : ""}
+                              </span>
+                            )}
+                            {/* L'intitulé est saisi au moment de l'envoi et
+                                remplace le titre de la séance sur le document.
+                                Quand les deux diffèrent, l'écran montrait le
+                                titre et la personne avait reçu l'autre — sans
+                                que rien ne le dise. On ne l'affiche que dans
+                                ce cas : le répéter à l'identique sur chaque
+                                ligne n'apprendrait rien. */}
+                            {m.deja_envoyee && intituleDiverge(m) && (
+                              <span
+                                className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                                title="Le document porte cet intitulé, pas le titre de la séance"
+                              >
+                                envoyée sous «&nbsp;{m.envoyee_sous}&nbsp;»
                               </span>
                             )}
                           </span>
