@@ -9,6 +9,7 @@ import PageLoader from "./components/PageLoader";
 import PrivateRoute from "./routes/PrivateRoute";
 import { useAuth } from "./auth/useAuth";
 import AdminRoute from "./routes/AdminRoute";
+import SuperAdminRoute from "./routes/SuperAdminRoute";
 import TeamOdcRoute from "./routes/TeamOdcRoute";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -18,6 +19,7 @@ const Campagnes = lazy(() => import("./pages/Campagnes"));
 const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
+const Budget = lazy(() => import("./pages/Budget"));
 const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
@@ -227,6 +229,18 @@ export default function App() {
                 <ModelesAttestation />
               </Suspense>
             </AdminRoute>
+          }
+        />
+        {/* Reserve aux Admin + : le garde evite d'afficher une page vide, la
+            vraie protection est au serveur. */}
+        <Route
+          path="budget"
+          element={
+            <SuperAdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <Budget />
+              </Suspense>
+            </SuperAdminRoute>
           }
         />
         <Route

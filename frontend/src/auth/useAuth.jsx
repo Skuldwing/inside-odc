@@ -96,6 +96,11 @@ export function AuthProvider({ children }) {
         isViewer: role === "viewer",
         // Acces Mbootay : les admins l'ont d'office, les autres via le drapeau.
         isTeamOdc: role === "admin" || !!user?.is_team_odc,
+        /* Admin + : le cran au-dessus, qui ouvre la page budget. Les deux
+           conditions comptent — un drapeau sans le role ne doit rien ouvrir,
+           et le serveur verifie la meme chose de son cote. Ici, ce n'est qu'un
+           affichage : la protection est au serveur. */
+        isSuperAdmin: role === "admin" && !!user?.is_super_admin,
         login,
         logout,
         refreshUser,

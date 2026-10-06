@@ -15,6 +15,7 @@ const participantsRoutes = require("./routes/participants.routes");
 const campagnesRoutes = require("./routes/campagnes.routes");
 const importRoutes = require("./routes/import.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
+const budgetRoutes = require("./routes/budget.routes");
 const socialKpisRoutes = require("./routes/socialKpis.routes");
 const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const socialReportRoutes = require("./routes/socialReport.routes");
@@ -40,6 +41,7 @@ const { ensureIdentitePersonnes } = require("./migrations/identitePersonnes");
 const { ensureIdentitesDistinctes } = require("./migrations/identitesDistinctes");
 const { ensureListeTelleQuelle } = require("./migrations/listeTelleQuelle");
 const { ensureReservePartenaire } = require("./migrations/reservePartenaire");
+const { ensureBudget } = require("./migrations/budget");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -169,6 +171,8 @@ app.use("/participants", participantsRoutes);
 app.use("/campagnes", campagnesRoutes);
 app.use("/import", importRoutes);
 app.use("/dashboard", dashboardRoutes);
+/* Reserve aux Admin + : les controles sont dans le routeur, pas ici. */
+app.use("/budget", budgetRoutes);
 app.use("/social-kpis", socialKpisRoutes);
 app.use("/social-dashboard", socialDashboardRoutes);
 app.use("/social-dashboard", socialReportRoutes);
@@ -811,6 +815,28 @@ pool.query(`
     console.log("Migration OK: reserve des partenaires");
   } catch (e) {
     console.error("Migration reserve des partenaires ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Le budget, et le role Admin + qui seul y a acces ──
+   L'amorcage ne lit SUPER_ADMIN_EMAILS que si personne ne porte encore le
+   drapeau : un acces retire depuis l'ecran ne ressuscite pas au redemarrage,
+   et un acces perdu se retrouve. */
+(async () => {
+  try {
+    const r = await ensureBudget();
+    console.log(
+      r?.amorces
+        ? `Migration OK: budget (${r.amorces} Admin + amorce(s) depuis SUPER_ADMIN_EMAILS)`
+        : "Migration OK: budget"
+    );
+    if (r && !r.amorces && !r.deja) {
+      console.warn(
+        "[BUDGET] aucun Admin + : definissez SUPER_ADMIN_EMAILS (adresses d'administrateurs existants, separees par des virgules) puis redemarrez."
+      );
+    }
+  } catch (e) {
+    console.error("Migration budget ECHOUEE :", e.message);
   }
 })();
 
