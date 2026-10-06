@@ -20,6 +20,7 @@ import AdminModal from "../components/admin/AdminModal";
 import AdminPageHeader from "../components/admin/AdminPageHeader";
 import AdminSearchCard from "../components/admin/AdminSearchCard";
 import { useToast, useConfirm, EmptyState } from "../components/ui";
+import { lireReserve, BadgeReserve } from "../components/Reserve";
 
 const PIPELINE_STAGES = [
   { key: "prospect", label: "Prospect", dot: "bg-slate-400" },
@@ -441,10 +442,11 @@ export default function Partenaires() {
             const personnes = p.personnes_distinctes == null
               ? null
               : Number(p.personnes_distinctes);
-            const pct =
-              objective > 0
-                ? Math.min(100, Math.round((beneficiaries / objective) * 100))
-                : 0;
+            /* Le réalisé est retenu à l'objectif, et ce qui a été fait au-delà
+               attend en réserve. Le calcul vient du serveur pour que la carte,
+               la fiche et le tableau de bord ne puissent pas diverger. */
+            const reserve = lireReserve(p.reserve, { objectif: objective, realise: beneficiaries });
+            const pct = reserve.pourcentage;
             const partnerCoaches = coaches.filter(c => String(c.partner_id) === String(p.id));
             const coachesAllocated = Number(p.coaches_objective_allocated || 0);
             const coachesCount = Number(p.coaches_count || 0);
@@ -552,14 +554,19 @@ export default function Partenaires() {
                       <Target className="w-4 h-4 text-orange-500" />
                       Objectif
                     </div>
+                    {/* Le compteur est retenu à l'objectif : au-delà, il
+                        afficherait un engagement dépassé de cinq fois, ce qui
+                        ne se lit pas. Le réalisé entier reste visible dans la
+                        tuile « Participations » juste au-dessus, et l'écart est
+                        nommé par le badge de réserve. */}
                     <span>
-                      {beneficiaries} / {objective}
+                      {reserve.retenu} / {objective}
                     </span>
                   </div>
                   <div className="w-full h-2 bg-slate-100 rounded-full mt-2">
                     <div
                       className="h-2 bg-orange-500 rounded-full"
-                      style={{ width: `${pct}%` }}
+                      style={{ width: `${Math.min(100, pct)}%` }}
                     />
                   </div>
                   {/* Maintenant que les deux chiffres sont là, il faut dire
@@ -573,6 +580,7 @@ export default function Partenaires() {
                     )}
                     <span className="text-orange-600 ml-auto">{pct}%</span>
                   </div>
+                  <BadgeReserve reserve={reserve} className="mt-2" />
                 </div>
 
                 {/* Répartition objectif → coachs */}
