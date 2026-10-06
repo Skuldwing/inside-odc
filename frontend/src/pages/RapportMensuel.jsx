@@ -49,8 +49,13 @@ function RapportContent({ summary, filters, partners, devices, role }) {
   const totalParticipants = totals.participants ?? 0;
   const femmes = gender.find((g) => g.name === "Femmes")?.value || 0;
   const hommes = gender.find((g) => g.name === "Hommes")?.value || 0;
-  const pctF = percent(femmes, totalParticipants);
-  const pctH = percent(hommes, totalParticipants);
+  /* La répartition hommes / femmes se calcule sur le réalisé entier, pas sur le
+     total retenu aux objectifs. Les deux comptes de genre, eux, portent sur
+     toutes les personnes présentes : les diviser par un total bridé donnerait
+     des pourcentages au-delà de cent. */
+  const baseGenre = totals.participants_reels ?? totalParticipants;
+  const pctF = percent(femmes, baseGenre);
+  const pctH = percent(hommes, baseGenre);
 
   const filterName = (list, id, key = "name") =>
     id ? (list.find((x) => String(x.id) === String(id))?.[key] || "") : "";
@@ -115,7 +120,7 @@ function RapportContent({ summary, filters, partners, devices, role }) {
           <div>
             <SectionTitle>Repartition par genre</SectionTitle>
             <div style={{ background: "#f8fafc", borderRadius: 10, padding: 16 }}>
-              <GenderBar pctF={pctF} pctH={pctH} femmes={femmes} hommes={hommes} total={totalParticipants} />
+              <GenderBar pctF={pctF} pctH={pctH} femmes={femmes} hommes={hommes} total={baseGenre} />
             </div>
           </div>
 
@@ -317,8 +322,11 @@ function RapportDispositif({ summary, filters, devices }) {
   const totalParticipants = totals.participants ?? 0;
   const femmes = gender.find((g) => g.name === "Femmes")?.value || 0;
   const hommes = gender.find((g) => g.name === "Hommes")?.value || 0;
-  const pctF = percent(femmes, totalParticipants);
-  const pctH = percent(hommes, totalParticipants);
+  /* Comme dans le rapport mensuel : la répartition se divise par le réalisé
+     entier, jamais par le total retenu aux objectifs. */
+  const baseGenre = totals.participants_reels ?? totalParticipants;
+  const pctF = percent(femmes, baseGenre);
+  const pctH = percent(hommes, baseGenre);
 
   const filterName = (list, id) =>
     id ? (list.find((x) => String(x.id) === String(id))?.name || "") : "";
@@ -413,7 +421,7 @@ function RapportDispositif({ summary, filters, devices }) {
         <div style={{ marginBottom: 28 }}>
           <SectionTitle>Répartition par genre</SectionTitle>
           <div style={{ background: "#f8fafc", borderRadius: 10, padding: 20 }}>
-            <GenderBar pctF={pctF} pctH={pctH} femmes={femmes} hommes={hommes} total={totalParticipants} />
+            <GenderBar pctF={pctF} pctH={pctH} femmes={femmes} hommes={hommes} total={baseGenre} />
           </div>
         </div>
 

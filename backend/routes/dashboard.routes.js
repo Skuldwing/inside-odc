@@ -159,6 +159,39 @@ router.get("/summary", authMiddleware, async (req, res) => {
       FROM eff
     `;
 
+    /* Les totaux, repartis par partenaire pour pouvoir leur appliquer le
+     * plafond avant de les additionner.
+     *
+     * Le grand chiffre du tableau de bord ne doit pas compter ce qui attend en
+     * reserve : tant qu'un administrateur n'a pas libere le surplus d'un
+     * partenaire, ce surplus n'existe pas pour les indicateurs.
+     *
+     * Le regroupement part de « eff » et non de « partners » : ainsi chaque
+     * participation tombe dans exactement un seau. Une activite sans partenaire
+     * — ou rattachee a un partenaire efface — se retrouve dans un seau sans
+     * objectif, donc comptee en entier, ce qui est la bonne reponse. Partir de
+     * « partners » aurait fait disparaitre ces participations du total.
+     *
+     * « manuel » isole la part purement estimee — un effectif saisi a la main,
+     * sans liste nominative. Elle n'entre pas dans le plafond puisqu'elle
+     * n'entre pas non plus dans l'objectif ; elle est simplement rajoutee au
+     * chiffre « estimes ». */
+    const totauxParPartenaireQuery = `
+      ${baseCte}
+      SELECT e.partner_id,
+             COALESCE(pr.objective_beneficiaries, 0)::int AS objective_beneficiaries,
+             COALESCE(${reserveExpr}, 0)::int             AS reserve_activee,
+             COALESCE(SUM(e.effective_count), 0)::int     AS effectif,
+             COALESCE(SUM(e.estimated_count - e.effective_count), 0)::int AS manuel
+      FROM eff e
+      LEFT JOIN partners pr ON pr.id = e.partner_id
+      /* Sur la cle primaire de « partners » : ses autres colonnes en dependent
+         fonctionnellement. Les enumerer serait impossible ici, puisque la
+         colonne de reserve est remplacee par un litteral tant que la migration
+         n'a pas tourne — et « GROUP BY 0 » designerait une position. */
+      GROUP BY e.partner_id, pr.id
+    `;
+
     const genderQuery = `
       ${baseCte}
       SELECT genre, COUNT(participant_id)::int AS count
@@ -357,7 +390,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       ${partnerId ? "AND id = $1" : ""}
     `;
 
-    const [totalsRes, genderRes, byDeviceRes, byPartnerRes, recentRes, trendsRes, topDevicesRes, topPartnersRes, locationsRes, dataQualityRes, alertsPartnersRes, alertsDevicesRes, partnersActiveRes, byModeRes] =
+    const [totalsRes, genderRes, byDeviceRes, byPartnerRes, recentRes, trendsRes, topDevicesRes, topPartnersRes, locationsRes, dataQualityRes, alertsPartnersRes, alertsDevicesRes, partnersActiveRes, byModeRes, totauxPartRes] =
       await Promise.all([
         pool.query(totalsQuery, params),
         pool.query(genderQuery, params),
@@ -373,6 +406,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
         pool.query(alertsDevicesQuery, partnerId ? [partnerId] : []),
         pool.query(partnersActiveQuery, partnerId ? [partnerId] : []),
         pool.query(beneficiariesByModeQuery, params),
+        pool.query(totauxParPartenaireQuery, params),
       ]);
 
     const totals = totalsRes.rows[0] || {
@@ -381,6 +415,27 @@ router.get("/summary", authMiddleware, async (req, res) => {
       participants_estimated: 0,
       hours: 0,
     };
+
+    /* Le grand chiffre, plafonne partenaire par partenaire puis additionne.
+     *
+     * On ne peut pas plafonner le total d'un coup : le plafond est par
+     * partenaire, et un partenaire en dessous de son objectif ne compense pas
+     * celui qui l'a depasse. On applique donc la regle a chaque seau, et on
+     * somme ensuite. */
+    const totauxPlafonnes = totauxPartRes.rows.reduce(
+      (acc, r) => {
+        const calcul = plafonnerObjectif({
+          objectif: r.objective_beneficiaries,
+          realise: r.effectif,
+          reserve_activee: r.reserve_activee,
+        });
+        acc.retenu += calcul.retenu;
+        acc.en_reserve += calcul.reserve_disponible;
+        acc.estime += calcul.retenu + Math.max(0, Number(r.manuel) || 0);
+        return acc;
+      },
+      { retenu: 0, en_reserve: 0, estime: 0 }
+    );
 
     const gender = [
       {
@@ -497,8 +552,18 @@ router.get("/summary", authMiddleware, async (req, res) => {
       meta: { year, from, to },
       totals: {
         activities: totals.activities,
-        participants: totals.participants,
-        participants_estimated: totals.participants_estimated,
+        /* Ce qui est compte : le realise de chaque partenaire retenu a son
+           objectif, plus ce qui ne depend d'aucun objectif. */
+        participants: totauxPlafonnes.retenu,
+        /* Et ce qui existe vraiment. Les deux sont renvoyes parce qu'aucun des
+           deux ne se suffit : le premier est le chiffre qu'on publie, le second
+           est celui qui sert de denominateur a toute proportion — une
+           repartition hommes / femmes calculee sur un total bride donnerait des
+           pourcentages au-dela de cent. */
+        participants_reels: totals.participants,
+        participants_en_reserve: totauxPlafonnes.en_reserve,
+        participants_estimated: totauxPlafonnes.estime,
+        participants_estimated_reels: totals.participants_estimated,
         hours: totals.hours,
         partners_active: partnersActive,
       },

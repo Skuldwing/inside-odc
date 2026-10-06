@@ -537,12 +537,29 @@ export default function Dashboard() {
         ref={kpiRef}
         className={`grid grid-cols-2 gap-3 sm:gap-4 ${isAdmin ? "md:grid-cols-3 xl:grid-cols-5" : "md:grid-cols-4"}`}
       >
+        {/* Ce chiffre est le réalisé de chaque partenaire retenu à son
+            objectif. Ce qui a été fait au-delà n'y est pas : il attend en
+            réserve sur la fiche du partenaire, jusqu'à ce qu'un administrateur
+            l'active. La mention est obligatoire — un total bridé qui ne dirait
+            pas qu'il l'est finirait recopié dans un rapport comme s'il était
+            complet. */}
         <HeroKpiCard
           label="Bénéficiaires enregistrés"
           value={totals.participants ?? 0}
           icon={Users}
           accent="from-emerald-500 to-emerald-600"
-          hint="Liste nominative importée"
+          hint={
+            Number(totals.participants_en_reserve || 0) > 0 ? (
+              <>
+                Liste nominative importée
+                <span className="mt-1 block text-sky-700">
+                  {totals.participants_en_reserve} en réserve, non comptés
+                </span>
+              </>
+            ) : (
+              "Liste nominative importée"
+            )
+          }
           prominent
         />
         <HeroKpiCard
@@ -576,6 +593,27 @@ export default function Dashboard() {
           hint="Volume pédagogique"
         />
       </section>
+
+      {/* Dit une fois, à l'endroit où l'écart se verrait.
+          Le grand chiffre est plafonné ; les répartitions qui suivent — par
+          dispositif, par mois, par genre, par lieu — ne le sont pas, et ne
+          peuvent pas l'être : la réserve est une quantité, pas un groupe de
+          personnes qu'on saurait retirer d'un graphique. Sans cette phrase,
+          leur somme ne tomberait pas sur le total et ça passerait pour une
+          panne. */}
+      {Number(totals.participants_en_reserve || 0) > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" aria-hidden="true" />
+          <p>
+            <strong>{totals.participants_en_reserve}</strong> bénéficiaires
+            réalisés au-delà des objectifs ne sont pas comptés dans le total
+            ci-dessus. Ils attendent sur la fiche de leur partenaire, où un
+            administrateur peut les activer. Les répartitions ci-dessous
+            portent, elles, sur le réalisé entier
+            {totals.participants_reels != null && <> ({totals.participants_reels})</>}.
+          </p>
+        </div>
+      )}
 
       <section className={`grid grid-cols-1 gap-6 ${isAdmin ? "xl:grid-cols-3" : ""}`}>
         <div className={isAdmin ? "xl:col-span-2" : ""}>
