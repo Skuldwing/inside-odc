@@ -7,6 +7,8 @@ const { logAudit } = require("../services/audit");
 
 const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
 const { ensureIdentitePersonnes } = require("../migrations/identitePersonnes");
+const { ensureReservePartenaire } = require("../migrations/reservePartenaire");
+const { plafonnerObjectif } = require("../services/reservePartenaire");
 
 const router = express.Router();
 
@@ -24,6 +26,7 @@ async function avecSchema(travail) {
     console.warn("[PARTENAIRES] schéma incomplet, migrations rejouées");
     await ensureEmargementPartenaire();
     await ensureIdentitePersonnes();
+    await ensureReservePartenaire();
     return travail();
   }
 }
@@ -57,6 +60,25 @@ const COMPTES_PAR_PARTENAIRE = `
   GROUP BY a.partner_id
 `;
 
+/* Le plafond et la reserve, joints a la fiche.
+ *
+ * L'objectif se mesure en participations — c'est ainsi depuis toujours, et le
+ * compte des personnes distinctes est affiche a cote sans entrer dans ce
+ * calcul. On ne touche pas a « beneficiaries_count » : il reste le compte brut,
+ * lisible partout ailleurs. Ce qui est plafonne, c'est ce qu'on porte au credit
+ * du partenaire, et il vit dans son propre objet pour qu'aucun ecran ne
+ * confonde les deux. */
+function avecReserve(ligne) {
+  return {
+    ...ligne,
+    reserve: plafonnerObjectif({
+      objectif: ligne.objective_beneficiaries,
+      realise: ligne.beneficiaries_count,
+      reserve_activee: ligne.reserve_activee,
+    }),
+  };
+}
+
 /* ===== GET ALL PARTNERS ===== */
 router.get("/", authMiddleware, requireAdmin, async (req, res) => {
   try {
@@ -82,7 +104,7 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
       ORDER BY p.name
       `
     ));
-    res.json(result.rows);
+    res.json(result.rows.map(avecReserve));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -106,7 +128,115 @@ router.get("/:id", authMiddleware, requireAdmin, async (req, res) => {
       [req.params.id]
     ));
     if (!result.rows.length) return res.status(404).json({ error: "Partenaire introuvable" });
-    res.json(result.rows[0]);
+    res.json(avecReserve(result.rows[0]));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== LIBÉRER (OU REMETTRE) LA RÉSERVE =====
+ *
+ * Le surplus d'un partenaire n'est pas compte tant qu'un administrateur ne l'a
+ * pas decide. Cette route porte cette decision, et elle seule : rien n'est
+ * recalcule, aucune inscription n'est touchee, aucun compte ne bouge. Ce qui
+ * change, c'est la part du reel qu'on porte au credit du partenaire.
+ *
+ * Le PIN est demande comme pour la modification de l'objectif lui-meme : les
+ * deux deplacent le meme indicateur, l'un par le haut, l'autre par le bas.
+ *
+ * Le geste est reversible dans les deux sens. « activer: 0 » remet tout en
+ * reserve ; c'est voulu, une liberation faite trop tot doit pouvoir etre
+ * reprise sans passer par la base. */
+router.post("/:id/reserve", authMiddleware, requireAdmin, requireAdminPin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tout = false } = req.body || {};
+
+    const actuel = await avecSchema(() => pool.query(
+      `
+      SELECT p.id, p.name, p.objective_beneficiaries, p.reserve_activee,
+             COALESCE(c.participations, 0) AS beneficiaries_count
+      FROM partners p
+      LEFT JOIN (${COMPTES_PAR_PARTENAIRE}) c ON c.partner_id = p.id
+      WHERE p.id = $1
+      `,
+      [id]
+    ));
+    if (!actuel.rows.length) return res.status(404).json({ error: "Partenaire introuvable" });
+
+    const partenaire = actuel.rows[0];
+    const avant = plafonnerObjectif({
+      objectif: partenaire.objective_beneficiaries,
+      realise: partenaire.beneficiaries_count,
+      reserve_activee: partenaire.reserve_activee,
+    });
+
+    /* Sans objectif chiffre il n'y a pas de plafond, donc rien a liberer. Le
+       dire plutot que d'enregistrer un zero qui n'aura aucun effet. */
+    if (avant.objectif === 0) {
+      return res.status(400).json({
+        error: "Ce partenaire n'a pas d'objectif chiffré : son réalisé est déjà compté en entier.",
+      });
+    }
+
+    /* « tout » vaut le surplus au moment du clic, pas une valeur figee : si le
+       realise a bouge depuis l'affichage, c'est le chiffre du moment qui
+       compte. */
+    const demande = tout
+      ? avant.surplus
+      : Math.floor(Number(req.body?.activer));
+
+    if (!Number.isFinite(demande) || demande < 0) {
+      return res.status(400).json({ error: "Nombre à activer invalide" });
+    }
+    if (demande > avant.surplus) {
+      return res.status(400).json({
+        error: avant.surplus === 0
+          ? "Ce partenaire n'a pas dépassé son objectif : il n'y a rien en réserve."
+          : `La réserve ne contient que ${avant.surplus} participation${avant.surplus > 1 ? "s" : ""}.`,
+        surplus: avant.surplus,
+      });
+    }
+
+    /* Le jeton ne porte que l'identifiant, le role et le partenaire : le nom se
+       relit, comme dans la validation d'une liste. */
+    const qui = await pool.query("SELECT full_name FROM users WHERE id = $1", [req.user.id]);
+
+    const maj = await avecSchema(() => pool.query(
+      `
+      UPDATE partners
+      SET reserve_activee         = $1,
+          reserve_activee_le      = CASE WHEN $1 > 0 THEN NOW() ELSE NULL END,
+          reserve_activee_par     = CASE WHEN $1 > 0 THEN $2::int ELSE NULL END,
+          reserve_activee_par_nom = CASE WHEN $1 > 0 THEN $3::text ELSE NULL END
+      WHERE id = $4
+      RETURNING *
+      `,
+      [demande, req.user.id, qui.rows[0]?.full_name || null, id]
+    ));
+
+    const apres = plafonnerObjectif({
+      objectif: partenaire.objective_beneficiaries,
+      realise: partenaire.beneficiaries_count,
+      reserve_activee: demande,
+    });
+
+    if (avant.reserve_activee !== apres.reserve_activee) {
+      logAudit(req, "UPDATE", "partners", Number(id), partenaire.name, {
+        motif: demande > avant.reserve_activee
+          ? "réserve activée : du surplus entre dans les indicateurs"
+          : "réserve remise de côté : du surplus sort des indicateurs",
+        objectif: avant.objectif,
+        realise_brut: avant.brut,
+        modifications: {
+          reserve_activee: { avant: avant.reserve_activee, apres: apres.reserve_activee },
+          realise_retenu: { avant: avant.retenu, apres: apres.retenu },
+        },
+      });
+    }
+
+    res.json({ ...maj.rows[0], beneficiaries_count: partenaire.beneficiaries_count, reserve: apres });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });

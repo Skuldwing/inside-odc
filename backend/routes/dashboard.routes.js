@@ -1,8 +1,23 @@
 const express = require("express");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const { plafonnerObjectif } = require("../services/reservePartenaire");
 
 const router = express.Router();
+
+/* « reserve_activee » n'existe pas avant la migration de demarrage, et le
+   tableau de bord est la premiere page que tout le monde ouvre : on ne veut pas
+   qu'il tombe en panne pendant les quelques secondes ou la colonne manque. Un
+   COALESCE ne sauverait rien — c'est la lecture de la colonne elle-meme qui
+   echoue — alors on regarde le catalogue avant de composer la requete, comme le
+   fait deja la verification de « duration_hours » juste a cote. */
+async function colonneReservePresente() {
+  const { rowCount } = await pool.query(`
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'partners' AND column_name = 'reserve_activee' LIMIT 1
+  `);
+  return rowCount > 0;
+}
 
 function buildFilters(req) {
   const year = Number(req.query.year) || new Date().getFullYear();
@@ -61,7 +76,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
   try {
     const { where, params, year, from, to, partnerId } = buildFilters(req);
 
-    const [durationColCheck, participantsManualColCheck] = await Promise.all([
+    const [durationColCheck, participantsManualColCheck, reservePresente] = await Promise.all([
       pool.query(`
         SELECT 1 FROM information_schema.columns
         WHERE table_name = 'activities' AND column_name = 'duration_hours' LIMIT 1
@@ -70,7 +85,10 @@ router.get("/summary", authMiddleware, async (req, res) => {
         SELECT 1 FROM information_schema.columns
         WHERE table_name = 'activities' AND column_name = 'participants_manual' LIMIT 1
       `),
+      colonneReservePresente(),
     ]);
+
+    const reserveExpr = reservePresente ? "pr.reserve_activee" : "0";
 
     const durationExpr =
       durationColCheck.rowCount > 0 ? "a.duration_hours" : "NULL::int";
@@ -163,6 +181,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       ${baseCte}
       SELECT pr.name,
              pr.objective_beneficiaries,
+             ${reserveExpr}::int AS reserve_activee,
              COALESCE(b.value, 0)::int AS value
       FROM partners pr
       LEFT JOIN (
@@ -288,6 +307,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       ${baseCte}
       SELECT pr.name,
              pr.objective_beneficiaries,
+             ${reserveExpr}::int AS reserve_activee,
              COALESCE(b.value, 0)::int AS value
       FROM partners pr
       LEFT JOIN (
@@ -377,22 +397,49 @@ router.get("/summary", authMiddleware, async (req, res) => {
       },
     ];
 
-    const beneficiariesByPartner = byPartnerRes.rows.map((r) => ({
-      name: r.name,
-      value: r.value,
-      objective: r.objective_beneficiaries || 0,
-    }));
+    /* Le realise d'un partenaire est retenu a son objectif, et ce qu'il a fait
+       au-dela attend en reserve qu'un administrateur en dispose. « value » reste
+       le compte brut — c'est lui qu'on additionne, c'est lui qui est vrai — et
+       « reserve » dit ce qui est porte au credit du partenaire aujourd'hui.
+       L'ecran affiche le second et mentionne le premier.
+
+       La periode entre en jeu : l'objectif n'a pas de dimension temporelle dans
+       la base, alors que ce tableau est filtre par annee ou par mois. Sur un
+       mois ou le partenaire n'a pas atteint son objectif, il n'y a pas de
+       surplus, donc rien a liberer — le service ramene la part liberee a ce qui
+       existe reellement dans ce qu'on regarde. */
+    const beneficiariesByPartner = byPartnerRes.rows.map((r) => {
+      const calcul = plafonnerObjectif({
+        objectif: r.objective_beneficiaries,
+        realise: r.value,
+        reserve_activee: r.reserve_activee,
+      });
+      return {
+        name: r.name,
+        value: r.value,
+        objective: r.objective_beneficiaries || 0,
+        reserve: calcul,
+      };
+    });
 
     const alertsPartners = alertsPartnersRes.rows
-      .map((r) => ({
-        name: r.name,
-        objective: r.objective_beneficiaries || 0,
-        value: r.value,
-        percent:
-          r.objective_beneficiaries > 0
-            ? Math.round((r.value / r.objective_beneficiaries) * 100)
-            : 0,
-      }))
+      .map((r) => {
+        const calcul = plafonnerObjectif({
+          objectif: r.objective_beneficiaries,
+          realise: r.value,
+          reserve_activee: r.reserve_activee,
+        });
+        return {
+          name: r.name,
+          objective: calcul.objectif,
+          value: r.value,
+          /* Le meme pourcentage qu'ailleurs, calcule sur le realise retenu.
+             Sans cela un partenaire pourrait etre signale « sous les 50 % » ici
+             et affiche a 100 % deux cartes plus haut. */
+          percent: calcul.pourcentage,
+          reserve: calcul,
+        };
+      })
       .filter((r) => r.objective > 0 && r.percent < 50);
 
     const today = new Date();
@@ -484,11 +531,15 @@ router.get("/export", authMiddleware, async (req, res) => {
   try {
     const { where, params, year } = buildFilters(req);
 
-    const pmColCheck = await pool.query(`
-      SELECT 1 FROM information_schema.columns
-      WHERE table_name = 'activities' AND column_name = 'participants_manual' LIMIT 1
-    `);
+    const [pmColCheck, reservePresente] = await Promise.all([
+      pool.query(`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'activities' AND column_name = 'participants_manual' LIMIT 1
+      `),
+      colonneReservePresente(),
+    ]);
     const pmExpr = pmColCheck.rowCount > 0 ? "a.participants_manual" : "NULL::int";
+    const reserveExpr = reservePresente ? "pr.reserve_activee" : "0";
 
     const exportQuery = `
       WITH base AS (
@@ -513,22 +564,44 @@ router.get("/export", authMiddleware, async (req, res) => {
       )
       SELECT pr.name,
              pr.objective_beneficiaries,
+             ${reserveExpr}::int AS reserve_activee,
              COALESCE(SUM(b.effective_count), 0)::int AS realized
       FROM partners pr
       LEFT JOIN eff b ON b.partner_id = pr.id
-      GROUP BY pr.name, pr.objective_beneficiaries
+      /* Sur la cle primaire : les autres colonnes de « pr » en dependent
+         fonctionnellement, donc Postgres les accepte sans les enumerer. C'est
+         necessaire ici parce que la colonne de reserve peut etre remplacee par
+         un litteral quand la migration n'a pas encore tourne, et « GROUP BY 0 »
+         serait lu comme une position de colonne. Au passage, deux partenaires
+         homonymes ne sont plus fondus en une ligne — l'ecran les distinguait
+         deja. */
+      GROUP BY pr.id
       ORDER BY pr.name ASC
     `;
 
     const result = await pool.query(exportQuery, params);
 
-    const rows = result.rows.map((r) => [
-      r.name,
-      r.realized,
-      r.objective_beneficiaries || 0,
-    ]);
+    /* Quatre colonnes au lieu de trois. « Realise retenu » est le chiffre de
+       l'ecran, celui qui vaut pour l'objectif ; « Realise brut » est le compte
+       entier. Les deux figurent parce qu'un export sert a justifier : donner le
+       chiffre bride sans dire qu'il l'est reviendrait a cacher du travail fait,
+       et donner le brut seul reviendrait a contredire le tableau de bord. */
+    const rows = result.rows.map((r) => {
+      const calcul = plafonnerObjectif({
+        objectif: r.objective_beneficiaries,
+        realise: r.realized,
+        reserve_activee: r.reserve_activee,
+      });
+      return [
+        r.name,
+        calcul.retenu,
+        calcul.objectif,
+        calcul.brut,
+        calcul.reserve_disponible,
+      ];
+    });
 
-    const header = ["Partenaire", "Realise", "Objectif"];
+    const header = ["Partenaire", "Realise retenu", "Objectif", "Realise brut", "En reserve"];
     const csv = [header, ...rows]
       .map((r) => r.join(";"))
       .join("\n");

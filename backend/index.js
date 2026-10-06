@@ -39,6 +39,7 @@ const { ensureEmargementPartenaire } = require("./migrations/emargementPartenair
 const { ensureIdentitePersonnes } = require("./migrations/identitePersonnes");
 const { ensureIdentitesDistinctes } = require("./migrations/identitesDistinctes");
 const { ensureListeTelleQuelle } = require("./migrations/listeTelleQuelle");
+const { ensureReservePartenaire } = require("./migrations/reservePartenaire");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -798,6 +799,18 @@ pool.query(`
     console.log("Migration OK: listes telles quelles");
   } catch (e) {
     console.error("Migration listes telles quelles ECHOUEE :", e.message);
+  }
+})();
+
+/* ── La reserve d'un partenaire : son realise au-dela de son objectif ──
+   Neutre au demarrage : rien n'est libere, donc chaque partenaire est plafonne
+   a son objectif et le surplus attend qu'un administrateur en dispose. */
+(async () => {
+  try {
+    await ensureReservePartenaire();
+    console.log("Migration OK: reserve des partenaires");
+  } catch (e) {
+    console.error("Migration reserve des partenaires ECHOUEE :", e.message);
   }
 })();
 

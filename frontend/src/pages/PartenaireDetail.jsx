@@ -18,6 +18,8 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import api from "../api";
+import { lireReserve, BadgeReserve } from "../components/Reserve";
+import ReservePartenaire from "../components/admin/ReservePartenaire";
 
 const PIPELINE_STAGES = [
   { key: "prospect", label: "Prospect", dot: "bg-slate-400" },
@@ -255,7 +257,11 @@ export default function PartenaireDetail() {
   const personnes = partner.personnes_distinctes == null
     ? null
     : Number(partner.personnes_distinctes);
-  const pct = objective > 0 ? Math.min(100, Math.round((beneficiaries / objective) * 100)) : 0;
+  /* Le réalisé est retenu à l'objectif ; le surplus attend en réserve, et c'est
+     le panneau « Réserve » qui le libère. Le calcul vient du serveur pour que la
+     fiche, la carte et le tableau de bord ne puissent pas diverger. */
+  const reserve = lireReserve(partner.reserve, { objectif: objective, realise: beneficiaries });
+  const pct = reserve.pourcentage;
 
   const activityScores = timeline
     .filter((e) => e.type === "activity" && e.data.reliability_score != null)
@@ -345,6 +351,13 @@ export default function PartenaireDetail() {
               {personnes == null ? "Objectif" : "Objectif (particip.)"}
             </p>
             <p className="text-xl font-semibold text-slate-900">{pct}%</p>
+            {/* Le pourcentage seul ne dirait pas qu'une part du réalisé n'est
+                pas comptée. Ici il se lit « 100 % » alors que le partenaire a
+                fait cinq fois son objectif : la mention est ce qui empêche de
+                recopier le chiffre sans savoir. */}
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {reserve.retenu} / {objective}
+            </p>
           </div>
           <div className="rounded-xl border border-slate-100 p-3">
             <p className="text-xs text-slate-500 mb-1 flex items-center gap-1"><ShieldAlert className="w-3 h-3" />Fiabilité moy.</p>
@@ -353,6 +366,8 @@ export default function PartenaireDetail() {
             </p>
           </div>
         </div>
+
+        <BadgeReserve reserve={reserve} className="mt-3" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -376,6 +391,14 @@ export default function PartenaireDetail() {
         </div>
 
         <div className="space-y-6">
+          <ReservePartenaire
+            partnerId={id}
+            reserve={reserve}
+            onChange={(data) =>
+              setPartner((p) => ({ ...p, ...data, reserve: data.reserve }))
+            }
+          />
+
           <div className="card-solid p-5">
             <h2 className="font-semibold text-slate-900 flex items-center gap-2 mb-3">
               <ListChecks className="w-4 h-4 text-orange-500" />

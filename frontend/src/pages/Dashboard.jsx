@@ -44,6 +44,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
+import { lireReserve, BadgeReserve } from "../components/Reserve";
 import RapportMensuelModal from "./RapportMensuel";
 
 const markerIcon = new L.Icon({
@@ -755,7 +756,14 @@ function TopListCard({ title, items }) {
 function BeneficiariesByPartnerTable({ data }) {
   return (
     <div className="card p-6">
-      <h3 className="font-semibold mb-4 text-slate-900">Objectifs par partenaire</h3>
+      <h3 className="font-semibold text-slate-900">Objectifs par partenaire</h3>
+      {/* Dit une fois, en haut, plutôt que répété sur chaque ligne. Sans cette
+          phrase un « 400 / 400 » se lit comme un objectif tout juste atteint,
+          alors qu'il peut cacher cinq fois le travail. */}
+      <p className="text-xs text-slate-500 mt-1 mb-4">
+        Le réalisé est retenu à l'objectif. Ce qui a été fait au-delà attend en
+        réserve sur la fiche du partenaire, où un administrateur peut l'activer.
+      </p>
       <div className="overflow-x-auto">
         <table className="table border-separate border-spacing-y-2 w-full">
           <thead className="table-head">
@@ -767,16 +775,33 @@ function BeneficiariesByPartnerTable({ data }) {
           </thead>
           <tbody>
             {data.map((row) => {
-              const percent =
-                row.objective > 0
-                  ? Math.min(100, Math.round((row.value / row.objective) * 100))
-                  : 0;
+              /* Le réalisé est retenu à l'objectif du partenaire, et ce qu'il a
+                 fait au-delà attend en réserve sur sa fiche — un administrateur
+                 l'y active quand il en a besoin. Le calcul vient du serveur :
+                 cette table, la carte du partenaire et sa fiche doivent donner
+                 le même chiffre. */
+              const reserve = lireReserve(row.reserve, {
+                objectif: row.objective,
+                realise: row.value,
+              });
+              const percent = reserve.pourcentage;
               return (
                 <tr key={row.name} className="table-row">
-                  <td className="p-4 font-medium break-words">{row.name}</td>
+                  <td className="p-4 font-medium break-words">
+                    {row.name}
+                    <BadgeReserve reserve={reserve} className="mt-1" />
+                  </td>
                   <td className="p-4 text-right">
                     <div className="flex items-center justify-end gap-3">
-                      <span>{row.value}</span>
+                      <span
+                        title={
+                          reserve.plafonne
+                            ? `${reserve.brut} participations réalisées, retenues à l'objectif de ${reserve.objectif}.`
+                            : undefined
+                        }
+                      >
+                        {reserve.retenu}
+                      </span>
                       <div className="relative w-9 h-9">
                         <svg
                           viewBox="0 0 36 36"
@@ -800,7 +825,7 @@ function BeneficiariesByPartnerTable({ data }) {
                             strokeWidth="4"
                             strokeLinecap="round"
                             strokeDasharray="100"
-                            strokeDashoffset={100 - percent}
+                            strokeDashoffset={100 - Math.min(100, percent)}
                           />
                         </svg>
                         <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-slate-700">
