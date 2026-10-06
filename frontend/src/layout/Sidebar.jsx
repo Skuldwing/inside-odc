@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   KanbanSquare,
+  Wallet,
   X,
   ChevronLeft,
   ChevronRight,
@@ -84,6 +85,17 @@ const GROUPES = [
     ],
   },
   {
+    /* Ce que coutent les seances. Un seul groupe, une seule entree, et elle
+       n'apparait que pour un Admin + : les tarifs des partenaires n'ont pas a
+       etre lus par tous les administrateurs. Le menu ne protege rien — c'est le
+       serveur qui refuse — mais montrer une porte fermee n'a pas d'interet. */
+    titre: "Direction",
+    adminPlus: true,
+    items: [
+      { name: "Budget", icon: Wallet, path: "/budget" },
+    ],
+  },
+  {
     /* Qui a acces, ce qui est fiable, ce qui s'est passe. */
     titre: "Administration",
     items: [
@@ -125,7 +137,7 @@ function NavLink({ item, collapsed, location, onClick, index = 0 }) {
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onToggle }) {
   const location = useLocation();
-  const { role, isTeamOdc, user } = useAuth();
+  const { role, isTeamOdc, isSuperAdmin, user } = useAuth();
   const safeRole = role || "viewer";
 
   const roleLabel =
@@ -209,6 +221,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
 
             return GROUPES.map((groupe) => {
               if (groupe.equipe && !isTeamOdc) return null;
+              if (groupe.adminPlus && !isSuperAdmin) return null;
 
               const items = groupe.items.filter(
                 (item) => !item.roles || item.roles.includes(safeRole)

@@ -89,12 +89,37 @@ router.post("/logout", (req, res) => {
   res.json({ success: true });
 });
 
+/* « is_super_admin » n'existe pas avant la migration de demarrage. Cette route
+   est la sonde de session de toutes les pages : si elle tombe, c'est la
+   plateforme entiere qui tombe avec. On lit donc la colonne si elle est la, et
+   on s'en passe sinon — l'absence du drapeau vaut « pas Admin + », ce qui est
+   la bonne reponse par defaut. La verification ne se fait qu'une fois. */
+let colonneAdminPlus = null;
+async function aLaColonneAdminPlus() {
+  if (colonneAdminPlus !== null) return colonneAdminPlus;
+  try {
+    const { rowCount } = await pool.query(`
+      SELECT 1 FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name = 'is_super_admin' LIMIT 1
+    `);
+    colonneAdminPlus = rowCount > 0;
+  } catch {
+    colonneAdminPlus = false;
+  }
+  return colonneAdminPlus;
+}
+
 router.get("/me", authMiddleware, async (req, res) => {
   try {
+    const adminPlus = (await aLaColonneAdminPlus())
+      ? "COALESCE(is_super_admin, false)"
+      : "false";
+
     const result = await pool.query(
       `
       SELECT id, email, full_name, role, partner_id,
              COALESCE(is_team_odc, false) AS is_team_odc,
+             ${adminPlus} AS is_super_admin,
              job_title, avatar_updated_at
       FROM users
       WHERE id = $1

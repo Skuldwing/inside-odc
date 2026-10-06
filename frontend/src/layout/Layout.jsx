@@ -34,6 +34,7 @@ export default function Layout() {
     ["/fiabilite", "Fiabilité"],
     ["/audit", "Journaux d'audit"],
     ["/rapport-mensuel", "Rapport mensuel"],
+    ["/budget", "Budget"],
   ];
 
   const currentPageName =
