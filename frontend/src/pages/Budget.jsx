@@ -324,7 +324,12 @@ export default function Budget() {
                     <th className="text-left p-4">Zone</th>
                     <th className="text-right p-4">Bénéficiaires</th>
                     {!parHeure && <th className="text-right p-4">En réserve</th>}
-                    <th className="text-right p-4">Heures</th>
+                    {/* Les heures ne s'affichent qu'au tarif horaire. Au
+                        bénéficiaire, elles ne servent à rien dans ce tableau et
+                        se lisent à tort comme une part du calcul : deux colonnes
+                        chiffrées à côté d'un tarif unitaire, on cherche
+                        forcément laquelle est multipliée. */}
+                    {parHeure && <th className="text-right p-4">Heures</th>}
                     <th className="text-right p-4">Tarif unitaire</th>
                     <th className="text-right p-4">Total</th>
                   </tr>
@@ -363,7 +368,9 @@ export default function Budget() {
                               : <span className="text-slate-300">—</span>}
                           </td>
                         )}
-                        <td className="p-4 text-right text-slate-600">{z.heures}</td>
+                        {parHeure && (
+                          <td className="p-4 text-right text-slate-600">{z.heures}</td>
+                        )}
                         <td className="p-4 text-right">
                           {z.facturable ? montant(z.tarif, devise) : "—"}
                         </td>
@@ -381,7 +388,9 @@ export default function Budget() {
                         {synthese.en_reserve || "—"}
                       </td>
                     )}
-                    <td className="p-4 text-right font-semibold">{synthese.heures}</td>
+                    {parHeure && (
+                      <td className="p-4 text-right font-semibold">{synthese.heures}</td>
+                    )}
                     <td className="p-4" />
                     <td className="p-4 text-right text-lg font-semibold text-slate-900">
                       {montant(synthese.total, devise)}
@@ -411,6 +420,96 @@ export default function Budget() {
                 pas qui il recouvre.
               </p>
             </div>
+          </div>
+
+          {/* ── Par partenaire ───────────────────────────────────────────── */}
+          <div className="card-solid p-5">
+            <h2 className="font-semibold text-slate-900 mb-1">Détail par partenaire</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Ce que représente chaque partenaire sur la période. Un partenaire
+              qui intervient dans plusieurs zones est facturé zone par zone, à
+              leurs tarifs respectifs — son montant n'est donc pas un simple
+              nombre de bénéficiaires multiplié par un tarif unique.
+            </p>
+
+            {synthese.partenaires.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Aucune séance avec liste nominative sur cette période.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table border-separate border-spacing-y-2 w-full">
+                  <thead className="table-head">
+                    <tr>
+                      <th className="text-left p-4">Partenaire</th>
+                      <th className="text-right p-4">Objectif</th>
+                      <th className="text-right p-4">Bénéficiaires</th>
+                      {!parHeure && <th className="text-right p-4">En réserve</th>}
+                      {parHeure && <th className="text-right p-4">Heures</th>}
+                      <th className="text-right p-4">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {synthese.partenaires.map((p) => (
+                      <tr key={p.partner_id ?? "sans"} className="table-row">
+                        <td className="p-4 font-medium break-words">
+                          <span className="flex items-center gap-2">
+                            <Building2
+                              className={`w-4 h-4 ${p.partner_id == null ? "text-slate-300" : "text-orange-500"}`}
+                            />
+                            {p.nom}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right text-slate-600">
+                          {p.objectif > 0 ? p.objectif : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="p-4 text-right">
+                          {p.beneficiaires}
+                          {p.plafonne && (
+                            <span className="block text-xs text-slate-400">
+                              sur {p.beneficiaires_reels} réalisés
+                            </span>
+                          )}
+                        </td>
+                        {!parHeure && (
+                          <td className="p-4 text-right">
+                            {p.en_reserve > 0
+                              ? <span className="text-sky-700">{p.en_reserve}</span>
+                              : <span className="text-slate-300">—</span>}
+                          </td>
+                        )}
+                        {parHeure && (
+                          <td className="p-4 text-right text-slate-600">{p.heures}</td>
+                        )}
+                        <td className="p-4 text-right font-semibold">
+                          {montant(Math.round(p.montant), devise)}
+                        </td>
+                      </tr>
+                    ))}
+                    <tr className="table-row bg-slate-50">
+                      <td className="p-4 font-semibold">Total</td>
+                      <td className="p-4" />
+                      <td className="p-4 text-right font-semibold">{synthese.beneficiaires}</td>
+                      {!parHeure && (
+                        <td className="p-4 text-right font-semibold text-sky-700">
+                          {synthese.en_reserve || "—"}
+                        </td>
+                      )}
+                      {parHeure && (
+                        <td className="p-4 text-right font-semibold">{synthese.heures}</td>
+                      )}
+                      {/* Le même total que le tableau par zone, et ce n'est pas
+                          une coïncidence : les deux découpent le même ensemble
+                          de couples partenaire-zone. C'est pour cela que les
+                          montants ne sont arrondis qu'ici, à l'affichage. */}
+                      <td className="p-4 text-right text-lg font-semibold text-slate-900">
+                        {montant(synthese.total, devise)}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -93,10 +93,28 @@ router.post("/logout", (req, res) => {
    est la sonde de session de toutes les pages : si elle tombe, c'est la
    plateforme entiere qui tombe avec. On lit donc la colonne si elle est la, et
    on s'en passe sinon — l'absence du drapeau vaut « pas Admin + », ce qui est
-   la bonne reponse par defaut. La verification ne se fait qu'une fois. */
-let colonneAdminPlus = null;
+   la bonne reponse par defaut.
+ *
+ * Seule la reponse positive est retenue. C'est la correction d'un defaut qui a
+ * rendu la page budget invisible alors que tout etait correctement configure :
+ * les migrations ne sont pas attendues avant « app.listen », donc le premier
+ * « /auth/me » peut arriver pendant que la colonne s'ajoute encore. En
+ * memorisant ce « non » definitivement, le drapeau restait faux pour toute la
+ * duree de vie du processus — et un redemarrage pouvait retomber dans la meme
+ * fenetre.
+ *
+ * Un « non » est donc provisoire et se reverifie, mais pas a chaque appel : une
+ * migration en echec ferait sinon une requete de catalogue a chaque chargement
+ * de page. Quelques secondes d'attente suffisent, la fenetre a combler ne dure
+ * que le temps d'un ALTER TABLE. */
+let colonneAdminPlus = false;
+let prochaineVerification = 0;
+const DELAI_REVERIFICATION_MS = 10_000;
+
 async function aLaColonneAdminPlus() {
-  if (colonneAdminPlus !== null) return colonneAdminPlus;
+  if (colonneAdminPlus) return true;
+  if (Date.now() < prochaineVerification) return false;
+  prochaineVerification = Date.now() + DELAI_REVERIFICATION_MS;
   try {
     const { rowCount } = await pool.query(`
       SELECT 1 FROM information_schema.columns
