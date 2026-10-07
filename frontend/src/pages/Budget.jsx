@@ -40,22 +40,49 @@ export default function Budget() {
   const toast = useToast();
   const annee = new Date().getFullYear();
 
-  const [periode, setPeriode] = useState({ year: annee, month: "", partenaire: "" });
+  /* « partenaires » vide veut dire « tous ». C'est la seule convention qui
+     rende le panneau lisible : décocher le dernier ne doit pas afficher une
+     page de zéros, qui se lirait comme une panne. Le bouton de remise à zéro
+     s'appelle donc « Tous les partenaires » et non « Tout décocher ». */
+  const [periode, setPeriode] = useState({ year: annee, month: "", partenaires: [] });
   const [synthese, setSynthese] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [refuse, setRefuse] = useState(false);
   const impression = useRef(null);
   const [pdf, setPdf] = useState(false);
+  const [panneau, setPanneau] = useState(false);
+  const [recherche, setRecherche] = useState("");
+  const boitePartenaires = useRef(null);
 
-  /* Le nom du partenaire choisi, s'il y en a un. Il sert à deux endroits : le
-     bandeau qui signale que les chiffres sont filtrés, et le nom du fichier
-     PDF — un document téléchargé doit dire de quoi il parle sans qu'on
-     l'ouvre. */
-  const nomDuFiltre = (() => {
-    const id = synthese?.filtre;
-    if (!id) return null;
-    return synthese?.roster?.find((r) => r.id === id)?.nom || null;
-  })();
+  /* Ce que le serveur a réellement retenu, nommé. Sert au bandeau qui signale
+     la restriction et au nom du fichier PDF — un document téléchargé doit dire
+     de quoi il parle sans qu'on l'ouvre. */
+  const nomsDuFiltre = (synthese?.filtre || [])
+    .map((id) => synthese?.roster?.find((r) => r.id === id)?.nom)
+    .filter(Boolean);
+  const libelleFiltre = nomsDuFiltre.length ? nomsDuFiltre.join(", ") : null;
+
+  const choisis = periode.partenaires;
+  const basculer = (id) =>
+    setPeriode((p) => ({
+      ...p,
+      partenaires: p.partenaires.includes(id)
+        ? p.partenaires.filter((x) => x !== id)
+        : [...p.partenaires, id],
+    }));
+
+  /* Fermer en cliquant ailleurs : un panneau de cases à cocher qui reste ouvert
+     recouvre les chiffres qu'on vient de filtrer. */
+  useEffect(() => {
+    if (!panneau) return;
+    const dehors = (e) => {
+      if (boitePartenaires.current && !boitePartenaires.current.contains(e.target)) {
+        setPanneau(false);
+      }
+    };
+    document.addEventListener("mousedown", dehors);
+    return () => document.removeEventListener("mousedown", dehors);
+  }, [panneau]);
 
   const [form, setForm] = useState(null);
   const [enregistre, setEnregistre] = useState(false);
@@ -67,7 +94,7 @@ export default function Budget() {
     try {
       const q = new URLSearchParams({ year: String(periode.year) });
       if (periode.month) q.set("month", String(periode.month));
-      if (periode.partenaire) q.set("partenaire", periode.partenaire);
+      if (periode.partenaires.length) q.set("partenaires", periode.partenaires.join(","));
       const { data } = await api.get(`/budget/synthese?${q}`);
       setSynthese(data);
       setForm((f) => f || { ...data.parametres });
@@ -80,7 +107,13 @@ export default function Budget() {
     }
   }, [periode, toast]);
 
-  useEffect(() => { charger(); }, [charger]);
+  /* Un court délai avant de recharger : cocher trois partenaires d'affilée
+     lancerait sinon trois calculs complets, dont deux pour rien. Assez court
+     pour qu'on ne l'attende pas, assez long pour absorber une suite de clics. */
+  useEffect(() => {
+    const t = setTimeout(charger, 350);
+    return () => clearTimeout(t);
+  }, [charger]);
 
   const envoyerParametres = async () => {
     setEnregistre(true);
@@ -169,7 +202,15 @@ export default function Budget() {
       const quand = periode.month
         ? `${periode.year}-${String(periode.month).padStart(2, "0")}`
         : String(periode.year);
-      const qui = nomDuFiltre ? `-${nomDuFiltre.replace(/[^\w-]+/g, "_")}` : "";
+      /* Un seul partenaire : son nom dans le fichier. Plusieurs : leur nombre —
+         enchaîner trois noms donnerait un nom de fichier illisible, et le détail
+         figure de toute façon en tête du document. */
+      const qui =
+        nomsDuFiltre.length === 1
+          ? `-${nomsDuFiltre[0].replace(/[^\w-]+/g, "_")}`
+          : nomsDuFiltre.length > 1
+            ? `-${nomsDuFiltre.length}-partenaires`
+            : "";
       doc.save(`budget-odc-${quand}${qui}.pdf`);
     } catch (err) {
       console.error("Erreur PDF:", err);
@@ -260,18 +301,86 @@ export default function Budget() {
               total qui ne correspond plus à ce qu'on voit. La liste vient du
               serveur et reste complète même quand un filtre est posé — sinon on
               ne pourrait plus en sortir. */}
-          <div>
-            <label className="text-xs text-slate-500">Partenaire</label>
-            <select
-              className="select mt-1 max-w-[16rem]"
-              value={periode.partenaire}
-              onChange={(e) => setPeriode((p) => ({ ...p, partenaire: e.target.value }))}
+          <div className="relative" ref={boitePartenaires}>
+            <label className="text-xs text-slate-500">Partenaires</label>
+            {/* Un libellé stable : le texte du bouton change avec la sélection,
+                et sans lui un lecteur d'écran annoncerait « AASTIC » sans dire
+                de quoi il s'agit. */}
+            <button
+              type="button"
+              aria-label="Choisir les partenaires"
+              aria-expanded={panneau}
+              onClick={() => setPanneau((v) => !v)}
+              className="select mt-1 w-[16rem] text-left truncate"
             >
-              <option value="">Tous les partenaires</option>
-              {(synthese?.roster || []).map((r) => (
-                <option key={r.id} value={r.id}>{r.nom}</option>
-              ))}
-            </select>
+              {choisis.length === 0
+                ? "Tous les partenaires"
+                : choisis.length === 1
+                  ? (synthese?.roster || []).find((r) => r.id === choisis[0])?.nom || "1 partenaire"
+                  : `${choisis.length} partenaires`}
+            </button>
+
+            {panneau && (
+              <div className="absolute right-0 z-20 mt-1 w-[20rem] rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                {(synthese?.roster || []).length > 8 && (
+                  <input
+                    className="input text-sm mb-2"
+                    placeholder="Rechercher un partenaire…"
+                    value={recherche}
+                    onChange={(e) => setRecherche(e.target.value)}
+                    autoFocus
+                  />
+                )}
+
+                <div className="max-h-72 overflow-y-auto space-y-1">
+                  {(synthese?.roster || [])
+                    .filter((r) =>
+                      r.nom.toLowerCase().includes(recherche.trim().toLowerCase())
+                    )
+                    .map((r) => {
+                      const coche = choisis.includes(r.id);
+                      return (
+                        <label
+                          key={r.id}
+                          className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                            coche
+                              ? "border-orange-300 bg-orange-50 text-orange-900"
+                              : "border-slate-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-orange-500"
+                            checked={coche}
+                            onChange={() => basculer(r.id)}
+                          />
+                          <span className="truncate">{r.nom}</span>
+                        </label>
+                      );
+                    })}
+                </div>
+
+                <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2">
+                  {/* « Tous » et non « Tout décocher » : une sélection vide ne
+                      restreint rien, et le bouton doit dire ce qu'il produit, pas
+                      ce qu'il efface. */}
+                  <button
+                    type="button"
+                    className="text-xs text-slate-500 hover:text-orange-600"
+                    onClick={() => setPeriode((p) => ({ ...p, partenaires: [] }))}
+                  >
+                    Tous les partenaires
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-orange-600 hover:text-orange-700"
+                    onClick={() => setPanneau(false)}
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -406,7 +515,7 @@ export default function Budget() {
               {periode.month
                 ? `${MOIS[Number(periode.month) - 1]} ${periode.year}`
                 : `Année ${periode.year}`}
-              {nomDuFiltre ? ` · ${nomDuFiltre}` : " · tous les partenaires"}
+              {libelleFiltre ? ` · ${libelleFiltre}` : " · tous les partenaires"}
               {" · "}
               {parHeure ? "paiement à l'heure" : "paiement au bénéficiaire"}
               {" · "}
@@ -416,13 +525,17 @@ export default function Budget() {
             </p>
           </div>
 
-          {nomDuFiltre && (
+          {libelleFiltre && (
             <div className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
               <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-600" aria-hidden="true" />
               <p>
                 Tous les chiffres de cette page ne portent que sur
-                {" "}<strong>{nomDuFiltre}</strong>. Choisissez « Tous les
-                partenaires » pour revenir au budget complet.
+                {" "}<strong>{libelleFiltre}</strong>
+                {nomsDuFiltre.length > 1 && (
+                  <> — {nomsDuFiltre.length} partenaires sur {synthese.roster?.length || 0}</>
+                )}
+                . Choisissez « Tous les partenaires » pour revenir au budget
+                complet.
               </p>
             </div>
           )}

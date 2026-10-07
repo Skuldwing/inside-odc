@@ -298,17 +298,30 @@ router.get("/synthese", ...ADMIN_PLUS, async (req, res) => {
        tableau par partenaire. Masquer des lignes sans recalculer laisserait un
        total qui ne correspond plus a ce qu'on voit — exactement ce qu'on
        s'applique a eviter sur cette page. */
-    const demande = String(req.query.partenaire || "").trim();
-    /* Un identifiant qui ne designe personne vaut « tous ». Filtrer sur du vide
-       afficherait une page de zeros, ce qui se lit comme une panne et non comme
-       un choix. */
-    const choisi = roster.some((r) => r.id === demande) ? demande : null;
-    const lignes = !choisi
+    /* Plusieurs partenaires a la fois : on veut pouvoir regarder trois d'entre
+       eux et pas les autres. « partenaire » au singulier reste accepte — le
+       temps d'un deploiement, un ecran plus ancien peut encore l'envoyer, et il
+       vaut mieux qu'il continue de fonctionner que de retourner silencieusement
+       le budget complet. */
+    const demandes = [
+      ...String(req.query.partenaires || "").split(","),
+      String(req.query.partenaire || ""),
+    ]
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    /* On ne garde que les identifiants qui designent vraiment quelqu'un sur la
+       periode. Un choix vide — rien de demande, ou que des identifiants
+       inconnus — vaut « tous » : filtrer sur du vide afficherait une page de
+       zeros, ce qui se lit comme une panne et non comme un choix. */
+    const connus = new Set(roster.map((r) => r.id));
+    const choisis = [...new Set(demandes.filter((id) => connus.has(id)))];
+    const filtre = choisis.length ? new Set(choisis) : null;
+
+    const lignes = !filtre
       ? toutes
       : toutes.filter((l) =>
-          choisi === SANS_PARTENAIRE
-            ? l.partner_id == null
-            : String(l.partner_id) === choisi
+          filtre.has(l.partner_id == null ? SANS_PARTENAIRE : String(l.partner_id))
         );
 
     const chiffrage = chiffrer(lignes, parametres);
@@ -317,10 +330,10 @@ router.get("/synthese", ...ADMIN_PLUS, async (req, res) => {
       periode: { annee, mois: mois || null, du, au },
       parametres,
       roster,
-      /* Ce qui a reellement ete applique : un identifiant qui ne designe
-         personne vaut « tous », et l'ecran doit pouvoir le refleter plutot que
-         d'afficher un filtre actif sur un chiffre qui ne l'est pas. */
-      filtre: choisi,
+      /* Ce qui a reellement ete applique, et non ce qui a ete demande :
+         l'ecran doit pouvoir afficher la restriction exacte plutot qu'un filtre
+         actif sur un chiffre qui ne l'est pas. */
+      filtre: filtre ? choisis : null,
       ...chiffrage,
     });
   } catch (err) {
