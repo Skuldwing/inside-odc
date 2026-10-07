@@ -118,9 +118,9 @@ function repartirAuProrata(parts, total) {
  * Agrege les lignes « un partenaire, une zone » en un total par zone, en
  * appliquant le plafond de chaque partenaire.
  *
- * @param {Array} lignes  {partner_id, zone, beneficiaires, heures,
+ * @param {Array} lignes  {partner_id, partenaire, zone, beneficiaires, heures,
  *                         objective_beneficiaries, reserve_activee}
- * @returns {{zones: object, totaux: object}}
+ * @returns {{zones: object, partenaires: Array}}
  */
 function agregerParZone(lignes) {
   const zones = {};
@@ -136,6 +136,8 @@ function agregerParZone(lignes) {
     const cle = l.partner_id == null ? "sans" : String(l.partner_id);
     if (!parPartenaire.has(cle)) {
       parPartenaire.set(cle, {
+        partner_id: l.partner_id ?? null,
+        nom: l.partenaire || (l.partner_id == null ? "Sans partenaire" : `Partenaire #${l.partner_id}`),
         objectif: l.objective_beneficiaries,
         reserve_activee: l.reserve_activee,
         parZone: [],
@@ -144,6 +146,7 @@ function agregerParZone(lignes) {
     parPartenaire.get(cle).parZone.push(l);
   }
 
+  const partenaires = [];
   for (const p of parPartenaire.values()) {
     const brut = p.parZone.reduce((s, l) => s + entier(l.beneficiaires), 0);
     const calcul = plafonnerObjectif({
@@ -156,19 +159,40 @@ function agregerParZone(lignes) {
       calcul.retenu
     );
 
+    /* Le detail par zone de ce partenaire est conserve : c'est lui qui portera
+       les tarifs, puisqu'un meme partenaire peut intervenir a Dakar et en
+       region, qui ne se facturent pas au meme prix. Additionner d'abord ses
+       beneficiaires puis appliquer un tarif unique serait faux. */
+    const zonesDuPartenaire = {};
     for (const l of p.parZone) {
       const z = zones[l.zone];
       if (!z) continue;
       const reel = entier(l.beneficiaires);
       const retenu = retenuParZone.get(l.zone) || 0;
+      const heures = Math.max(0, Number(l.heures) || 0);
+
       z.beneficiaires += retenu;
       z.beneficiaires_reels += reel;
       z.en_reserve += reel - retenu;
-      z.heures += Math.max(0, Number(l.heures) || 0);
+      z.heures += heures;
+
+      zonesDuPartenaire[l.zone] = { retenu, reel, en_reserve: reel - retenu, heures };
     }
+
+    partenaires.push({
+      partner_id: p.partner_id,
+      nom: p.nom,
+      objectif: calcul.objectif,
+      beneficiaires: calcul.retenu,
+      beneficiaires_reels: calcul.brut,
+      en_reserve: calcul.reserve_disponible,
+      plafonne: calcul.plafonne,
+      heures: p.parZone.reduce((s, l) => s + Math.max(0, Number(l.heures) || 0), 0),
+      zones: zonesDuPartenaire,
+    });
   }
 
-  return zones;
+  return { zones, partenaires };
 }
 
 /**
@@ -176,19 +200,23 @@ function agregerParZone(lignes) {
  * montant.
  */
 function chiffrer(lignes, parametres) {
-  const zones = agregerParZone(lignes);
+  const { zones, partenaires } = agregerParZone(lignes);
   const mode = parametres?.mode_paiement === "heure" ? "heure" : "beneficiaire";
+  const tarifDe = (z) => {
+    const champ = TARIF_DE[z];
+    return champ ? Number(parametres?.[champ] || 0) : null;
+  };
+
+  /* A l'heure, le plafond ne s'applique pas : il est exprime en beneficiaires,
+     et rien ne permet de le traduire en heures. On facture les heures reelles,
+     et la page le dit. */
+  const quantiteDe = (seau) =>
+    mode === "heure" ? arrondirHeures(seau.heures) : seau.retenu ?? seau.beneficiaires;
 
   const detail = ZONES.map((z) => {
     const brut = zones[z];
-    const champ = TARIF_DE[z];
-    const tarif = champ ? Number(parametres?.[champ] || 0) : null;
-    /* A l'heure, le plafond ne s'applique pas : il est exprime en
-       beneficiaires, et rien ne permet de le traduire en heures. On facture les
-       heures reelles, et la page le dit. */
+    const tarif = tarifDe(z);
     const quantite = mode === "heure" ? arrondirHeures(brut.heures) : brut.beneficiaires;
-    const montant = tarif == null ? null : Math.round(quantite * tarif);
-
     return {
       zone: z,
       libelle: brut.libelle,
@@ -199,11 +227,44 @@ function chiffrer(lignes, parametres) {
       facturable: tarif != null,
       tarif,
       quantite,
-      montant,
+      /* Montant exact, non arrondi. Les deux tableaux — par zone et par
+         partenaire — decoupent le meme ensemble de couples (partenaire, zone) :
+         tant qu'on n'arrondit pas chaque ligne, leurs sommes sont rigoureusement
+         egales et les deux totaux affiches coincident. Arrondir ligne a ligne
+         ferait diverger les deux tableaux des que les tarifs portent des
+         centimes, et rien n'est plus inquietant sur une page de budget que deux
+         totaux differents pour la meme periode. */
+      montant: tarif == null ? null : quantite * tarif,
     };
   });
 
-  const total = detail.reduce((s, d) => s + (d.montant || 0), 0);
+  const parPartenaire = partenaires
+    .map((p) => {
+      let montant = 0;
+      let facturable = 0;
+      for (const [z, seau] of Object.entries(p.zones)) {
+        const tarif = tarifDe(z);
+        if (tarif == null) continue;
+        const q = quantiteDe(seau);
+        montant += q * tarif;
+        facturable += q;
+      }
+      return {
+        partner_id: p.partner_id,
+        nom: p.nom,
+        objectif: p.objectif,
+        beneficiaires: p.beneficiaires,
+        beneficiaires_reels: p.beneficiaires_reels,
+        en_reserve: p.en_reserve,
+        plafonne: p.plafonne,
+        heures: arrondirHeures(p.heures),
+        quantite_facturee: mode === "heure" ? arrondirHeures(facturable) : facturable,
+        montant,
+      };
+    })
+    .sort((a, b) => b.montant - a.montant || a.nom.localeCompare(b.nom, "fr"));
+
+  const total = Math.round(detail.reduce((s, d) => s + (d.montant || 0), 0));
 
   /* Ce que couterait la reserve si on l'activait. Chiffre a part : c'est un
      risque connu, pas une depense engagee — les confondre dans un seul nombre
@@ -218,6 +279,7 @@ function chiffrer(lignes, parametres) {
     mode_paiement: mode,
     devise: parametres?.devise || "FCFA",
     zones: detail,
+    partenaires: parPartenaire,
     total,
     total_en_reserve: Math.round(coutReserve),
     beneficiaires: detail.reduce((s, d) => s + d.beneficiaires, 0),

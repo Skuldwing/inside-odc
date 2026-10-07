@@ -246,6 +246,7 @@ router.get("/synthese", ...ADMIN_PLUS, async (req, res) => {
         WHERE a.activity_date BETWEEN $1 AND LEAST($2::date, CURRENT_DATE)
       )
       SELECT e.partner_id,
+             MAX(pr.name)                                         AS partenaire,
              e.zone,
              SUM(e.beneficiaires)::int                            AS beneficiaires,
              COALESCE(SUM(CASE WHEN e.beneficiaires > 0 THEN e.heures ELSE 0 END), 0)::numeric AS heures,
