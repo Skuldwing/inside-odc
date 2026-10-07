@@ -15,6 +15,12 @@ const router = express.Router();
    pour qu'aucune route ajoutee plus tard ne puisse l'oublier. */
 const ADMIN_PLUS = [authMiddleware, requireAdmin, requireSuperAdmin];
 
+/* Les seances sans partenaire forment un cas a part qu'on doit pouvoir
+   selectionner comme les autres. Une valeur sentinelle plutot qu'un identifiant
+   vide, qui se confondrait avec « tous ». Meme convention que l'ecran des
+   campagnes. */
+const SANS_PARTENAIRE = "__sans__";
+
 /* Comme ailleurs dans la plateforme : si la migration de demarrage a echoue,
    la page tomberait sur « colonne inconnue » sans rien expliquer. */
 let schemaRejoue = false;
@@ -264,11 +270,57 @@ router.get("/synthese", ...ADMIN_PLUS, async (req, res) => {
     ]);
 
     const parametres = lireParametres(paramsRes.rows[0]);
-    const chiffrage = chiffrer(lignesRes.rows, parametres);
+    const toutes = lignesRes.rows;
+
+    /* La liste des partenaires presents sur la periode, etablie AVANT tout
+       filtrage : c'est elle qui remplit le selecteur. La tirer des lignes
+       filtrees le viderait de tout sauf du choix en cours, et on ne pourrait
+       plus en sortir. */
+    const roster = [];
+    const vus = new Set();
+    for (const l of toutes) {
+      const cle = l.partner_id == null ? SANS_PARTENAIRE : String(l.partner_id);
+      if (vus.has(cle)) continue;
+      vus.add(cle);
+      roster.push({
+        id: cle,
+        nom: l.partenaire || (l.partner_id == null ? "Sans partenaire" : `Partenaire #${l.partner_id}`),
+      });
+    }
+    roster.sort((a, b) =>
+      /* « Sans partenaire » en dernier : c'est un cas a part, pas un
+         partenaire, et il n'a rien a faire au milieu de la liste. */
+      (a.id === SANS_PARTENAIRE) - (b.id === SANS_PARTENAIRE) ||
+      a.nom.localeCompare(b.nom, "fr")
+    );
+
+    /* Le filtre porte sur tout le chiffrage, pas seulement sur l'affichage du
+       tableau par partenaire. Masquer des lignes sans recalculer laisserait un
+       total qui ne correspond plus a ce qu'on voit — exactement ce qu'on
+       s'applique a eviter sur cette page. */
+    const demande = String(req.query.partenaire || "").trim();
+    /* Un identifiant qui ne designe personne vaut « tous ». Filtrer sur du vide
+       afficherait une page de zeros, ce qui se lit comme une panne et non comme
+       un choix. */
+    const choisi = roster.some((r) => r.id === demande) ? demande : null;
+    const lignes = !choisi
+      ? toutes
+      : toutes.filter((l) =>
+          choisi === SANS_PARTENAIRE
+            ? l.partner_id == null
+            : String(l.partner_id) === choisi
+        );
+
+    const chiffrage = chiffrer(lignes, parametres);
 
     res.json({
       periode: { annee, mois: mois || null, du, au },
       parametres,
+      roster,
+      /* Ce qui a reellement ete applique : un identifiant qui ne designe
+         personne vaut « tous », et l'ecran doit pouvoir le refleter plutot que
+         d'afficher un filtre actif sur un chiffre qui ne l'est pas. */
+      filtre: choisi,
       ...chiffrage,
     });
   } catch (err) {

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Wallet, Settings2, Loader2, Info, MapPin, Globe, Building2,
-  AlertTriangle, ShieldCheck, Archive,
+  AlertTriangle, ShieldCheck, Archive, Download,
 } from "lucide-react";
 import api from "../api";
 import { useToast } from "../components/ui";
@@ -40,10 +40,22 @@ export default function Budget() {
   const toast = useToast();
   const annee = new Date().getFullYear();
 
-  const [periode, setPeriode] = useState({ year: annee, month: "" });
+  const [periode, setPeriode] = useState({ year: annee, month: "", partenaire: "" });
   const [synthese, setSynthese] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [refuse, setRefuse] = useState(false);
+  const impression = useRef(null);
+  const [pdf, setPdf] = useState(false);
+
+  /* Le nom du partenaire choisi, s'il y en a un. Il sert à deux endroits : le
+     bandeau qui signale que les chiffres sont filtrés, et le nom du fichier
+     PDF — un document téléchargé doit dire de quoi il parle sans qu'on
+     l'ouvre. */
+  const nomDuFiltre = (() => {
+    const id = synthese?.filtre;
+    if (!id) return null;
+    return synthese?.roster?.find((r) => r.id === id)?.nom || null;
+  })();
 
   const [form, setForm] = useState(null);
   const [enregistre, setEnregistre] = useState(false);
@@ -55,6 +67,7 @@ export default function Budget() {
     try {
       const q = new URLSearchParams({ year: String(periode.year) });
       if (periode.month) q.set("month", String(periode.month));
+      if (periode.partenaire) q.set("partenaire", periode.partenaire);
       const { data } = await api.get(`/budget/synthese?${q}`);
       setSynthese(data);
       setForm((f) => f || { ...data.parametres });
@@ -96,6 +109,78 @@ export default function Budget() {
     }
   };
 
+  /* Le PDF, par capture de la zone imprimable — même procédé que le rapport
+     mensuel, et les deux bibliothèques ne sont chargées qu'au clic.
+   *
+   * Le thème est basculé en clair le temps du rendu, puis remis. Le mode sombre
+   * passe par « :root[data-theme] », qui redéfinit le fond des cartes : capturer
+   * sur un fond blanc forcé donnerait un document au texte clair sur page
+   * blanche, c'est-à-dire vide. */
+  const telecharger = async () => {
+    if (!impression.current) return;
+    setPdf(true);
+    const racine = document.documentElement;
+    const themeAvant = racine.getAttribute("data-theme");
+    try {
+      racine.setAttribute("data-theme", "light");
+      /* Un tour de boucle pour que le navigateur ait repeint avant la capture. */
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      /* Facteur 1,5 et non 2 : le document reste net à l'impression, et on ne
+         paie pas quatre fois la surface en pixels pour des tableaux de texte. */
+      const canvas = await html2canvas(impression.current, {
+        scale: 1.5, backgroundColor: "#ffffff", useCORS: true, logging: false,
+      });
+
+      /* Paysage : le tableau par partenaire porte jusqu'à huit colonnes, et en
+         portrait elles se tasseraient au point d'être illisibles. */
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const largeur = doc.internal.pageSize.getWidth();
+      const hauteur = doc.internal.pageSize.getHeight();
+      const pxParMm = canvas.width / largeur;
+      const hauteurPage = Math.floor(hauteur * pxParMm);
+
+      const tranche = document.createElement("canvas");
+      tranche.width = canvas.width;
+      tranche.height = hauteurPage;
+      const ctx = tranche.getContext("2d");
+
+      let y = 0;
+      while (y < canvas.height) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, tranche.width, tranche.height);
+        ctx.drawImage(canvas, 0, -y);
+        if (y > 0) doc.addPage();
+        /* JPEG plutôt que PNG. En PNG, une page de tableaux capturée au double
+           de la résolution produisait un fichier de trente mégaoctets —
+           intransmissible par courriel, c'est-à-dire inutilisable pour ce à quoi
+           sert un export de budget. La compression ne se voit pas sur du texte
+           noir sur blanc à cette qualité, et le fichier tient en quelques
+           centaines de kilooctets. */
+        doc.addImage(tranche.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, largeur, hauteur);
+        y += hauteurPage;
+      }
+
+      const quand = periode.month
+        ? `${periode.year}-${String(periode.month).padStart(2, "0")}`
+        : String(periode.year);
+      const qui = nomDuFiltre ? `-${nomDuFiltre.replace(/[^\w-]+/g, "_")}` : "";
+      doc.save(`budget-odc-${quand}${qui}.pdf`);
+    } catch (err) {
+      console.error("Erreur PDF:", err);
+      toast?.error?.("La génération du PDF a échoué.");
+    } finally {
+      if (themeAvant) racine.setAttribute("data-theme", themeAvant);
+      else racine.removeAttribute("data-theme");
+      setPdf(false);
+    }
+  };
+
   const soumettre = (e) => {
     e.preventDefault();
     const existant = sessionStorage.getItem("admin_pin");
@@ -127,6 +212,15 @@ export default function Budget() {
   const parHeure = synthese?.mode_paiement === "heure";
   const unite = parHeure ? "heure" : "bénéficiaire";
 
+  /* Les colonnes de zone du tableau par partenaire. Les trois zones tarifées
+     sont toujours là, même vides, pour que les colonnes restent alignées d'une
+     ligne à l'autre. « Lieu non renseigné » ne s'ajoute que s'il existe : sinon
+     c'est une colonne de tirets, mais quand il existe il doit se voir, sans
+     quoi la somme des colonnes ne tomberait pas sur le total. */
+  const colonnesZones = (synthese?.zones || []).filter(
+    (z) => z.zone !== "non_renseigne" || z.beneficiaires_reels > 0
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -140,7 +234,7 @@ export default function Budget() {
             Ce que représentent les séances réalisées, par zone et au tarif en vigueur.
           </p>
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <div>
             <label className="text-xs text-slate-500">Année</label>
             <input
@@ -161,6 +255,33 @@ export default function Budget() {
               {MOIS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
           </div>
+          {/* Le choix du partenaire recalcule toute la page, pas seulement le
+              second tableau : masquer des lignes sans recalculer laisserait un
+              total qui ne correspond plus à ce qu'on voit. La liste vient du
+              serveur et reste complète même quand un filtre est posé — sinon on
+              ne pourrait plus en sortir. */}
+          <div>
+            <label className="text-xs text-slate-500">Partenaire</label>
+            <select
+              className="select mt-1 max-w-[16rem]"
+              value={periode.partenaire}
+              onChange={(e) => setPeriode((p) => ({ ...p, partenaire: e.target.value }))}
+            >
+              <option value="">Tous les partenaires</option>
+              {(synthese?.roster || []).map((r) => (
+                <option key={r.id} value={r.id}>{r.nom}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="button"
+            className="btn-ghost border text-sm inline-flex items-center gap-1.5"
+            onClick={telecharger}
+            disabled={pdf || !synthese}
+          >
+            {pdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            PDF
+          </button>
         </div>
       </div>
 
@@ -273,7 +394,39 @@ export default function Budget() {
 
       {/* ── La synthèse ──────────────────────────────────────────────────── */}
       {synthese && (
-        <>
+        /* La zone capturée pour le PDF. Elle porte son propre en-tête : un
+           document téléchargé est lu loin de l'écran qui l'a produit, et des
+           chiffres sans période, sans filtre ni tarifs ne veulent rien dire. */
+        <div ref={impression} className="space-y-6 bg-white">
+          <div className="border-b border-slate-200 pb-3">
+            <p className="text-sm font-semibold text-slate-900">
+              Budget — Orange Digital Center Sénégal
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {periode.month
+                ? `${MOIS[Number(periode.month) - 1]} ${periode.year}`
+                : `Année ${periode.year}`}
+              {nomDuFiltre ? ` · ${nomDuFiltre}` : " · tous les partenaires"}
+              {" · "}
+              {parHeure ? "paiement à l'heure" : "paiement au bénéficiaire"}
+              {" · "}
+              Dakar {montant(synthese.parametres?.tarif_dakar, devise)} ·
+              {" "}régions {montant(synthese.parametres?.tarif_region, devise)} ·
+              {" "}en ligne {montant(synthese.parametres?.tarif_ligne, devise)}
+            </p>
+          </div>
+
+          {nomDuFiltre && (
+            <div className="flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+              <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-orange-600" aria-hidden="true" />
+              <p>
+                Tous les chiffres de cette page ne portent que sur
+                {" "}<strong>{nomDuFiltre}</strong>. Choisissez « Tous les
+                partenaires » pour revenir au budget complet.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="card-solid p-5">
               <p className="text-sm text-slate-500">Budget de la période</p>
@@ -443,9 +596,16 @@ export default function Budget() {
                     <tr>
                       <th className="text-left p-4">Partenaire</th>
                       <th className="text-right p-4">Objectif</th>
-                      <th className="text-right p-4">Bénéficiaires</th>
+                      {/* Le détail qui permet de lire le montant : un partenaire
+                          présent dans deux zones est facturé à deux tarifs, et
+                          sans ces colonnes son total paraît arbitraire. */}
+                      {colonnesZones.map((z) => (
+                        <th key={z.zone} className="text-right p-4">{z.libelle}</th>
+                      ))}
+                      <th className="text-right p-4">
+                        {parHeure ? "Heures" : "Total bénéf."}
+                      </th>
                       {!parHeure && <th className="text-right p-4">En réserve</th>}
-                      {parHeure && <th className="text-right p-4">Heures</th>}
                       <th className="text-right p-4">Total</th>
                     </tr>
                   </thead>
@@ -463,9 +623,18 @@ export default function Budget() {
                         <td className="p-4 text-right text-slate-600">
                           {p.objectif > 0 ? p.objectif : <span className="text-slate-300">—</span>}
                         </td>
+                        {colonnesZones.map((z) => {
+                          const seau = p.zones?.[z.zone];
+                          const v = parHeure ? seau?.heures : seau?.beneficiaires;
+                          return (
+                            <td key={z.zone} className="p-4 text-right text-slate-600">
+                              {v ? v : <span className="text-slate-300">—</span>}
+                            </td>
+                          );
+                        })}
                         <td className="p-4 text-right">
-                          {p.beneficiaires}
-                          {p.plafonne && (
+                          {parHeure ? p.heures : p.beneficiaires}
+                          {!parHeure && p.plafonne && (
                             <span className="block text-xs text-slate-400">
                               sur {p.beneficiaires_reels} réalisés
                             </span>
@@ -478,9 +647,6 @@ export default function Budget() {
                               : <span className="text-slate-300">—</span>}
                           </td>
                         )}
-                        {parHeure && (
-                          <td className="p-4 text-right text-slate-600">{p.heures}</td>
-                        )}
                         <td className="p-4 text-right font-semibold">
                           {montant(Math.round(p.montant), devise)}
                         </td>
@@ -489,14 +655,18 @@ export default function Budget() {
                     <tr className="table-row bg-slate-50">
                       <td className="p-4 font-semibold">Total</td>
                       <td className="p-4" />
-                      <td className="p-4 text-right font-semibold">{synthese.beneficiaires}</td>
+                      {colonnesZones.map((z) => (
+                        <td key={z.zone} className="p-4 text-right font-semibold">
+                          {parHeure ? z.heures : z.beneficiaires}
+                        </td>
+                      ))}
+                      <td className="p-4 text-right font-semibold">
+                        {parHeure ? synthese.heures : synthese.beneficiaires}
+                      </td>
                       {!parHeure && (
                         <td className="p-4 text-right font-semibold text-sky-700">
                           {synthese.en_reserve || "—"}
                         </td>
-                      )}
-                      {parHeure && (
-                        <td className="p-4 text-right font-semibold">{synthese.heures}</td>
                       )}
                       {/* Le même total que le tableau par zone, et ce n'est pas
                           une coïncidence : les deux découpent le même ensemble
@@ -511,7 +681,7 @@ export default function Budget() {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

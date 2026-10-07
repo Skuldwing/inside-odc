@@ -242,10 +242,24 @@ function chiffrer(lignes, parametres) {
     .map((p) => {
       let montant = 0;
       let facturable = 0;
-      for (const [z, seau] of Object.entries(p.zones)) {
+      /* Le detail zone par zone de ce partenaire, rendu a l'ecran : c'est ce
+         qui permet de lire son montant, puisqu'il ne se deduit pas d'un nombre
+         unique de beneficiaires. Toutes les zones sont presentes, y compris
+         celles ou il n'a rien fait, pour que le tableau garde des colonnes
+         alignees d'une ligne a l'autre. */
+      const parZone = {};
+      for (const z of ZONES) {
+        const seau = p.zones[z] || { retenu: 0, reel: 0, en_reserve: 0, heures: 0 };
         const tarif = tarifDe(z);
-        if (tarif == null) continue;
         const q = quantiteDe(seau);
+        parZone[z] = {
+          beneficiaires: seau.retenu,
+          beneficiaires_reels: seau.reel,
+          en_reserve: seau.en_reserve,
+          heures: arrondirHeures(seau.heures),
+          montant: tarif == null ? null : q * tarif,
+        };
+        if (tarif == null) continue;
         montant += q * tarif;
         facturable += q;
       }
@@ -259,6 +273,7 @@ function chiffrer(lignes, parametres) {
         plafonne: p.plafonne,
         heures: arrondirHeures(p.heures),
         quantite_facturee: mode === "heure" ? arrondirHeures(facturable) : facturable,
+        zones: parZone,
         montant,
       };
     })
