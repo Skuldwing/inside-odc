@@ -7,7 +7,7 @@ const { sendEmail } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
 
-const { getTemplate, renderTemplate, phraseOrganisateur } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, phraseOrganisateur, blocDetails, lienSignalement, composerEmail } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
@@ -825,12 +825,16 @@ router.post("/:id/send-attestations", authMiddleware, requireWriteAccess, async 
           dispositif: activity.device_name || "",
           duree: activity.duration_hours ? `${activity.duration_hours}h` : "",
         };
+        /* La fiche de la seance dans le message : seulement ce qui est
+           renseigne. Voir « blocDetails ». */
+        tplVars.details = blocDetails(tplVars);
+        tplVars.signalement = lienSignalement(tplVars);
 
         await sendEmail({
           toEmail: participant.email,
           toName: fullName,
           subject: renderTemplate(tpl.subject, tplVars),
-          html: renderTemplate(tpl.body_html, tplVars),
+          html: composerEmail(tpl, tplVars),
           text:
             `Bonjour ${fullName},\n\n` +
             `Veuillez trouver ci-joint votre attestation de participation à "${intitule}".\n` +
