@@ -314,6 +314,30 @@ function configurationEnvoi() {
   else if (smtpConfigure) fournisseur = "smtp";
   else fournisseur = "aucun";
 
+  /* « smtp » n'est pas un service, c'est un protocole.
+   *
+   * Brevo et Mailjet proposent tous deux un relais SMTP en plus de leur API :
+   * on peut donc passer par SMTP tout en etant chez Brevo. L'ecran l'ignorait
+   * et traitait « smtp » comme un synonyme d'Exchange Online — il reclamait
+   * alors « include:spf.protection.outlook.com », declarait les selecteurs
+   * brevo1/brevo2 « d'un autre service », et annoncait une usurpation. Trois
+   * alarmes, un seul malentendu, et un remede qui aurait aggrave les choses :
+   * autoriser Microsoft dans le SPF d'un domaine qui envoie par Brevo.
+   *
+   * On regarde donc l'hote. Ce qu'on diagnostique, c'est le service qui signe
+   * reellement, pas le protocole qui le transporte. */
+  const RELAIS_CONNUS = [
+    { motif: /(^|\.)brevo\.com$|(^|\.)sendinblue\.com$/i, service: "brevo" },
+    { motif: /(^|\.)mailjet\.com$/i, service: "mailjet" },
+  ];
+  const hote = String(smtpHost || "").trim().toLowerCase();
+  const relais = fournisseur === "smtp"
+    ? (RELAIS_CONNUS.find((r) => r.motif.test(hote))?.service || null)
+    : null;
+  /* Ce qui sert au diagnostic DNS : le service qui signe. « fournisseur »
+     reste le mode d'envoi, qui doit continuer de s'afficher tel quel. */
+  const signataire = relais || fournisseur;
+
   const domaineDe = (adresse) => (adresse && adresse.includes("@") ? adresse.split("@")[1].toLowerCase() : null);
   const domaineFrom = domaineDe(from);
   const domaineSmtp = domaineDe(smtpUser);
@@ -324,7 +348,14 @@ function configurationEnvoi() {
       "Aucun service d'envoi n'est configure : les emails sont ignores silencieusement."
     );
   }
-  if (fournisseur === "smtp" && domaineFrom && domaineSmtp && domaineFrom !== domaineSmtp) {
+  /* L'alerte d'usurpation ne vaut que pour une boite ordinaire — un compte
+     Exchange ou un serveur maison, ou l'adresse d'expedition doit appartenir au
+     domaine du compte. Un relais professionnel fonctionne autrement : le
+     compte « 7bf1df001@smtp-brevo.com » n'est qu'un identifiant de connexion,
+     et la signature DKIM est deleguee au domaine de l'expediteur par les
+     enregistrements brevo1/brevo2. L'alignement est alors correct, et crier a
+     l'usurpation enverrait chercher un probleme qui n'existe pas. */
+  if (!relais && fournisseur === "smtp" && domaineFrom && domaineSmtp && domaineFrom !== domaineSmtp) {
     alertes.push(
       `Les messages partent du compte ${smtpUser} mais s'annoncent comme venant de ${from}. ` +
         "Pour un serveur destinataire, c'est une usurpation : ni SPF ni DKIM ne peuvent s'aligner, " +
@@ -378,6 +409,10 @@ function configurationEnvoi() {
     smtp_configure: smtpConfigure,
     smtp_hote: smtpHost,
     smtp_compte: smtpUser,
+    /* Le service qui signe reellement, quand l'envoi passe par le relais SMTP
+       d'un prestataire. C'est lui que le diagnostic DNS doit interroger. */
+    signataire,
+    relais,
     alertes,
   };
 }
