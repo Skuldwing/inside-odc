@@ -163,6 +163,30 @@ const DEFAULTS = {
             </table>`,
     variables: ["{{nom}}", "{{lien}}", "{{bouton}}"],
   },
+  espace_lien: {
+    slug: "espace_lien",
+    label: "Accès à l'espace bénéficiaire",
+    description: "Envoyé quand un bénéficiaire demande le lien d'accès à son espace depuis le site.",
+    subject: `Votre accès à l'espace ${IDENTITE.nomCourt}`,
+    apercu: "Votre lien d'accès vous attend. Il est valable une heure.",
+    body_html: `            <p style="${P}">Bonjour,</p>
+            <p style="${P}">Voici votre lien d'accès à votre espace ${IDENTITE.nom}. Vous y retrouverez les formations que vous avez suivies et vos attestations, à télécharger quand vous le souhaitez.</p>
+
+{{bouton}}
+            <p style="${PETIT};text-align:center">Ce lien est valable <strong>{{duree}}</strong> et ne peut servir qu'une fois.</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F8FAFC;border-radius:8px;margin:18px 0 0">
+              <tr>
+                <td style="padding:14px 16px">
+                  <p style="margin:0;font-family:${POLICE};font-size:13px;line-height:20px;color:${GRIS}">
+                    <strong style="color:${ENCRE}">Vous n'avez rien demandé&nbsp;?</strong>
+                    Ignorez ce message : sans clic de votre part, ce lien expire tout seul et rien ne s'ouvre.
+                  </p>
+                </td>
+              </tr>
+            </table>`,
+    variables: ["{{lien}}", "{{duree}}", "{{bouton}}"],
+  },
   attestation: {
     slug: "attestation",
     label: "Attestation de participation",

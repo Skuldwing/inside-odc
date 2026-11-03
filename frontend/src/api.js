@@ -36,7 +36,7 @@ api.interceptors.request.use(
   }
 );
 
-const PUBLIC_PREFIXES = ["/login", "/set-password", "/checkin/", "/f/", "/vote/join/", "/vote/jury/", "/vote/guest-join/", "/vote/guest/", "/vote/project/"];
+const PUBLIC_PREFIXES = ["/login", "/set-password", "/espace", "/checkin/", "/f/", "/vote/join/", "/vote/jury/", "/vote/guest-join/", "/vote/guest/", "/vote/project/"];
 
 /* La racine est comparee a l'identique, pas en prefixe : « / » est le prefixe
    de toutes les adresses, l'ajouter a la liste ci-dessus desactiverait la

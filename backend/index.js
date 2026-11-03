@@ -16,6 +16,7 @@ const campagnesRoutes = require("./routes/campagnes.routes");
 const importRoutes = require("./routes/import.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const budgetRoutes = require("./routes/budget.routes");
+const espaceRoutes = require("./routes/espace.routes");
 const socialKpisRoutes = require("./routes/socialKpis.routes");
 const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const socialReportRoutes = require("./routes/socialReport.routes");
@@ -42,6 +43,7 @@ const { ensureIdentitesDistinctes } = require("./migrations/identitesDistinctes"
 const { ensureListeTelleQuelle } = require("./migrations/listeTelleQuelle");
 const { ensureReservePartenaire } = require("./migrations/reservePartenaire");
 const { ensureBudget } = require("./migrations/budget");
+const { ensureEspaceBeneficiaire } = require("./migrations/espaceBeneficiaire");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -173,6 +175,8 @@ app.use("/import", importRoutes);
 app.use("/dashboard", dashboardRoutes);
 /* Reserve aux Admin + : les controles sont dans le routeur, pas ici. */
 app.use("/budget", budgetRoutes);
+/* Espace beneficiaire : public, protege par ses propres jetons. */
+app.use("/espace", espaceRoutes);
 app.use("/social-kpis", socialKpisRoutes);
 app.use("/social-dashboard", socialDashboardRoutes);
 app.use("/social-dashboard", socialReportRoutes);
@@ -837,6 +841,16 @@ pool.query(`
     }
   } catch (e) {
     console.error("Migration budget ECHOUEE :", e.message);
+  }
+})();
+
+/* ── L'espace des beneficiaires, et les liens d'acces ── */
+(async () => {
+  try {
+    await ensureEspaceBeneficiaire();
+    console.log("Migration OK: espace beneficiaire");
+  } catch (e) {
+    console.error("Migration espace beneficiaire ECHOUEE :", e.message);
   }
 })();
 
