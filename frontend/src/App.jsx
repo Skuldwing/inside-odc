@@ -20,6 +20,7 @@ const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
 const Budget = lazy(() => import("./pages/Budget"));
+const Espace = lazy(() => import("./pages/Espace"));
 const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
 const Formulaires = lazy(() => import("./pages/Formulaires"));
@@ -57,6 +58,16 @@ export default function App() {
       {/* ===== PUBLIC ===== */}
       <Route path="/login" element={<Login />} />
       <Route path="/set-password" element={<SetPassword />} />
+      {/* Espace beneficiaire : public, sans mot de passe. C'est ici que mene
+          desormais le bouton de la page d'accueil. */}
+      <Route
+        path="/espace"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <Espace />
+          </Suspense>
+        }
+      />
       <Route
         path="/f/:slug"
         element={

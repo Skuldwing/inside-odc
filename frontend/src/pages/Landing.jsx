@@ -140,8 +140,12 @@ export default function Landing() {
     return () => zone.removeEventListener("pointermove", onMove);
   }, []);
 
-  const lienApp = isAuthenticated ? "/dashboard" : "/login";
-  const libelleApp = isAuthenticated ? "Accéder à la plateforme" : "Se connecter";
+  /* La connexion mise en avant ici est celle des beneficiaires : la page
+     d'accueil s'adresse au public, pas a l'equipe. L'acces a la plateforme —
+     reserve a l'interne et aux partenaires — reste atteignable depuis
+     l'espace, et bien sur directement par /login. */
+  const lienApp = isAuthenticated ? "/dashboard" : "/espace";
+  const libelleApp = isAuthenticated ? "Accéder à la plateforme" : "Mon espace";
 
   return (
     <div className="lp">
