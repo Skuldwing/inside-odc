@@ -6,7 +6,7 @@ const requireAdmin = require("../middleware/role.middleware");
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
 const { createPasswordToken, DUREE_LIEN_HEURES } = require("../services/passwordReset");
-const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, composerEmail, boutonAction } = require("./emailTemplates.routes");
 const requireAdminPin = require("../middleware/pin.middleware");
 const crypto = require("crypto");
 const { logAudit } = require("../services/audit");
@@ -208,11 +208,12 @@ router.post("/", async (req, res) => {
 
       const tpl = await getTemplate("welcome");
       const vars = { nom: full_name || email, email, lien: link };
+      vars.bouton = boutonAction(link, "Définir mon mot de passe");
       await sendEmail({
         toEmail: email,
         toName: full_name || email,
         subject: renderTemplate(tpl.subject, vars),
-        html: renderTemplate(tpl.body_html, vars),
+        html: composerEmail(tpl, vars),
         text: `Bonjour ${full_name || email}\nDéfinir le mot de passe: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
       });
     } catch (err) {
@@ -423,12 +424,13 @@ router.post("/:id/reset-password", async (req, res) => {
        l'ecran devenu invalide — les deux portes fermees d'un coup. */
     const tpl = await getTemplate("reset_password");
     const vars = { nom: user.full_name || user.email, lien: link };
+    vars.bouton = boutonAction(link, "Choisir un nouveau mot de passe");
     try {
       await sendEmail({
         toEmail: user.email,
         toName: user.full_name || user.email,
         subject: renderTemplate(tpl.subject, vars),
-        html: renderTemplate(tpl.body_html, vars),
+        html: composerEmail(tpl, vars),
         text: `Bonjour ${user.full_name || user.email}\nLien de réinitialisation: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
       });
     } catch (err) {

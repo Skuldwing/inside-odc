@@ -9,7 +9,7 @@ const { genererAttestation, styleRetenu, stylesDisponibles } = require("../servi
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
-const { getTemplate, renderTemplate } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, phraseOrganisateur, blocDetails, lienSignalement, composerEmail } = require("./emailTemplates.routes");
 
 const router = express.Router();
 
@@ -479,16 +479,22 @@ router.post("/envoyer", authMiddleware, requireAdmin, async (req, res) => {
       activite: d.intitule,
       date: d.date.toLocaleDateString("fr-FR"),
       partenaire: modele.organisation || "",
+      /* Cette route ne transmettait pas « organisateur » : la variable
+         arrivait telle quelle chez le beneficiaire, « {{organisateur}} » en
+         toutes lettres au milieu du message. */
+      organisateur: phraseOrganisateur(modele.organisation),
       dispositif: modele.programme || "",
       duree: "",
     };
+    vars.details = blocDetails(vars);
+    vars.signalement = lienSignalement(vars);
 
     try {
       await sendEmail({
         toEmail: email,
         toName: nomComplet || email,
         subject: renderTemplate(tpl.subject, vars),
-        html: renderTemplate(tpl.body_html, vars),
+        html: composerEmail(tpl, vars),
         text: `Bonjour ${nomComplet},\n\nVeuillez trouver ci-joint votre attestation de participation à "${d.intitule}".\n\n— ODC Sénégal`,
         attachments: [
           { filename: nomFichier(d.prenom, d.nom), content: pdf, contentType: "application/pdf" },

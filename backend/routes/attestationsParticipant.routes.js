@@ -7,7 +7,7 @@ const { trierAdresses } = require("../services/adressesValides");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
 const { classerParAssiduite } = require("../services/assiduite");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
-const { getTemplate, renderTemplate, phraseOrganisateur } = require("./emailTemplates.routes");
+const { getTemplate, renderTemplate, phraseOrganisateur, blocDetails, lienSignalement, composerEmail } = require("./emailTemplates.routes");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 const { ensureAttestationsTerminees } = require("../migrations/attestationsTerminees");
 
@@ -474,13 +474,15 @@ router.post("/envoyer", authMiddleware, async (req, res) => {
       dispositif: autorisees.rows[0].device_name || "",
       duree: "",
     };
+    vars.details = blocDetails(vars);
+    vars.signalement = lienSignalement(vars);
 
     try {
       await sendEmail({
         toEmail: email,
         toName: nomComplet,
         subject: renderTemplate(tpl.subject, vars),
-        html: renderTemplate(tpl.body_html, vars),
+        html: composerEmail(tpl, vars),
         text:
           `Bonjour ${nomComplet},\n\n` +
           `Veuillez trouver ci-joint votre attestation de participation ` +
