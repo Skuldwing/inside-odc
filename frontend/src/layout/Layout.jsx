@@ -120,7 +120,6 @@ export default function Layout() {
         style={{ transition: "padding-left 0.3s" }}
       >
         <Header
-          currentPageName={currentPageName}
           onMenuClick={() => setSidebarOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
         />

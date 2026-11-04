@@ -42,6 +42,8 @@ const Fiabilite = lazy(() => import("./pages/Fiabilite"));
 const Mbootay = lazy(() => import("./pages/Mbootay"));
 const Profil = lazy(() => import("./pages/Profil"));
 const MbootayProjet = lazy(() => import("./pages/MbootayProjet"));
+const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
+const ParticipantProfile = lazy(() => import("./pages/ParticipantProfile"));
 
 /* Adresse inconnue : une personne connectee revient a son tableau de bord,
    un visiteur a la page d'accueil. Renvoyer tout le monde vers la vitrine
@@ -170,10 +172,26 @@ export default function App() {
           }
         />
         <Route
+          path="activities/:id"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ActivityDetail />
+            </Suspense>
+          }
+        />
+        <Route
           path="participants"
           element={
             <Suspense fallback={<PageLoader />}>
               <Participants />
+            </Suspense>
+          }
+        />
+        <Route
+          path="participants/:id"
+          element={
+            <Suspense fallback={<PageLoader />}>
+              <ParticipantProfile />
             </Suspense>
           }
         />

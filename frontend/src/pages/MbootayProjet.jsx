@@ -28,6 +28,7 @@ import {
   GripVertical,
 } from "lucide-react";
 import api from "../api";
+import { useAuth } from "../auth/useAuth";
 import AdminModal from "../components/admin/AdminModal";
 import { projectStatusMeta } from "./Mbootay";
 import { useToast, useConfirm, Button } from "../components/ui";
@@ -35,7 +36,9 @@ import { useToast, useConfirm, Button } from "../components/ui";
 const TASK_COLUMNS = [
   { key: "a_faire", label: "À faire", dot: "bg-slate-400" },
   { key: "en_cours", label: "En cours", dot: "bg-orange-500" },
+  { key: "en_pause", label: "En pause", dot: "bg-amber-500" },
   { key: "termine", label: "Terminé", dot: "bg-emerald-500" },
+  { key: "annule", label: "Annulé", dot: "bg-slate-300" },
 ];
 
 const TASK_PRIORITIES = [
@@ -65,6 +68,7 @@ export default function MbootayProjet() {
   const { id } = useParams();
   const toast = useToast();
   const confirm = useConfirm();
+  const { user } = useAuth();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
@@ -274,10 +278,11 @@ export default function MbootayProjet() {
       )}
 
       {/* En-tête */}
-      <div className="card p-5 space-y-4">
+      <div className="relative isolate space-y-5 overflow-hidden rounded-3xl bg-slate-950 p-5 text-white shadow-xl shadow-slate-900/10 sm:p-7">
+        <div className="absolute -right-10 -top-16 -z-10 h-60 w-60 rounded-full bg-orange-500/25 blur-3xl" />
         <Link
           to="/mbootay"
-          className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-orange-600 transition"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-300 transition hover:text-orange-300"
         >
           <ArrowLeft className="w-4 h-4" />
           Mbootay
@@ -285,9 +290,9 @@ export default function MbootayProjet() {
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="page-title">{project?.title}</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{project?.title}</h1>
             {project?.description && (
-              <p className="page-subtitle max-w-2xl">{project.description}</p>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{project.description}</p>
             )}
             <div className="flex flex-wrap items-center gap-2 mt-3">
               <span className={`badge border-transparent ${meta.badge}`}>
@@ -295,25 +300,25 @@ export default function MbootayProjet() {
                 {meta.label}
               </span>
               {project?.owner_name && (
-                <span className="badge bg-slate-100 border-slate-200 text-slate-600">
+                <span className="badge border-white/20 bg-white/10 text-slate-100">
                   <Users className="w-3 h-3 mr-1.5" />
                   {project.owner_name}
                 </span>
               )}
               {project?.partner_name && (
-                <span className="badge bg-slate-100 border-slate-200 text-slate-600">
+                <span className="badge border-white/20 bg-white/10 text-slate-100">
                   <Building2 className="w-3 h-3 mr-1.5" />
                   {project.partner_name}
                 </span>
               )}
               {project?.device_name && (
-                <span className="badge bg-slate-100 border-slate-200 text-slate-600">
+                <span className="badge border-white/20 bg-white/10 text-slate-100">
                   <Layers className="w-3 h-3 mr-1.5" />
                   {project.device_name}
                 </span>
               )}
               {project?.due_date && (
-                <span className="badge bg-slate-100 border-slate-200 text-slate-600">
+                <span className="badge border-white/20 bg-white/10 text-slate-100">
                   <CalendarDays className="w-3 h-3 mr-1.5" />
                   Échéance {format(toDateOnly(project.due_date), "d MMM yyyy", { locale: fr })}
                 </span>
@@ -322,7 +327,7 @@ export default function MbootayProjet() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button onClick={openMembers} className="btn-ghost border">
+            <button onClick={openMembers} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15">
               <Users className="w-4 h-4" />
               Membres ({members.length})
             </button>
@@ -333,14 +338,31 @@ export default function MbootayProjet() {
           </div>
         </div>
 
+        {members.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-3" aria-label="Membres du projet">
+            <span className="mr-1 text-xs font-semibold text-slate-300">Équipe du projet</span>
+            {members.map((member) => {
+              const name = member.full_name || member.email || "Membre";
+              const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+              const isCurrentUser = Number(member.id) === Number(user?.id);
+              return (
+                <span key={member.id} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${isCurrentUser ? "border-orange-300/60 bg-orange-400/15 text-orange-100" : "border-white/10 bg-white/5 text-slate-100"}`}>
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${isCurrentUser ? "bg-orange-500 text-white" : "bg-white/15 text-white"}`}>{initials}</span>
+                  {name}{isCurrentUser ? " · Moi" : ""}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
         <div>
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-            <span>Avancement</span>
-            <span className="font-medium text-slate-700">
+          <div className="mb-1.5 flex items-center justify-between text-xs text-slate-300">
+            <span className="font-semibold">Avancement</span>
+            <span className="font-semibold text-white">
               {progress.done}/{progress.total} tâches · {progress.pct}%
             </span>
           </div>
-          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-2 overflow-hidden rounded-full bg-white/20">
             <div
               className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-500"
               style={{ width: `${progress.pct}%` }}
@@ -350,7 +372,7 @@ export default function MbootayProjet() {
       </div>
 
       {/* Bascule de vue */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100 p-2">
         <ViewToggle active={view === "kanban"} onClick={() => setView("kanban")} icon={Columns3}>
           Kanban
         </ViewToggle>
@@ -360,7 +382,7 @@ export default function MbootayProjet() {
       </div>
 
       {view === "kanban" ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
           {TASK_COLUMNS.map((column) => {
             const columnTasks = tasks.filter((t) => (t.status || "a_faire") === column.key);
             return (
@@ -377,16 +399,16 @@ export default function MbootayProjet() {
                   setDraggedId(null);
                   setDragOverColumn(null);
                 }}
-                className={`rounded-2xl border p-3 min-h-[240px] transition ${
+                className={`min-h-[240px] rounded-2xl border-2 p-3.5 transition ${
                   dragOverColumn === column.key
-                    ? "border-orange-300 bg-orange-50/60"
-                    : "border-slate-200 bg-slate-50/60"
+                    ? "border-orange-500 bg-orange-100"
+                    : "border-slate-300 bg-slate-100"
                 }`}
               >
-                <div className="flex items-center gap-2 px-1 mb-3">
-                  <span className={`w-2 h-2 rounded-full ${column.dot}`} />
-                  <p className="text-sm font-semibold text-slate-700">{column.label}</p>
-                  <span className="ml-auto text-xs text-slate-500">{columnTasks.length}</span>
+                <div className="mb-3 flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-white">
+                  <span className={`h-2.5 w-2.5 rounded-full ring-2 ring-white/25 ${column.dot}`} />
+                  <p className="text-sm font-bold">{column.label}</p>
+                  <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold text-white">{columnTasks.length}</span>
                 </div>
 
                 <div className="space-y-2">
@@ -408,7 +430,7 @@ export default function MbootayProjet() {
 
                 <button
                   onClick={() => openCreateTask(column.key)}
-                  className="mt-2 w-full rounded-xl border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500 transition hover:border-orange-300 hover:text-orange-600"
+                  className="mt-2 w-full rounded-xl border-2 border-dashed border-slate-400 bg-white/70 px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:border-orange-500 hover:bg-white hover:text-orange-800"
                 >
                   + Ajouter une tâche
                 </button>
@@ -571,7 +593,7 @@ function ViewToggle({ active, onClick, icon: Icon, children }) {
       className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition ${
         active
           ? "border-orange-200 bg-orange-50 text-orange-700"
-          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          : "border-slate-300 bg-white text-slate-800 hover:bg-slate-100"
       }`}
     >
       <Icon className="w-4 h-4" />
@@ -585,32 +607,32 @@ function TaskCard({ task, onDragStart, onDragEnd, dragging, onEdit, onDelete }) 
   const due = toDateOnly(task.due_date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const late = due && due < today && task.status !== "termine";
+  const late = due && due < today && !["termine", "annule"].includes(task.status);
 
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`group rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition cursor-grab active:cursor-grabbing hover:border-orange-200 ${
+      className={`group cursor-grab rounded-xl border-2 border-slate-300 bg-white p-3.5 shadow-sm transition hover:border-orange-400 hover:shadow-md active:cursor-grabbing ${
         dragging ? "opacity-40" : ""
       }`}
     >
       <div className="flex items-start gap-2">
-        <GripVertical className="w-3.5 h-3.5 text-slate-300 mt-0.5 flex-shrink-0" />
+        <GripVertical className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" />
         <p
-          className={`text-sm flex-1 ${
-            task.status === "termine" ? "text-slate-500 line-through" : "text-slate-800"
+          className={`flex-1 text-sm font-semibold leading-5 ${
+            ["termine", "annule"].includes(task.status) ? "text-slate-600 line-through decoration-2" : "text-slate-950"
           }`}
         >
           {task.title}
         </p>
-        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition flex-shrink-0">
-          <button onClick={onEdit} className="text-slate-500 hover:text-orange-500" title="Modifier">
-            <Pencil className="w-3.5 h-3.5" />
+        <div className="flex flex-shrink-0 items-center gap-1.5 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+          <button onClick={onEdit} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-orange-50 hover:text-orange-700" title="Modifier">
+            <Pencil className="h-4 w-4" />
           </button>
-          <button onClick={onDelete} className="text-slate-500 hover:text-red-500" title="Supprimer">
-            <Trash2 className="w-3.5 h-3.5" />
+          <button onClick={onDelete} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-700" title="Supprimer">
+            <Trash2 className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -622,14 +644,14 @@ function TaskCard({ task, onDragStart, onDragEnd, dragging, onEdit, onDelete }) 
             className={`badge ${
               late
                 ? "bg-red-50 border-red-200 text-red-700"
-                : "bg-slate-100 border-slate-200 text-slate-600"
+                : "bg-slate-200 border-slate-300 text-slate-800"
             }`}
           >
             {format(due, "d MMM", { locale: fr })}
           </span>
         )}
         {task.assigned_name && (
-          <span className="text-xs text-slate-500 truncate max-w-[110px]">{task.assigned_name}</span>
+          <span className="max-w-[110px] truncate text-xs font-medium text-slate-700">{task.assigned_name}</span>
         )}
       </div>
     </div>
@@ -660,8 +682,8 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
   return (
     <div className="space-y-4">
       <div className="card p-4">
-        <div className="flex items-center justify-between mb-4">
-          <p className="font-semibold text-slate-900 capitalize">
+          <div className="mb-4 flex items-center justify-between">
+          <p className="font-bold text-slate-950 capitalize">
             {format(month, "MMMM yyyy", { locale: fr })}
           </p>
           <div className="flex items-center gap-2">
@@ -685,13 +707,13 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px text-center text-xs uppercase tracking-wide text-slate-500 mb-1">
+        <div className="mb-1 grid grid-cols-7 gap-px text-center text-xs font-bold uppercase tracking-wide text-slate-700">
           {["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"].map((d) => (
             <div key={d} className="py-1">{d}</div>
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-px bg-slate-200 rounded-xl overflow-hidden">
+        <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xl border-2 border-slate-400 bg-slate-400">
           {days.map((day) => {
             const key = format(day, "yyyy-MM-dd");
             const dayTasks = tasksByDay.get(key) || [];
@@ -700,15 +722,15 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
             return (
               <div
                 key={key}
-                className={`min-h-[92px] bg-white p-1.5 ${inMonth ? "" : "bg-slate-50/80"}`}
+                className={`min-h-[92px] p-1.5 ${inMonth ? "bg-white" : "bg-slate-100"}`}
               >
                 <div
                   className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs mb-1 ${
                     isToday
                       ? "bg-orange-500 text-white font-semibold"
                       : inMonth
-                      ? "text-slate-600"
-                      : "text-slate-300"
+                      ? "font-semibold text-slate-800"
+                      : "font-medium text-slate-500"
                   }`}
                 >
                   {format(day, "d")}
@@ -721,17 +743,17 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
                       title={t.title}
                       className={`block w-full text-left truncate rounded-md px-1.5 py-1 text-xs transition ${
                         t.status === "termine"
-                          ? "bg-emerald-50 text-emerald-700 line-through"
+                          ? "bg-emerald-100 font-semibold text-emerald-900 line-through"
                           : t.priority === "haute"
-                          ? "bg-red-50 text-red-700 hover:bg-red-100"
-                          : "bg-orange-50 text-orange-700 hover:bg-orange-100"
+                          ? "bg-red-100 font-semibold text-red-900 hover:bg-red-200"
+                          : "bg-orange-100 font-semibold text-orange-900 hover:bg-orange-200"
                       }`}
                     >
                       {t.title}
                     </button>
                   ))}
                   {dayTasks.length > 3 && (
-                    <p className="text-xs text-slate-500 px-1.5">
+                    <p className="px-1.5 text-xs font-semibold text-slate-700">
                       +{dayTasks.length - 3} autre{dayTasks.length - 3 > 1 ? "s" : ""}
                     </p>
                   )}
@@ -744,13 +766,13 @@ function TaskCalendar({ tasks, month, onPrev, onNext, onToday, onSelectTask }) {
 
       {undated.length > 0 && (
         <div className="card p-4">
-          <p className="text-sm font-semibold text-slate-700 mb-2">Sans échéance</p>
+          <p className="mb-2 text-sm font-bold text-slate-900">Sans échéance</p>
           <div className="flex flex-wrap gap-2">
             {undated.map((t) => (
               <button
                 key={t.id}
                 onClick={() => onSelectTask(t)}
-                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 transition hover:border-orange-200 hover:text-orange-600"
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-800 transition hover:border-orange-300 hover:text-orange-800"
               >
                 {t.title}
               </button>

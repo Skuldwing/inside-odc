@@ -11,11 +11,10 @@ import {
   FileText,
 } from "lucide-react";
 import { useAuth } from "../auth/useAuth";
-import ODCLogo from "../components/branding/ODCLogo";
 import NotificationBell from "../components/NotificationBell";
 import { ThemeToggle } from "../components/ui";
 
-export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
+export default function Header({ onMenuClick, onOpenSearch }) {
   /* macOS affiche ⌘K, le reste Ctrl K. */
   const shortcutLabel =
     typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "")
@@ -26,6 +25,28 @@ export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
   const { logout, role } = useAuth();
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef(null);
+  const headerRef = useRef(null);
+
+  /* La hauteur reelle de l'en-tete est publiee en variable CSS : les barres
+     collantes des pages s'y accrochent sans dependre de valeurs en dur, qui
+     varient selon la taille de l'ecran et le mode tactile. */
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty(
+        "--app-header-h",
+        `${el.offsetHeight}px`
+      );
+    publish();
+    window.addEventListener("resize", publish);
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => {
+      window.removeEventListener("resize", publish);
+      observer.disconnect();
+    };
+  }, []);
 
   const quickActions = useMemo(() => {
     const actions = [
@@ -85,9 +106,12 @@ export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
 
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/75 backdrop-blur-xl">
-      <div className="flex items-center justify-between gap-4 px-4 py-3 lg:px-8 lg:py-4">
-        <div className="flex min-w-0 items-center gap-3 lg:gap-4">
+    <header
+      ref={headerRef}
+      className="app-topbar sticky top-0 z-30 border-b backdrop-blur-xl"
+    >
+      <div className="flex min-h-[72px] items-center justify-start gap-3 px-4 lg:gap-5 lg:px-8">
+        <div className="flex shrink-0 items-center gap-3">
           <button
             className="lg:hidden text-slate-600 transition-transform hover:text-slate-900 active:scale-90"
             onClick={onMenuClick}
@@ -96,30 +120,22 @@ export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
             <Menu />
           </button>
 
-          <div className="min-w-0 flex items-center gap-3">
-            <ODCLogo variant="mark" className="hidden h-8 w-8 rounded-lg sm:block" />
-            <div className="min-w-0">
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                Inside ODC
-              </p>
-              {/* Plus de `capitalize` : les libelles sont deja correctement
-                  casses, et la regle transformait "Journaux d'audit" en
-                  "Journaux D'audit". */}
-              <h2 className="truncate text-lg font-semibold text-slate-900">
-                {currentPageName}
-              </h2>
-            </div>
+          {/* Marque compacte, reste a cote de la recherche quelle que soit la largeur. */}
+          <div className="flex min-w-0 items-center">
+            <span className="app-brand-wordmark" aria-label="ODC">
+              <span className="app-brand-initial">O</span><span>DC</span>
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 lg:gap-3">
+        <div className="flex min-w-0 flex-1 items-center justify-start gap-2 lg:gap-3">
           {/* L'ancien champ n'interrogeait aucune donnee : il testait quatre
               chaines en dur et renvoyait tout le reste sur Participants. Il
               ouvre desormais la vraie recherche. */}
           <button
             type="button"
             onClick={onOpenSearch}
-            className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-orange-300 xl:flex xl:min-w-[240px] 2xl:min-w-[320px]"
+            className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-orange-300 xl:flex xl:min-w-[220px] xl:max-w-[440px] xl:flex-1"
           >
             <Search className="h-4 w-4 flex-shrink-0 text-slate-500" aria-hidden="true" />
             <span className="flex-1 text-sm text-slate-500">Rechercher…</span>
@@ -141,7 +157,7 @@ export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
           <div className="relative hidden sm:block" ref={actionsRef}>
             {role === "admin" && (
               <button
-                className="inline-flex btn-primary mr-2"
+                className="inline-flex btn-primary"
                 onClick={() => navigate("/formulaires?action=new")}
               >
                 <FileText className="w-4 h-4" />
@@ -182,9 +198,11 @@ export default function Header({ currentPageName, onMenuClick, onOpenSearch }) {
           <button
             className="btn-ghost border border-red-100 bg-white text-red-600 hover:bg-red-50"
             onClick={handleLogout}
+            title="Déconnexion"
+            aria-label="Déconnexion"
           >
             <LogOut className="w-4 h-4" />
-            Déconnexion
+            <span className="hidden sm:inline">Déconnexion</span>
           </button>
         </div>
       </div>

@@ -60,6 +60,13 @@ const GROUPES = [
     ],
   },
   {
+    titre: "Équipe ODC",
+    equipe: true,
+    items: [
+      { name: "Mbootay", icon: KanbanSquare, path: "/mbootay", matchPrefix: true },
+    ],
+  },
+  {
     /* Ce qui s'adresse aux participants et aux partenaires. */
     titre: "Animation",
     items: [
@@ -76,13 +83,6 @@ const GROUPES = [
       { name: "Partenaires", icon: Building2, path: "/partenaires", roles: ["admin"] },
       { name: "Dispositifs", icon: Layers, path: "/dispositifs", roles: ["admin"] },
       { name: "Attestations", icon: Award, path: "/modeles-attestation", roles: ["admin"] },
-    ],
-  },
-  {
-    titre: "Équipe ODC",
-    equipe: true,
-    items: [
-      { name: "Mbootay", icon: KanbanSquare, path: "/mbootay", matchPrefix: true },
     ],
   },
   {
@@ -126,7 +126,7 @@ function NavLink({ item, collapsed, location, onClick, index = 0 }) {
       className={clsx(
         "anim-fade-in-up group",
         collapsed
-          ? "flex items-center justify-center rounded-xl py-2.5 text-slate-300 hover:bg-white/10 hover:text-white transition"
+          ? "sidebar-nav-collapsed flex items-center justify-center rounded-xl py-2.5 transition"
           : "nav-pill",
         active && "nav-pill-active"
       )}
@@ -153,9 +153,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
   return (
     <aside
       className={clsx(
-        "fixed top-0 left-0 z-50 h-full border-r border-white/10 text-white/90",
-        "bg-[radial-gradient(circle_at_10%_-10%,#1e293b_0%,#0b1220_48%,#050915_100%)]",
-        "shadow-2xl shadow-slate-950/50",
+        "odc-sidebar fixed top-0 left-0 z-50 h-full border-r",
         "transform transition-all duration-300",
         sidebarOpen ? "translate-x-0" : "-translate-x-full",
         "lg:translate-x-0",
@@ -167,23 +165,23 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
 
         {/* Header */}
         <div className={clsx(
-          "flex items-center border-b border-white/10",
-          collapsed ? "flex-col gap-2 px-2 py-4" : "justify-between px-5 py-4"
+          "odc-sidebar-header flex min-h-[73px] items-center border-b",
+          collapsed ? "flex-col justify-center gap-1 px-2 py-0" : "justify-between px-5 py-0"
         )}>
           <div className={clsx("flex items-center", !collapsed && "gap-3")}>
             <ODCLogo
               variant="mark"
               className={clsx(
-                "shadow-lg shadow-orange-500/30 ring-1 ring-orange-300/30",
+                "shadow-lg shadow-orange-500/25 ring-1 ring-orange-300/30",
                 collapsed ? "h-8 w-8 rounded-lg" : "h-10 w-10 rounded-xl"
               )}
             />
             {!collapsed && (
               <div>
-                <h1 className="text-white font-semibold tracking-tight text-[14px]">
+                <h1 className="odc-sidebar-brand-name font-semibold tracking-tight text-[14px]">
                   Inside ODC
                 </h1>
-                <p className="text-xs text-slate-400 uppercase tracking-[0.2em]">
+                <p className="odc-sidebar-brand-subtitle text-xs uppercase tracking-[0.2em]">
                   Centre de pilotage
                 </p>
               </div>
@@ -192,7 +190,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
 
           {/* Desktop collapse toggle */}
           <button
-            className="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white active:scale-90"
+            className="odc-sidebar-icon-button hidden lg:flex items-center justify-center w-7 h-7 rounded-lg transition active:scale-90"
             onClick={onToggle}
             title={collapsed ? "Développer" : "Réduire"}
           >
@@ -205,7 +203,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
           {/* Mobile close */}
           {!collapsed && (
             <button
-              className="lg:hidden text-slate-400 hover:text-white transition"
+              className="odc-sidebar-icon-button lg:hidden transition"
               onClick={() => setSidebarOpen(false)}
               aria-label="Fermer le menu"
             >
@@ -234,14 +232,14 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
 
               return (
                 <div key={groupe.titre} className={premier ? undefined : collapsed ? "pt-2" : "pt-5"}>
-                  {!premier && collapsed && <div className="h-px bg-white/10 mx-1 mb-2" />}
+                  {!premier && collapsed && <div className="odc-sidebar-divider h-px mx-1 mb-2" />}
                   {!premier && !collapsed && (
-                    <div className="px-3"><div className="h-px bg-white/10" /></div>
+                    <div className="px-3"><div className="odc-sidebar-divider h-px" /></div>
                   )}
                   {!collapsed && (
                     <p
                       className={clsx(
-                        "px-3 mb-2 text-xs uppercase tracking-[0.22em] text-slate-400",
+                        "odc-sidebar-group-label px-3 mb-2 text-xs uppercase tracking-[0.22em]",
                         premier ? undefined : "mt-4"
                       )}
                     >
@@ -269,7 +267,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
         {/* Footer — acces au profil.
             Il n'affichait que l'initiale du role : on y lisait « A / Admin /
             Administrateur », jamais le nom de la personne connectee. */}
-        <div className={clsx("border-t border-white/10 bg-black/20", collapsed ? "p-2" : "p-4")}>
+        <div className={clsx("odc-sidebar-footer border-t", collapsed ? "p-2" : "p-4")}>
           <Link
             to="/profil"
             onClick={() => setSidebarOpen(false)}
@@ -277,8 +275,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
             className={clsx(
               "group flex items-center transition",
               collapsed
-                ? "justify-center rounded-xl py-1 hover:bg-white/10"
-                : "gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 hover:border-white/20 hover:bg-white/10",
+                ? "odc-sidebar-profile-collapsed justify-center rounded-xl py-1"
+                : "odc-sidebar-profile gap-3 rounded-xl border px-3 py-2.5 transition",
               profilActif && "ring-1 ring-orange-400/60"
             )}
           >
@@ -291,8 +289,8 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
             />
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white">{displayName}</p>
-                <p className="truncate text-xs text-slate-400">
+                <p className="odc-sidebar-profile-name truncate text-sm font-semibold">{displayName}</p>
+                <p className="odc-sidebar-profile-role truncate text-xs">
                   {user?.job_title || roleLabel}
                 </p>
               </div>

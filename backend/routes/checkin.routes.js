@@ -22,7 +22,7 @@ router.get("/:activityId", async (req, res) => {
               p.name AS partner_name, d.name AS device_name,
               /* Une activite sans partenaire n'est soumise a aucune convention :
                  l'emargement y reste ouvert. */
-              COALESCE(p.emargement_actif, TRUE) AS emargement_actif,
+              (COALESCE(p.emargement_actif, TRUE) AND NOT COALESCE(a.emargement_ferme_manuellement, FALSE)) AS emargement_actif,
               COALESCE(ap.cnt, 0)::int AS participants_count
        FROM activities a
        LEFT JOIN partners p ON p.id = a.partner_id

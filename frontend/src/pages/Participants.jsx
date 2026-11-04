@@ -1,6 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from "react";
-import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List, X, RotateCcw } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List, X, RotateCcw, Eye } from "lucide-react";
+import { useSearchParams, Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import api from "../api";
@@ -1736,7 +1736,19 @@ export default function Participants() {
             ) : (
               rows.map((p, i) => (
                 <tr key={`${p.id}_${p.activity_id ?? i}`} className="table-row">
-                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"} font-medium`}>{p.nom || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"} font-medium`}>
+                    {/* Chaque ligne ouvre le parcours complet de la personne :
+                        historique des activités, formulaires remplis et
+                        recommandation stage. C'est le seul accès à ce profil. */}
+                    <Link
+                      to={`/participants/${p.id}`}
+                      className="group inline-flex items-center gap-1.5 text-slate-900 hover:text-orange-600 transition-colors"
+                      title="Voir le profil et le parcours complet de ce participant"
+                    >
+                      {p.nom || "-"}
+                      <Eye className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-orange-500" />
+                    </Link>
+                  </td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.prenom || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.structure || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>

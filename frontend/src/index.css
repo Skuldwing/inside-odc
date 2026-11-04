@@ -99,6 +99,17 @@ body {
     @apply inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold;
   }
 
+  /* Bouton-icône d'action : une seule facture sur toute la plateforme.
+     Le survol reste dans la famille orange (identité ODC) ; seul le bouton
+     destructeur passe au rouge. */
+  .icon-btn {
+    @apply inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition-colors hover:border-orange-200 hover:bg-orange-50 hover:text-orange-600;
+  }
+
+  .icon-btn-danger {
+    @apply hover:border-red-200 hover:bg-red-50 hover:text-red-600;
+  }
+
   .table {
     @apply w-full text-sm;
   }
@@ -116,15 +127,96 @@ body {
   }
 
   .nav-pill {
-    @apply flex items-center gap-3 rounded-xl px-3.5 py-2 text-sm font-medium text-slate-300 transition;
+    @apply flex items-center gap-3 rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-700 transition;
   }
 
   .nav-pill:hover {
-    @apply bg-white/10 text-white;
+    @apply bg-orange-50 text-orange-800;
   }
 
   .nav-pill-active {
-    @apply bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/25;
+    @apply bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-md shadow-orange-500/20;
+  }
+
+  .odc-sidebar {
+    background: #fcf8f3;
+    color: #1f2937;
+    border-color: #eee5db;
+    box-shadow: 0 14px 36px rgb(63 45 28 / 0.10);
+  }
+  .app-topbar { background: #fcf8f3; border-color: #eee5db; }
+  .odc-sidebar-header { background: #fcf8f3; border-color: #eee5db; }
+  .app-brand-wordmark {
+    display: inline-block;
+    color: #f97316;
+    font-size: 1.75rem;
+    font-weight: 900;
+    letter-spacing: -0.07em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .app-brand-initial {
+    display: inline-flex;
+    width: 2rem;
+    height: 2rem;
+    margin-right: 0.22rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.65rem;
+    background: #f97316;
+    color: #fff;
+    font-size: 1.45rem;
+    letter-spacing: -0.07em;
+    box-shadow: 0 3px 8px rgb(249 115 22 / 0.22);
+  }
+  .odc-sidebar-brand-name { color: #111827; }
+  .odc-sidebar-brand-subtitle { color: #64748b; }
+  .odc-sidebar-divider { background: #eee5db; }
+  .odc-sidebar-group-label { color: #8b7662; font-weight: 700; }
+  .sidebar-nav-collapsed { color: #475569; }
+  .sidebar-nav-collapsed:hover { background: #fff7ed; color: #c2410c; }
+  .odc-sidebar-icon-button { color: #64748b; }
+  .odc-sidebar-icon-button:hover { background: #fff7ed; color: #c2410c; }
+  .odc-sidebar-footer { border-color: #eee5db; background: #f7f0e8; }
+  .odc-sidebar-profile { border-color: #eee5db; background: #fffdfa; }
+  .odc-sidebar-profile:hover { border-color: #fdba74; background: #fff7ed; }
+  .odc-sidebar-profile-collapsed:hover { background: #fff7ed; }
+  .odc-sidebar-profile-name { color: #1f2937; }
+  .odc-sidebar-profile-role { color: #64748b; }
+
+  /* === Cartes statistiques : l'orange Sonatel/ODC porte l'identité ===
+     Chaque carte accueille une icône dans un cercle coloré, un chiffre XL
+     et un label discret. Au survol, la carte s'élève avec une ombre orange. */
+  .stat-card {
+    @apply relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-lg hover:shadow-orange-100/60;
+  }
+
+  .stat-card-icon {
+    @apply absolute top-4 right-4 flex h-11 w-11 items-center justify-center rounded-xl;
+  }
+
+  .stat-card-value {
+    @apply mt-2 text-3xl font-bold tracking-tight;
+  }
+
+  .stat-card-label {
+    @apply text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  /* === Cartes d'activité modernes ===
+     Une barre d'accent orange à gauche rappelle l'identité ODC. Au survol,
+     la carte s'élève avec une ombre orange et la barre s'élargit. */
+  .activity-card {
+    @apply relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/90 shadow-sm shadow-slate-200/50 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-orange-200 hover:shadow-xl hover:shadow-orange-100/60;
+  }
+
+  .activity-card-accent {
+    @apply absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-orange-400 to-orange-600 transition-all duration-300;
+  }
+
+  /* En-tête sticky : une ligne orange en bas rappelle l'identité Sonatel. */
+  .header-accent {
+    @apply border-b-2 border-orange-500;
   }
 }
 
@@ -508,6 +600,40 @@ body {
 :root[data-theme="dark"] .page-subtitle {
   color: var(--muted);
 }
+
+/* La navigation garde la meme identite orange dans les deux themes. */
+:root[data-theme="dark"] .odc-sidebar {
+  background: #050505;
+  color: #f5f5f5;
+  border-color: #27272a;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 0.55);
+}
+:root[data-theme="dark"] .app-topbar { background: #050505; border-color: #27272a; }
+:root[data-theme="dark"] .odc-sidebar-header,
+:root[data-theme="dark"] .odc-sidebar-divider { border-color: #27272a; }
+:root[data-theme="dark"] .odc-sidebar-header { background: #050505; }
+:root[data-theme="dark"] .odc-sidebar-divider { background: #27272a; }
+:root[data-theme="dark"] .odc-sidebar-brand-name,
+:root[data-theme="dark"] .odc-sidebar-profile-name { color: #fafafa; }
+:root[data-theme="dark"] .odc-sidebar-brand-subtitle,
+:root[data-theme="dark"] .odc-sidebar-group-label,
+:root[data-theme="dark"] .odc-sidebar-profile-role { color: #a1a1aa; }
+:root[data-theme="dark"] .nav-pill,
+:root[data-theme="dark"] .sidebar-nav-collapsed { color: #d4d4d8; }
+:root[data-theme="dark"] .nav-pill:hover,
+:root[data-theme="dark"] .sidebar-nav-collapsed:hover { background: rgb(249 115 22 / 0.12); color: #fdba74; }
+:root[data-theme="dark"] .nav-pill-active,
+:root[data-theme="dark"] .nav-pill-active:hover {
+  background: linear-gradient(90deg, #f97316, #ea580c);
+  color: #fff;
+  box-shadow: 0 8px 20px rgb(249 115 22 / 0.22);
+}
+:root[data-theme="dark"] .odc-sidebar-icon-button { color: #a1a1aa; }
+:root[data-theme="dark"] .odc-sidebar-icon-button:hover { background: rgb(249 115 22 / 0.12); color: #fdba74; }
+:root[data-theme="dark"] .odc-sidebar-footer { border-color: #27272a; background: #09090b; }
+:root[data-theme="dark"] .odc-sidebar-profile { border-color: #27272a; background: #111113; }
+:root[data-theme="dark"] .odc-sidebar-profile:hover { border-color: #9a3412; background: #1c120d; }
+:root[data-theme="dark"] .odc-sidebar-profile-collapsed:hover { background: #1c120d; }
 
 /* ── Utilitaires porteurs du fond clair ──
    Portee limitee a <main> et aux surfaces flottantes : la barre

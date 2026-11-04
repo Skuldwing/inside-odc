@@ -2271,4 +2271,182 @@ router.post("/fiches-absorbees/restaurer", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== PROFIL DÉTAILLÉ DU PARTICIPANT =====
+   Chaque participant dispose d'un historique complet de toutes les activités
+   auxquelles il a participé et un lien vers tous les formulaires qu'il a remplis.
+   Cela permet d'identifier les jeunes les plus engagés sur la durée pour leur proposer
+   ensuite des stages, accélérations ou opportunités d'insertion. */
+router.get("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const pRes = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.genre, p.age_range, p.email, p.telephone,
+              p.statut, p.structure, p.notes, p.interet_stage, p.created_at
+         FROM participants p
+        WHERE p.id = $1`,
+      [id]
+    );
+    if (!pRes.rows.length) {
+      return res.status(404).json({ error: "Participant introuvable" });
+    }
+    const participant = pRes.rows[0];
+
+    // Historique complet des activités suivies
+    const actRes = await pool.query(
+      `SELECT a.id, a.title, a.description, a.activity_date, a.date_fin, a.duration_hours,
+              a.location, a.mode,
+              pr.name AS partner_name,
+              d.name AS device_name,
+              u.full_name AS coach_name,
+              ae.envoye_le AS attestation_envoyee_le,
+              ae.module AS attestation_module,
+              COALESCE(ap.registered_at, a.activity_date) AS registered_at
+         FROM activities a
+         JOIN activity_participants ap ON ap.activity_id = a.id
+         LEFT JOIN partners pr ON pr.id = a.partner_id
+         LEFT JOIN devices d ON d.id = a.device_id
+         LEFT JOIN users u ON u.id = a.coach_id
+         LEFT JOIN attestations_envoyees ae ON ae.activity_id = a.id AND ae.participant_id = $1
+        WHERE ap.participant_id = $1
+        ORDER BY a.activity_date DESC`,
+      [id]
+    );
+
+    // Formulaires dynamiques remplis (soumissions form_submissions)
+    let formSubmissions = [];
+    const emailNorm = (participant.email || "").trim();
+    const telNorm = (participant.telephone || "").trim();
+    if (emailNorm || telNorm) {
+      const fSubRes = await pool.query(
+        `SELECT fs.id, fs.form_id, f.title AS form_title, f.slug AS form_slug, f.fields AS form_fields,
+                fs.values, fs.submitted_at, fs.source
+           FROM form_submissions fs
+           JOIN forms f ON f.id = fs.form_id
+          WHERE (
+            ($1 <> '' AND (fs.values->>'email' ILIKE $1 OR fs.values->>'e_mail' ILIKE $1 OR fs.values->>'mail' ILIKE $1))
+            OR
+            ($2 <> '' AND (fs.values->>'telephone' = $2 OR fs.values->>'phone' = $2 OR fs.values->>'tel' = $2))
+          )
+          ORDER BY fs.submitted_at DESC`,
+        [emailNorm, telNorm]
+      );
+      formSubmissions = fSubRes.rows;
+    }
+
+    // Émargements enregistrés via audit_logs
+    const checkinLogsRes = await pool.query(
+      `SELECT l.id, l.resource_id AS activity_id, a.title AS activity_title,
+              a.activity_date, l.details, l.created_at
+         FROM audit_logs l
+         LEFT JOIN activities a ON a.id = NULLIF(regexp_replace(l.resource_id, '\\D', '', 'g'), '')::int
+        WHERE l.action = 'CHECKIN'
+          AND l.resource = 'activities'
+          AND l.details->>'participant_id' = $1
+        ORDER BY l.created_at DESC`,
+      [String(id)]
+    );
+
+    // Analyse d'engagement & éligibilité stage
+    const activities = actRes.rows;
+    const totalActivities = activities.length;
+    const totalHours = activities.reduce((sum, a) => sum + (Number(a.duration_hours) || 0), 0);
+    const devices = Array.from(new Set(activities.map((a) => a.device_name).filter(Boolean)));
+    const partners = Array.from(new Set(activities.map((a) => a.partner_name).filter(Boolean)));
+    const attestations = activities.filter((a) => a.attestation_envoyee_le).length;
+
+    let level = "Nouveau / Ponctuel";
+    if (totalActivities >= 3 || totalHours >= 20) {
+      level = "Très engagé(e)";
+    } else if (totalActivities >= 2 || totalHours >= 8) {
+      level = "Régulier";
+    }
+
+    const eligibleStage = totalActivities >= 2 || Boolean(participant.interet_stage) || totalHours >= 15;
+    let recommendation = "";
+    if (totalActivities >= 3) {
+      recommendation = "Profil hautement prioritaire pour les opportunités et offres de stages (ODC / partenaires). Excellente assiduité démontrée sur la durée avec plusieurs compétences consolidées.";
+    } else if (totalActivities >= 2) {
+      recommendation = "Profil engagé et régulier. Recommandé pour des entretiens de stage ou des programmes d'accélération et mentorat.";
+    } else {
+      recommendation = "Participant au début de son parcours chez ODC. À inviter à d'autres formations complémentaires pour renforcer son profil.";
+    }
+
+    res.json({
+      participant,
+      activities,
+      forms: {
+        custom_form_submissions: formSubmissions,
+        checkin_submissions: checkinLogsRes.rows,
+        total_forms: formSubmissions.length + checkinLogsRes.rows.length,
+      },
+      engagement: {
+        total_activities: totalActivities,
+        total_hours: totalHours,
+        attestations_count: attestations,
+        devices,
+        partners,
+        first_activity_date: activities[activities.length - 1]?.activity_date || null,
+        last_activity_date: activities[0]?.activity_date || null,
+        level,
+        eligible_stage: eligibleStage,
+        recommendation,
+      },
+    });
+  } catch (err) {
+    console.error("[PARTICIPANT PROFILE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== MISE À JOUR DU PARTICIPANT (Coordonnées, notes, intérêt stage) ===== */
+router.patch("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nom, prenom, email, telephone, genre, age_range, structure, statut, notes, interet_stage } = req.body;
+
+    const existing = await pool.query("SELECT * FROM participants WHERE id = $1", [id]);
+    if (!existing.rows.length) return res.status(404).json({ error: "Participant introuvable" });
+
+    const p = existing.rows[0];
+    const updated = await pool.query(
+      `UPDATE participants
+          SET nom = COALESCE($1, nom),
+              prenom = COALESCE($2, prenom),
+              email = $3,
+              telephone = $4,
+              genre = COALESCE($5, genre),
+              age_range = COALESCE($6, age_range),
+              structure = $7,
+              statut = $8,
+              notes = $9,
+              interet_stage = COALESCE($10, interet_stage)
+        WHERE id = $11
+        RETURNING id, nom, prenom, email, telephone, genre, age_range, structure, statut, notes, interet_stage`,
+      [
+        nom !== undefined ? nom.trim() : p.nom,
+        prenom !== undefined ? prenom.trim() : p.prenom,
+        email !== undefined ? (email ? email.trim().toLowerCase() : null) : p.email,
+        telephone !== undefined ? (telephone ? telephone.trim() : null) : p.telephone,
+        genre !== undefined ? genre : p.genre,
+        age_range !== undefined ? age_range : p.age_range,
+        structure !== undefined ? (structure ? structure.trim() : null) : p.structure,
+        statut !== undefined ? statut : p.statut,
+        notes !== undefined ? notes : p.notes,
+        interet_stage !== undefined ? Boolean(interet_stage) : p.interet_stage,
+        id,
+      ]
+    );
+
+    logAudit(req, "UPDATE", "participants", id, `${updated.rows[0].prenom} ${updated.rows[0].nom}`, {
+      notes_modifiees: notes !== undefined,
+      interet_stage: updated.rows[0].interet_stage,
+    });
+
+    res.json(updated.rows[0]);
+  } catch (err) {
+    console.error("[UPDATE PARTICIPANT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;

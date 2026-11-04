@@ -247,7 +247,7 @@ INSERT INTO email_templates (slug, label, description, subject, body_html, varia
 (
   'attestation',
   'Attestation de participation',
-  'Envoyé avec le PDF d'attestation quand l'admin clique le bouton ✉ sur une activité.',
+  'Envoyé avec le PDF d''attestation quand l''admin clique le bouton ✉ sur une activité.',
   'Attestation de participation — {{activite}}',
   '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
   <div style="background:#FF6600;padding:20px;text-align:center">

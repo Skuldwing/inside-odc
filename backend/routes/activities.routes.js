@@ -11,12 +11,14 @@ const { getTemplate, renderTemplate, phraseOrganisateur, blocDetails, lienSignal
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
+const { ensureActivityTasksSchema } = require("../migrations/activityTasks");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
 const { ensureEmargementPartenaire } = require("../migrations/emargementPartenaire");
 const { ensureListeTelleQuelle } = require("../migrations/listeTelleQuelle");
 /* Reunir deux fiches sans rien supprimer : c'est la meme mecanique que la
    revue des doublons, et elle doit le rester. */
 const { reunir } = require("../services/identite");
+const { generateActivityReport, REPORT_TYPES } = require("../services/activityReport");
 
 const router = express.Router();
 
@@ -50,7 +52,7 @@ const ACTIVITY_RETURNING = `
   device_id, partner_id, created_by, created_at, participants_manual,
   date_fin, coach_id, report_filename, mode, reliability_score,
   reliability_status, reliability_details, reliability_manual_override,
-  duplicate_of
+  duplicate_of, form_id, emargement_ferme_manuellement, list_export_name
 `;
 
 const ACTIVITY_COLUMNS = `
@@ -58,7 +60,7 @@ const ACTIVITY_COLUMNS = `
   a.device_id, a.partner_id, a.created_by, a.created_at, a.participants_manual,
   a.date_fin, a.coach_id, a.report_filename, a.mode, a.reliability_score,
   a.reliability_status, a.reliability_details, a.reliability_manual_override,
-  a.duplicate_of,
+  a.duplicate_of, a.form_id, a.emargement_ferme_manuellement, a.list_export_name,
   /* La liste est-elle entree telle qu'elle a ete ecrite, et quelqu'un
      l'a-t-il regardee depuis ? Un effectif sous reserve doit se voir des la
      liste des activites : sinon il finit dans un rapport comme s'il etait
@@ -129,7 +131,7 @@ router.get("/", authMiddleware, async (req, res) => {
              /* Le partenaire peut avoir ferme l'emargement par lien et QR
                 code. Une activite sans partenaire n'est soumise a aucune
                 convention : il y reste ouvert. */
-             COALESCE(p.emargement_actif, TRUE) AS emargement_actif,
+             (COALESCE(p.emargement_actif, TRUE) AND NOT COALESCE(a.emargement_ferme_manuellement, FALSE)) AS emargement_actif,
              COALESCE(ap.participants_count, 0) AS participants_count,
              COALESCE(ap.personnes_distinctes, 0) AS personnes_distinctes,
              COALESCE(ph.photo_count, 0) AS photo_count,
@@ -406,6 +408,496 @@ router.put("/:id", authMiddleware, requireWriteAccess, async (req, res) => {
   }
 });
 
+/* ===== CHECKLIST DE L'ACTIVITE =====
+   Chaque activite porte sa liste de taches d'organisation : intitule,
+   responsable, echeance et avancement. La table vit dans
+   migrations/activityTasks.js ; si elle manque encore (migration de demarrage
+   non passee), la route la cree puis reessaie. */
+const TASK_STATUSES = ["a_faire", "en_cours", "termine"];
+
+async function avecTableTaches(operation) {
+  try {
+    return await operation();
+  } catch (err) {
+    if (!tableAbsente(err)) throw err;
+    console.warn("[TACHES] table activity_tasks absente, creation puis nouvel essai");
+    await ensureActivityTasksSchema();
+    return operation();
+  }
+}
+
+/* Annuaire restreint aux profils internes qui peuvent porter une tache.
+   Declaree avant /:id : sinon « team-members » serait pris pour un
+   identifiant d'activite. */
+router.get("/team-members", authMiddleware, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, full_name, email, role
+       FROM users
+       WHERE role <> 'partner'
+         AND (is_active IS DISTINCT FROM false)
+         AND (role IN ('admin','coach') OR COALESCE(is_team_odc, false) = true)
+       ORDER BY full_name NULLS LAST, email`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("[EQUIPE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.get("/:id/tasks", authMiddleware, async (req, res) => {
+  try {
+    const rows = await avecTableTaches(() =>
+      pool
+        .query(
+          `SELECT t.*, u.full_name AS assigned_name, u.email AS assigned_email
+           FROM activity_tasks t
+           LEFT JOIN users u ON u.id = t.assigned_to
+           WHERE t.activity_id = $1
+           ORDER BY t.position ASC, t.created_at ASC`,
+          [req.params.id]
+        )
+        .then((r) => r.rows)
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("[TACHES LIST]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/:id/tasks", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const {
+      title,
+      description = null,
+      status = "a_faire",
+      assigned_to = null,
+      due_date = null,
+    } = req.body;
+    if (!title?.trim()) return res.status(400).json({ error: "Intitulé requis" });
+
+    const created = await avecTableTaches(() =>
+      pool
+        .query(
+          `INSERT INTO activity_tasks
+           (activity_id, title, description, status, assigned_to, due_date, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [
+            req.params.id,
+            title.trim(),
+            description?.trim() || null,
+            TASK_STATUSES.includes(status) ? status : "a_faire",
+            assigned_to || null,
+            due_date || null,
+            req.user.id,
+          ]
+        )
+        .then((r) => r.rows[0])
+    );
+
+    logAudit(req, "CREATE", "activity_tasks", created.id, created.title, {
+      activity_id: Number(req.params.id),
+      responsable: created.assigned_to,
+      echeance: created.due_date,
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    console.error("[TACHES CREATE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.put("/tasks/:taskId", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const {
+      title,
+      description = null,
+      status = "a_faire",
+      assigned_to = null,
+      due_date = null,
+    } = req.body;
+    if (!title?.trim()) return res.status(400).json({ error: "Intitulé requis" });
+    const resolvedStatus = TASK_STATUSES.includes(status) ? status : "a_faire";
+
+    const updated = await avecTableTaches(() =>
+      pool
+        .query(
+          `UPDATE activity_tasks
+           SET title = $1, description = $2, status = $3, assigned_to = $4, due_date = $5,
+               completed_at = CASE WHEN $3 = 'termine' THEN COALESCE(completed_at, NOW()) ELSE NULL END
+           WHERE id = $6 RETURNING *`,
+          [
+            title.trim(),
+            description?.trim() || null,
+            resolvedStatus,
+            assigned_to || null,
+            due_date || null,
+            req.params.taskId,
+          ]
+        )
+        .then((r) => r.rows[0])
+    );
+    if (!updated) return res.status(404).json({ error: "Tâche introuvable" });
+
+    logAudit(req, "UPDATE", "activity_tasks", updated.id, updated.title, {
+      activity_id: updated.activity_id,
+      statut: updated.status,
+    });
+    res.json(updated);
+  } catch (err) {
+    console.error("[TACHES UPDATE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Changement d'etat seul : c'est le geste le plus frequent de la checklist. */
+router.patch("/tasks/:taskId/status", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!TASK_STATUSES.includes(status)) {
+      return res.status(400).json({ error: "Statut invalide" });
+    }
+    const updated = await avecTableTaches(() =>
+      pool
+        .query(
+          `UPDATE activity_tasks
+           SET status = $1,
+               completed_at = CASE WHEN $1 = 'termine' THEN COALESCE(completed_at, NOW()) ELSE NULL END
+           WHERE id = $2 RETURNING *`,
+          [status, req.params.taskId]
+        )
+        .then((r) => r.rows[0])
+    );
+    if (!updated) return res.status(404).json({ error: "Tâche introuvable" });
+    res.json(updated);
+  } catch (err) {
+    console.error("[TACHES STATUT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.delete("/tasks/:taskId", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const deleted = await avecTableTaches(() =>
+      pool
+        .query("DELETE FROM activity_tasks WHERE id = $1 RETURNING id, title", [
+          req.params.taskId,
+        ])
+        .then((r) => r.rows[0])
+    );
+    if (!deleted) return res.status(404).json({ error: "Tâche introuvable" });
+    logAudit(req, "DELETE", "activity_tasks", deleted.id, deleted.title);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("[TACHES DELETE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== GET ACTIVITY DETAIL (Vue complète avec présences et formulaire) ===== */
+router.get("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const query = `
+      SELECT ${ACTIVITY_COLUMNS},
+             p.name AS partner_name,
+             d.name AS device_name,
+             u.full_name AS coach_name,
+             (COALESCE(p.emargement_actif, TRUE) AND NOT COALESCE(a.emargement_ferme_manuellement, FALSE)) AS emargement_actif,
+             COALESCE(ap.participants_count, 0) AS participants_count,
+             COALESCE(ap.personnes_distinctes, 0) AS personnes_distinctes,
+             COALESCE(ph.photo_count, 0) AS photo_count,
+             COALESCE(att.attestations_envoyees, 0) AS attestations_envoyees,
+             COALESCE(joi.participants_joignables, 0) AS participants_joignables,
+             COALESCE(rap.rapprochements_en_attente, 0) AS rapprochements_en_attente
+      FROM activities a
+      LEFT JOIN partners p ON a.partner_id = p.id
+      LEFT JOIN devices d ON a.device_id = d.id
+      LEFT JOIN users u ON a.coach_id = u.id
+      LEFT JOIN (
+        SELECT ap0.activity_id,
+               COUNT(*)::int AS participants_count,
+               COUNT(DISTINCT COALESCE(pa0.personne_id, -pa0.id))::int AS personnes_distinctes
+        FROM activity_participants ap0
+        JOIN participants pa0 ON pa0.id = ap0.participant_id
+        GROUP BY ap0.activity_id
+      ) ap ON ap.activity_id = a.id
+      LEFT JOIN (
+        SELECT ap2.activity_id, COUNT(*)::int AS participants_joignables
+        FROM activity_participants ap2
+        JOIN participants pa ON pa.id = ap2.participant_id
+        WHERE COALESCE(TRIM(pa.email), '') <> ''
+        GROUP BY ap2.activity_id
+      ) joi ON joi.activity_id = a.id
+      LEFT JOIN (
+        SELECT activity_id, COUNT(*)::int AS attestations_envoyees
+        FROM attestations_envoyees
+        GROUP BY activity_id
+      ) att ON att.activity_id = a.id
+      LEFT JOIN (
+        SELECT activity_id, COUNT(*)::int AS photo_count
+        FROM activity_photos
+        GROUP BY activity_id
+      ) ph ON ph.activity_id = a.id
+      LEFT JOIN (
+        SELECT activity_id, COUNT(*)::int AS rapprochements_en_attente
+        FROM rapprochements_ecartes
+        WHERE tranche IS NULL
+        GROUP BY activity_id
+      ) rap ON rap.activity_id = a.id
+      WHERE a.id = $1
+    `;
+
+    const result = await pool.query(query, [id]);
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "Activité introuvable" });
+    }
+    const activity = result.rows[0];
+    if (!isOwner(req, activity)) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    // Liste des inscrits / présences
+    const partRes = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.age_range,
+              p.structure, p.statut, p.notes, p.interet_stage,
+              COALESCE(ap.registered_at, p.created_at) AS registered_at,
+              ae.envoye_le AS attestation_envoyee_le,
+              ae.module    AS attestation_module
+         FROM participants p
+         JOIN activity_participants ap ON ap.participant_id = p.id
+         LEFT JOIN attestations_envoyees ae
+                ON ae.activity_id = ap.activity_id AND ae.participant_id = p.id
+        WHERE ap.activity_id = $1
+        ORDER BY p.nom, p.prenom`,
+      [id]
+    );
+
+    const deadline = new Date(activity.date_fin || activity.activity_date);
+    deadline.setUTCHours(23, 59, 59, 999);
+    const isOpenByDate = new Date() <= deadline;
+    const is_open = Boolean(activity.emargement_actif) && isOpenByDate;
+
+    // Définition des champs du formulaire d'émargement standard
+    const standardFields = [
+      { key: "nom", label: "Nom de famille", type: "text", required: true, description: "Nom de famille" },
+      { key: "prenom", label: "Prénom", type: "text", required: true, description: "Prénom du participant" },
+      { key: "telephone", label: "Numéro de téléphone", type: "phone", required: true, description: "Contact téléphonique principal" },
+      { key: "email", label: "Adresse e-mail", type: "email", required: true, description: "Pour l'envoi de l'attestation et le suivi" },
+      { key: "genre", label: "Genre", type: "select", options: ["F", "H", "Autre"], required: true, description: "Indicateur de parité" },
+      { key: "tranche_age", label: "Tranche d'âge", type: "select", options: ["Moins de 18 ans", "18-25 ans", "26-35 ans", "36-45 ans", "Plus de 45 ans"], required: true, description: "Tranche d'âge" },
+      { key: "structure", label: "Structure / Établissement", type: "text", required: false, description: "Université, école, entreprise ou statut actuel" },
+    ];
+
+    // Formulaire personnalisé associé si configuré
+    let linkedForm = null;
+    let linkedFormSubmissions = [];
+    if (activity.form_id) {
+      const fRes = await pool.query(
+        "SELECT id, title, description, slug, status, fields, settings, created_at, updated_at FROM forms WHERE id = $1",
+        [activity.form_id]
+      );
+      if (fRes.rows.length) {
+        linkedForm = fRes.rows[0];
+        const subRes = await pool.query(
+          "SELECT id, values, source, submitted_at FROM form_submissions WHERE form_id = $1 ORDER BY submitted_at DESC LIMIT 50",
+          [activity.form_id]
+        );
+        linkedFormSubmissions = subRes.rows;
+      }
+    }
+
+    // Soumissions / checkins reçus via audit_logs
+    const checkinLogsRes = await pool.query(
+      `SELECT id, user_id, action, resource_label, details, created_at
+         FROM audit_logs
+        WHERE resource = 'activities' AND action = 'CHECKIN' AND resource_id = $1
+        ORDER BY created_at DESC LIMIT 100`,
+      [String(id)]
+    );
+
+    // Photos
+    const photosRes = await pool.query(
+      "SELECT id, filename, mime_type, created_at FROM activity_photos WHERE activity_id = $1 ORDER BY created_at DESC",
+      [id]
+    );
+
+    // Statistiques détaillées de l'activité
+    const participants = partRes.rows;
+    const stats = {
+      total: participants.length,
+      femmes: participants.filter((p) => p.genre === "F").length,
+      hommes: participants.filter((p) => p.genre === "H").length,
+      autres_genres: participants.filter((p) => p.genre !== "F" && p.genre !== "H").length,
+      avec_email: participants.filter((p) => Boolean(p.email && p.email.trim())).length,
+      avec_telephone: participants.filter((p) => Boolean(p.telephone && p.telephone.trim())).length,
+      attestations_envoyees: participants.filter((p) => Boolean(p.attestation_envoyee_le)).length,
+      tranches_age: {},
+      structures: {},
+    };
+    participants.forEach((p) => {
+      if (p.age_range) {
+        stats.tranches_age[p.age_range] = (stats.tranches_age[p.age_range] || 0) + 1;
+      }
+      if (p.structure) {
+        const s = p.structure.trim();
+        stats.structures[s] = (stats.structures[s] || 0) + 1;
+      }
+    });
+
+    res.json({
+      activity,
+      participants,
+      form: {
+        is_open,
+        emargement_actif: activity.emargement_actif,
+        checkin_url: `/checkin/${activity.id}`,
+        standard_fields: standardFields,
+        linked_form: linkedForm,
+        linked_form_submissions: linkedFormSubmissions,
+        checkin_logs: checkinLogsRes.rows,
+      },
+      photos: photosRes.rows,
+      stats,
+    });
+  } catch (err) {
+    console.error("[ACTIVITY DETAIL]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== AJOUT MANUEL D'UN PARTICIPANT À L'ACTIVITÉ ===== */
+router.post("/:id/participants", authMiddleware, requireWriteAccess, async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    const actRes = await client.query("SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1", [id]);
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    await client.query("BEGIN");
+
+    let participantId = req.body.participant_id ? Number(req.body.participant_id) : null;
+
+    if (!participantId) {
+      const { nom, prenom, email, telephone, genre, age_range, structure, statut } = req.body;
+      if (!nom || !prenom) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Nom et prénom sont obligatoires." });
+      }
+
+      let existingP = null;
+      if (email && email.trim()) {
+        const eRes = await client.query("SELECT id FROM participants WHERE lower(email) = lower($1) LIMIT 1", [email.trim()]);
+        if (eRes.rows.length) existingP = eRes.rows[0];
+      }
+      if (!existingP && telephone && telephone.trim()) {
+        const tRes = await client.query("SELECT id FROM participants WHERE telephone = $1 LIMIT 1", [telephone.trim()]);
+        if (tRes.rows.length) existingP = tRes.rows[0];
+      }
+
+      if (existingP) {
+        participantId = existingP.id;
+      } else {
+        const insP = await client.query(
+          `INSERT INTO participants (nom, prenom, email, telephone, genre, age_range, structure, statut)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+          [nom.trim(), prenom.trim(), email?.trim()?.toLowerCase() || null, telephone?.trim() || null, genre || null, age_range || null, structure?.trim() || null, statut || null]
+        );
+        participantId = insP.rows[0].id;
+      }
+    }
+
+    const insAp = await client.query(
+      `INSERT INTO activity_participants (activity_id, participant_id, registered_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT (activity_id, participant_id) DO NOTHING
+       RETURNING *`,
+      [id, participantId]
+    );
+
+    await client.query("COMMIT");
+    await computeAndStoreReliability(id).catch(() => {});
+
+    logAudit(req, "ADD_PARTICIPANT", "activities", id, actRes.rows[0].title, {
+      participant_id: participantId,
+      existant: !req.body.nom,
+    });
+
+    res.status(201).json({ success: true, participant_id: participantId, added: insAp.rowCount > 0 });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[ADD PARTICIPANT TO ACTIVITY]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+/* ===== RETIRER UN PARTICIPANT DE L'ACTIVITÉ ===== */
+router.delete("/:id/participants/:participantId", authMiddleware, requireWriteAccess, async (req, res) => {
+  const { id, participantId } = req.params;
+  try {
+    const actRes = await pool.query("SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1", [id]);
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    const del = await pool.query(
+      "DELETE FROM activity_participants WHERE activity_id = $1 AND participant_id = $2",
+      [id, participantId]
+    );
+    await computeAndStoreReliability(id).catch(() => {});
+
+    logAudit(req, "REMOVE_PARTICIPANT", "activities", id, actRes.rows[0].title, {
+      participant_id: Number(participantId),
+    });
+
+    res.json({ success: true, deleted: del.rowCount > 0 });
+  } catch (err) {
+    console.error("[REMOVE PARTICIPANT FROM ACTIVITY]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== BASCULER L'OUVERTURE DE L'ÉMARGEMENT ===== */
+router.patch("/:id/emargement", authMiddleware, requireWriteAccess, async (req, res) => {
+  const { id } = req.params;
+  const { fermer } = req.body;
+  try {
+    const actRes = await pool.query("SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1", [id]);
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    const updated = await pool.query(
+      "UPDATE activities SET emargement_ferme_manuellement = $1 WHERE id = $2 RETURNING id, emargement_ferme_manuellement",
+      [Boolean(fermer), id]
+    );
+    res.json({ success: true, emargement_ferme_manuellement: updated.rows[0].emargement_ferme_manuellement });
+  } catch (err) {
+    console.error("[TOGGLE EMARGEMENT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== ASSOCIER UN FORMULAIRE DYNAMIQUE ===== */
+router.patch("/:id/form", authMiddleware, requireWriteAccess, async (req, res) => {
+  const { id } = req.params;
+  const form_id = req.body.form_id ? Number(req.body.form_id) : null;
+  try {
+    const actRes = await pool.query("SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1", [id]);
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+
+    await pool.query("UPDATE activities SET form_id = $1 WHERE id = $2", [form_id, id]);
+    res.json({ success: true, form_id });
+  } catch (err) {
+    console.error("[LINK FORM]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== EXPORT LISTE PRESENCES PAR ACTIVITE ===== */
 /* ===== PARTICIPANTS D'UNE ACTIVITE =====
    Le nom est trace sur l'attestation : avant d'en envoyer cinquante, il faut
@@ -446,7 +938,7 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     const { id } = req.params;
 
     const actRes = await pool.query(
-      `SELECT a.title, a.activity_date, a.partner_id, a.coach_id, p.name AS partner_name
+      `SELECT a.title, a.activity_date, a.partner_id, a.coach_id, a.list_export_name, p.name AS partner_name
        FROM activities a LEFT JOIN partners p ON p.id = a.partner_id
        WHERE a.id = $1`,
       [id]
@@ -491,7 +983,12 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 
     const safeName = activity.title.replace(/[^a-z0-9]/gi, "_").toLowerCase();
-    const filename = `presences_${safeName}_${activity.activity_date}.xlsx`;
+    /* Nom personnalisé si défini, sinon nom auto-généré. */
+    const filename = activity.list_export_name
+      ? (activity.list_export_name.toLowerCase().endsWith(".xlsx")
+          ? activity.list_export_name
+          : activity.list_export_name + ".xlsx")
+      : `presences_${safeName}_${activity.activity_date}.xlsx`;
 
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1026,6 +1523,126 @@ router.delete("/:id/report", authMiddleware, requireWriteAccess, async (req, res
   } catch (err) {
     console.error("[REPORT DELETE]", err);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== RENOMMER UN FICHIER (rapport PDF ou export liste) =====
+   Permet à l'utilisateur de personnaliser le nom du fichier téléchargé.
+   field: "report" → met à jour report_filename
+   field: "list"   → met à jour list_export_name (utilisé par /participants/export) */
+router.patch("/:id/rename-file", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { field, filename } = req.body;
+
+    if (!field || !["report", "list"].includes(field)) {
+      return res.status(400).json({ error: "Champ invalide" });
+    }
+    if (!filename || typeof filename !== "string" || filename.trim().length === 0) {
+      return res.status(400).json({ error: "Nom de fichier requis" });
+    }
+
+    /* Sécuriser le nom : pas de chemin, pas de caractères spéciaux. */
+    const safeName = filename.trim().replace(/[\/\\:*?"<>|]/g, "_").slice(0, 200);
+
+    const actRes = await pool.query(
+      "SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, actRes.rows[0])) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    if (field === "report") {
+      /* Ajouter l'extension .pdf si absente. */
+      const finalName = safeName.toLowerCase().endsWith(".pdf") ? safeName : safeName + ".pdf";
+      await pool.query(
+        "UPDATE activities SET report_filename = $1 WHERE id = $2",
+        [finalName, id]
+      );
+      logAudit(req, "UPDATE", "activities", id, actRes.rows[0].title, {
+        action: "report_rename",
+        new_name: finalName,
+      });
+      res.json({ success: true, filename: finalName });
+    } else {
+      /* Pour la liste : ajouter .xlsx si absent. */
+      const finalName = safeName.toLowerCase().endsWith(".xlsx") ? safeName : safeName + ".xlsx";
+      await pool.query(
+        "UPDATE activities SET list_export_name = $1 WHERE id = $2",
+        [finalName, id]
+      );
+      logAudit(req, "UPDATE", "activities", id, actRes.rows[0].title, {
+        action: "list_rename",
+        new_name: finalName,
+      });
+      res.json({ success: true, filename: finalName });
+    }
+  } catch (err) {
+    console.error("[RENAME FILE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== DELETE ACTIVITY ===== */
+
+/* ===== GÉNÉRATION DE RAPPORT =====
+   Génère un PDF directement depuis les données de l'activité (participants,
+   statistiques, checklist...). L'utilisateur peut joindre un rapport de
+   référence (PDF) : le système modifiera directement ce PDF en remplaçant
+   les données (dates, nombres, contacts) par celles de l'activité.
+   Le résultat remplace tout rapport précédent dans report_data. */
+router.post("/:id/generate-report", authMiddleware, requireWriteAccess, reportUpload.single("reference"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const reportType = req.body?.report_type || "rapport_synthese";
+
+    if (!REPORT_TYPES[reportType]) {
+      return res.status(400).json({ error: "Type de rapport invalide" });
+    }
+
+    const actRes = await pool.query(
+      "SELECT id, title, partner_id, coach_id FROM activities WHERE id = $1",
+      [id]
+    );
+    if (!actRes.rows.length)
+      return res.status(404).json({ error: "Activité introuvable" });
+
+    if (!isOwner(req, actRes.rows[0])) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    /* Le buffer du PDF de référence est passé directement au générateur
+       qui modifiera le PDF en place. */
+    const referenceBuffer = req.file?.buffer || null;
+
+    const { buffer, filename, referenceApplied } = await generateActivityReport(id, reportType, referenceBuffer);
+
+    await pool.query(
+      "UPDATE activities SET report_filename = $1, report_data = $2 WHERE id = $3",
+      [filename, buffer, id]
+    );
+    await computeAndStoreReliability(id).catch((e) =>
+      console.warn("Reliability:", e.message)
+    );
+
+    logAudit(req, "UPDATE", "activities", id, actRes.rows[0].title, {
+      action: "report_generate",
+      report_type: reportType,
+      has_reference: referenceApplied,
+    });
+
+    res.json({
+      success: true,
+      filename,
+      report_type: reportType,
+      report_label: REPORT_TYPES[reportType],
+      has_reference: referenceApplied,
+    });
+  } catch (err) {
+    console.error("[REPORT GENERATE]", err);
+    res.status(500).json({ error: "Erreur lors de la génération du rapport" });
   }
 });
 

@@ -9,7 +9,7 @@ const router = express.Router();
 router.use(authMiddleware, requireTeamOdc);
 
 const PROJECT_STATUSES = ["non_demarre", "en_cours", "en_pause", "termine"];
-const TASK_STATUSES = ["a_faire", "en_cours", "termine"];
+const TASK_STATUSES = ["a_faire", "en_cours", "en_pause", "termine", "annule"];
 const TASK_PRIORITIES = ["basse", "normale", "haute"];
 
 /* ===== ANNUAIRE DE L'ÉQUIPE =====
@@ -56,14 +56,15 @@ router.get("/projects", async (req, res) => {
              d.name AS device_name,
              COALESCE(t.total, 0)::int AS tasks_total,
              COALESCE(t.done, 0)::int  AS tasks_done,
-             COALESCE(m.members_count, 0)::int AS members_count
+             COALESCE(m.members_count, 0)::int AS members_count,
+             COALESCE(pm.members, '[]'::json) AS members
       FROM mbootay_projects p
       LEFT JOIN users u ON u.id = p.owner_id
       LEFT JOIN partners pa ON pa.id = p.partner_id
       LEFT JOIN devices d ON d.id = p.device_id
       LEFT JOIN (
         SELECT project_id,
-               COUNT(*) AS total,
+               COUNT(*) FILTER (WHERE status <> 'annule') AS total,
                COUNT(*) FILTER (WHERE status = 'termine') AS done
         FROM mbootay_tasks GROUP BY project_id
       ) t ON t.project_id = p.id
@@ -71,6 +72,15 @@ router.get("/projects", async (req, res) => {
         SELECT project_id, COUNT(*) AS members_count
         FROM mbootay_members GROUP BY project_id
       ) m ON m.project_id = p.id
+      LEFT JOIN (
+        SELECT mm.project_id,
+               json_agg(json_build_object('id', mu.id, 'full_name', mu.full_name, 'role', mu.role)
+                        ORDER BY mu.full_name NULLS LAST) AS members
+        FROM mbootay_members mm
+        JOIN users mu ON mu.id = mm.user_id
+        GROUP BY mm.project_id
+      ) pm ON pm.project_id = p.id
+
       ORDER BY p.created_at DESC
     `);
     res.json(result.rows);
@@ -319,13 +329,112 @@ router.delete("/tasks/:taskId", async (req, res) => {
   }
 });
 
+/* ===== ORDRE DU JOUR HEBDOMADAIRE PARTAGÉ ===== */
+router.get("/weekly-plans", async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from || "") || !/^\d{4}-\d{2}-\d{2}$/.test(to || "")) {
+      return res.status(400).json({ error: "Période invalide" });
+    }
+    const plans = await pool.query(
+      `SELECT id, week_start FROM mbootay_weekly_plans
+       WHERE week_start >= $1::date AND week_start <= $2::date
+       ORDER BY week_start`,
+      [from, to]
+    );
+    if (!plans.rows.length) return res.json([]);
+    const items = await pool.query(
+      `SELECT id, plan_id, parent_id, title, done, position
+       FROM mbootay_weekly_items WHERE plan_id = ANY($1::int[])
+       ORDER BY position, id`,
+      [plans.rows.map((plan) => plan.id)]
+    );
+    const byPlan = new Map(plans.rows.map((plan) => [plan.id, { ...plan, items: [] }]));
+    const byItem = new Map();
+    items.rows.forEach((item) => {
+      const entry = { ...item, children: [] };
+      byItem.set(item.id, entry);
+      const plan = byPlan.get(item.plan_id);
+      if (!item.parent_id) plan?.items.push(entry);
+      else byItem.get(item.parent_id)?.children.push(entry);
+    });
+    res.json([...byPlan.values()]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/weekly-plans/:weekStart/items", async (req, res) => {
+  try {
+    const { weekStart } = req.params;
+    const { title, parent_id = null } = req.body;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) return res.status(400).json({ error: "Semaine invalide" });
+    if (!title?.trim()) return res.status(400).json({ error: "Le titre du point est requis" });
+
+    const plan = await pool.query(
+      `INSERT INTO mbootay_weekly_plans (week_start, created_by)
+       VALUES ($1::date, $2)
+       ON CONFLICT (week_start) DO UPDATE SET week_start = EXCLUDED.week_start
+       RETURNING id`,
+      [weekStart, req.user.id]
+    );
+    if (parent_id) {
+      const parent = await pool.query(
+        `SELECT id FROM mbootay_weekly_items
+         WHERE id = $1 AND plan_id = $2 AND parent_id IS NULL`,
+        [parent_id, plan.rows[0].id]
+      );
+      if (!parent.rows.length) return res.status(400).json({ error: "Grand point introuvable pour cette semaine" });
+    }
+    const result = await pool.query(
+      `INSERT INTO mbootay_weekly_items (plan_id, parent_id, title, created_by)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, plan_id, parent_id, title, done, position`,
+      [plan.rows[0].id, parent_id || null, title.trim(), req.user.id]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.patch("/weekly-items/:itemId", async (req, res) => {
+  try {
+    const { done } = req.body;
+    if (typeof done !== "boolean") return res.status(400).json({ error: "État de checklist invalide" });
+    const result = await pool.query(
+      `UPDATE mbootay_weekly_items SET done = $1 WHERE id = $2
+       RETURNING id, plan_id, parent_id, title, done, position`,
+      [done, req.params.itemId]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Point introuvable" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.delete("/weekly-items/:itemId", async (req, res) => {
+  try {
+    const result = await pool.query("DELETE FROM mbootay_weekly_items WHERE id = $1 RETURNING id", [req.params.itemId]);
+    if (!result.rows.length) return res.status(404).json({ error: "Point introuvable" });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 /* ===== MES TÂCHES (toutes projets confondus) ===== */
 router.get("/my-tasks", async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT t.*, p.title AS project_title
        FROM mbootay_tasks t JOIN mbootay_projects p ON p.id = t.project_id
-       WHERE t.assigned_to = $1 AND t.status != 'termine'
+       WHERE t.assigned_to = $1 AND t.status NOT IN ('termine', 'annule')
        ORDER BY t.due_date ASC NULLS LAST, t.created_at DESC`,
       [req.user.id]
     );

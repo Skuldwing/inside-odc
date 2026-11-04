@@ -46,6 +46,8 @@ const { ensureReservePartenaire } = require("./migrations/reservePartenaire");
 const { ensureBudget } = require("./migrations/budget");
 const { ensureEspaceBeneficiaire } = require("./migrations/espaceBeneficiaire");
 const { ensureAudience, entretenirAudience } = require("./migrations/audience");
+const { ensureActivityDetailAndProfileSchema } = require("./migrations/activityDetailAndProfile");
+const { ensureActivityTasksSchema } = require("./migrations/activityTasks");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -153,6 +155,9 @@ app.use(
       if (!origin) return cb(null, true);
       if (allowedOrigins.length === 0) return cb(null, true);
       if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (process.env.NODE_ENV !== "production" && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        return cb(null, true);
+      }
       return cb(new Error("CORS_NOT_ALLOWED"));
     },
     credentials: true,
@@ -707,7 +712,7 @@ pool.query(`
         project_id    INTEGER NOT NULL REFERENCES mbootay_projects(id) ON DELETE CASCADE,
         title         TEXT NOT NULL,
         description   TEXT,
-        status        TEXT DEFAULT 'a_faire' CHECK (status IN ('a_faire','en_cours','termine')),
+        status        TEXT DEFAULT 'a_faire' CHECK (status IN ('a_faire','en_cours','en_pause','termine','annule')),
         priority      TEXT DEFAULT 'normale' CHECK (priority IN ('basse','normale','haute')),
         assigned_to   INTEGER REFERENCES users(id) ON DELETE SET NULL,
         due_date      DATE,
@@ -717,7 +722,32 @@ pool.query(`
         completed_at  TIMESTAMPTZ
       )
     `);
+    await pool.query(`ALTER TABLE mbootay_tasks DROP CONSTRAINT IF EXISTS mbootay_tasks_status_check`);
+    await pool.query(`ALTER TABLE mbootay_tasks ADD CONSTRAINT mbootay_tasks_status_check CHECK (status IN ('a_faire','en_cours','en_pause','termine','annule'))`);
     console.log("Migration OK: mbootay_tasks");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mbootay_weekly_plans (
+        id          SERIAL PRIMARY KEY,
+        week_start  DATE NOT NULL UNIQUE,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS mbootay_weekly_items (
+        id          SERIAL PRIMARY KEY,
+        plan_id     INTEGER NOT NULL REFERENCES mbootay_weekly_plans(id) ON DELETE CASCADE,
+        parent_id   INTEGER REFERENCES mbootay_weekly_items(id) ON DELETE CASCADE,
+        title       TEXT NOT NULL,
+        done        BOOLEAN NOT NULL DEFAULT FALSE,
+        position    INTEGER NOT NULL DEFAULT 0,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_mbootay_weekly_items_plan ON mbootay_weekly_items(plan_id, position)`);
+    console.log("Migration OK: planning hebdomadaire Mbootay");
 
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_mbootay_tasks_project ON mbootay_tasks(project_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_mbootay_tasks_assigned ON mbootay_tasks(assigned_to)`);
@@ -922,6 +952,28 @@ pool.query(`
     console.log("Migration OK: user_devices");
   } catch (e) {
     console.error("Migration user_devices ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Détails d'activité et profil participant ── */
+(async () => {
+  try {
+    await ensureActivityDetailAndProfileSchema();
+    console.log("Migration OK: activity detail & participant profile schema");
+  } catch (e) {
+    console.error("Migration activity detail & participant profile ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Checklist des activités ──
+   Les tâches d'organisation d'une activité : intitulé, responsable,
+   échéance et avancement. */
+(async () => {
+  try {
+    await ensureActivityTasksSchema();
+    console.log("Migration OK: checklist des activites (activity_tasks)");
+  } catch (e) {
+    console.error("Migration checklist des activites ECHOUEE :", e.message);
   }
 })();
 
