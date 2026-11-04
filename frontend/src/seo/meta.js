@@ -28,7 +28,7 @@ export const PAGES = {
     chemin: "/",
     titre: "Inside ODC Sénégal — se former aux métiers du numérique",
     description:
-      "Formation, fabrication et accompagnement de projets dans un centre numérique au Sénégal. Découvrez les quatre pôles, les publics accueillis et la plateforme qui suit les activités.",
+      "Formation aux métiers du numérique, fabrication et accompagnement de projets dans un centre numérique au Sénégal : les quatre pôles et les publics accueillis.",
   },
   espace: {
     chemin: "/espace",

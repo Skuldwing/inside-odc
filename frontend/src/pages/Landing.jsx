@@ -17,7 +17,7 @@ import ODCLogo from "../components/branding/ODCLogo";
 import { useAuth } from "../auth/useAuth";
 import { suivreAudience } from "../analytics/audience";
 import { useMeta, PAGES } from "../seo/meta";
-import { HERO, MANIFESTE, POLES, PUBLICS, PLATEFORME, FINAL } from "../content/centre";
+import { HERO, CENTRE, POLES, PUBLICS, FINAL, EDITEUR } from "../content/centre";
 import "../styles/landing.css";
 
 /* Les textes du centre vivent dans content/centre.js, et nulle part ailleurs.
@@ -143,7 +143,6 @@ export default function Landing() {
             <a href="#centre">Le centre</a>
             <a href="#poles">Les pôles</a>
             <a href="#publics">Pour qui</a>
-            <a href="#plateforme">La plateforme</a>
           </nav>
 
           {/* « data-audience » : le nom du bouton pour la mesure d'audience.
@@ -237,17 +236,14 @@ export default function Landing() {
       <section className="lp-section" id="centre">
         <div className="lp-conteneur">
           <div className="lp-manifeste" data-reveal>
-            {/* Un titre de niveau 2, et non un paragraphe mis en forme : cette
-                section était la seule de la page sans titre, ce qui laissait un
-                trou dans sa structure pour qui la lit sans la voir — un lecteur
-                d'écran, un moteur de recherche. L'apparence est inchangée, la
-                classe est la même. */}
-            <h2 className="lp-surtitre">{MANIFESTE.surtitre}</h2>
-            <p className="lp-manifeste-texte">
-              <strong>{MANIFESTE.nom}</strong>
-              {MANIFESTE.texte}
-            </p>
-            <p className="lp-manifeste-note">{MANIFESTE.note}</p>
+            <p className="lp-surtitre">{CENTRE.surtitre}</p>
+            {/* Un titre de niveau 2 : cette section était la seule de la page
+                sans titre, ce qui laissait un trou dans sa structure pour qui
+                la lit sans la voir — un lecteur d'écran, un moteur de
+                recherche. */}
+            <h2 className="lp-manifeste-texte">{CENTRE.titre}</h2>
+            <p className="lp-manifeste-texte lp-manifeste-corps">{CENTRE.texte}</p>
+            <p className="lp-manifeste-note">{CENTRE.note}</p>
           </div>
         </div>
       </section>
@@ -311,62 +307,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ===== LA PLATEFORME =====
-          La vitrine ne doit pas faire oublier a quoi sert cette adresse : c'est
-          aussi la porte d'entree de l'outil interne. */}
-      <section className="lp-section lp-section-sombre" id="plateforme">
-        <div className="lp-conteneur lp-plateforme">
-          <div className="lp-plateforme-texte" data-reveal>
-            <p className="lp-surtitre lp-surtitre-clair">{PLATEFORME.surtitre}</p>
-            <h2 className="lp-h2 lp-h2-clair">{PLATEFORME.titre}</h2>
-            <p className="lp-texte-section">{PLATEFORME.texte}</p>
-            <p className="lp-plateforme-acces">{PLATEFORME.acces}</p>
-            <Link
-              to={lienApp}
-              className="lp-btn lp-btn-primaire lp-btn-lg"
-              data-audience="espace-plateforme"
-            >
-              {libelleApp}
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-          </div>
-
-          {/* Maquette volontairement abstraite : une fausse capture d'ecran
-              afficherait des chiffres qui n'existent pas. */}
-          <div className="lp-apercu" data-reveal aria-hidden="true">
-            <div className="lp-fenetre">
-              <div className="lp-fenetre-barre">
-                <span /><span /><span />
-              </div>
-              <div className="lp-fenetre-corps">
-                <div className="lp-faux-rail">
-                  <span className="lp-faux-logo" />
-                  <span className="lp-faux-ligne lp-w-70" />
-                  <span className="lp-faux-ligne lp-w-90 lp-actif" />
-                  <span className="lp-faux-ligne lp-w-60" />
-                  <span className="lp-faux-ligne lp-w-80" />
-                  <span className="lp-faux-ligne lp-w-50" />
-                </div>
-                <div className="lp-faux-contenu">
-                  <div className="lp-faux-kpis">
-                    <div className="lp-faux-kpi"><span className="lp-faux-barre lp-pulse-1" /></div>
-                    <div className="lp-faux-kpi"><span className="lp-faux-barre lp-pulse-2" /></div>
-                    <div className="lp-faux-kpi"><span className="lp-faux-barre lp-pulse-3" /></div>
-                    <div className="lp-faux-kpi"><span className="lp-faux-barre lp-pulse-4" /></div>
-                  </div>
-                  <div className="lp-faux-graphe">
-                    {[38, 62, 45, 78, 56, 88, 70, 94, 66, 82, 58, 76].map((h, i) => (
-                      <span key={i} style={{ "--h": `${h}%`, "--d": `${i * 70}ms` }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="lp-fenetre-lueur" />
-          </div>
-        </div>
-      </section>
-
       {/* ===== APPEL FINAL ===== */}
       {/* « id » pour que la mesure d'audience sache que le visiteur est
           descendu jusqu'au bout : l'observateur ne regarde que les sections
@@ -390,10 +330,13 @@ export default function Landing() {
         <div className="lp-conteneur lp-pied-inner">
           <div className="lp-pied-marque">
             <ODCLogo variant="full" className="h-10" />
-            <p>
-              Inside ODC Sénégal — suivi des activités de formation, des bénéficiaires
-              et des partenaires d&apos;un centre numérique.
-            </p>
+            <p>{EDITEUR.resume}</p>
+            {/* Qui édite ce site. Descendue ici depuis la section « Le centre »,
+                qui ne parle plus que du centre : c'est la seule mention, hors
+                mentions légales, que ce site n'est celui d'aucune entreprise —
+                et c'est ce que vérifie un service de conformité avant
+                d'autoriser un compte d'envoi. */}
+            <p className="lp-pied-editeur">{EDITEUR.mention}</p>
           </div>
           <div className="lp-pied-liens">
             <Link to={lienApp} data-audience="espace">{libelleApp}</Link>
