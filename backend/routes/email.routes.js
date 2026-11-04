@@ -93,7 +93,10 @@ router.get("/diagnostic", authMiddleware, requireAdmin, async (req, res) => {
       });
     }
 
-    const diagnostic = await diagnostiquerDomaine(domaine, config.fournisseur);
+    /* Le signataire, pas le mode d'envoi : passer par le relais SMTP de Brevo,
+       c'est toujours Brevo qui signe. Transmettre « smtp » faisait chercher
+       une configuration Exchange Online sur un domaine configure pour Brevo. */
+    const diagnostic = await diagnostiquerDomaine(domaine, config.signataire || config.fournisseur);
     /* Le panneau affiche la date de demarrage du serveur : si elle est
        anterieure au dernier deploiement attendu, c'est que l'hebergeur n'a pas
        repris le code, et aucun reglage n'y changera rien. */

@@ -3,6 +3,7 @@ import { Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "./auth/useAuth";
 import ODCLogo from "./components/branding/ODCLogo";
+import { useMeta, PAGES } from "./seo/meta";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -10,6 +11,11 @@ export default function Login() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  /* « noindex » : la connexion est réservée à l'équipe et aux partenaires,
+     elle n'a rien à faire dans un résultat de recherche. Les bénéficiaires,
+     eux, passent par /espace, qui est indexable. */
+  useMeta(PAGES.prive);
 
   const { login, isAuthenticated, authReady } = useAuth();
   const navigate = useNavigate();

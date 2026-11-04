@@ -1091,7 +1091,9 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 10px;
+  /* Sans écart : ce sont les liens eux-mêmes qui portent leur remplissage,
+     pour que la zone touchable soit assez grande au doigt (voir plus bas). */
+  gap: 0;
 }
 
 @media (min-width: 760px) {
@@ -1104,7 +1106,20 @@
   text-decoration: none;
   border-bottom: 1px solid transparent;
   transition: border-color 0.25s ease;
+
+  /* Ces trois liens faisaient vingt-trois pixels de haut. Au doigt, sur un
+     téléphone, c'est à peu près la moitié de ce qu'il faut pour viser sans
+     s'y reprendre — et c'est la seule remarque de l'audit sur le mobile qui
+     se vérifiait. Le remplissage agrandit la zone touchable sans changer ni
+     la taille du texte ni l'espacement visible, puisque l'écart entre les
+     liens est repris plus bas. */
+  display: inline-block;
+  padding: 11px 0;
 }
+
+/* La ligne de copyright n'est pas un lien : elle retrouve ici l'air que le
+   « gap » lui donnait. */
+.lp-pied-liens .lp-pied-mentions { margin-top: 10px; }
 
 .lp-pied-liens a:hover { border-bottom-color: var(--orange-clair); }
 

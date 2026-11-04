@@ -4,11 +4,58 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
-    <title>Inside ODC</title>
+    <!-- Le titre et la description de la page d'accueil. L'application les
+         remplace à chaque changement de page (src/seo/meta.js) ; ce sont donc
+         ces valeurs-ci que voient les robots qui n'exécutent pas de
+         JavaScript, et il faut qu'elles décrivent la racine du site.
+
+         Le titre faisait dix caractères — « Inside ODC » — et la description
+         soixante-dix-huit. Trop court pour l'un comme pour l'autre : un
+         moteur de recherche dispose d'une ligne pour donner envie de cliquer,
+         et il ne la remplit pas à notre place. -->
+    <title>Inside ODC Sénégal — se former aux métiers du numérique</title>
     <meta
       name="description"
-      content="Suivi des activités, des bénéficiaires et des partenaires. Inside ODC Sénégal."
+      content="Formation, fabrication et accompagnement de projets dans un centre numérique au Sénégal : les quatre pôles, les publics accueillis et la plateforme de suivi."
     />
+
+    <!-- L'adresse de référence. L'hébergement sert le même document pour toute
+         adresse du site : sans elle, les dizaines de chemins de l'application
+         passent pour autant de pages en double aux yeux des moteurs. -->
+    <link rel="canonical" href="https://inside-odc.com/" />
+
+    <!-- ===== L'APERÇU D'UN LIEN PARTAGÉ =====
+         Ce qui s'affiche quand quelqu'un colle l'adresse du site dans une
+         conversation WhatsApp, sur Facebook ou sur LinkedIn. Rien de tout cela
+         n'existait : un lien partagé n'affichait qu'une adresse nue, sans
+         titre, sans image et sans résumé. C'est la correction la plus utile de
+         toutes, parce que ces trois canaux sont ceux par lesquels ce site est
+         réellement diffusé — et aucun de leurs robots n'exécute le JavaScript
+         qui remplit la page. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Inside ODC Sénégal" />
+    <meta property="og:locale" content="fr_SN" />
+    <meta property="og:url" content="https://inside-odc.com/" />
+    <meta property="og:title" content="Inside ODC Sénégal — se former aux métiers du numérique" />
+    <meta
+      property="og:description"
+      content="Formation, fabrication et accompagnement de projets dans un centre numérique au Sénégal : les quatre pôles, les publics accueillis et la plateforme de suivi."
+    />
+    <meta property="og:image" content="https://inside-odc.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Inside ODC Sénégal — apprendre, créer, entreprendre" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Inside ODC Sénégal — se former aux métiers du numérique" />
+    <meta
+      name="twitter:description"
+      content="Formation, fabrication et accompagnement de projets dans un centre numérique au Sénégal : les quatre pôles, les publics accueillis et la plateforme de suivi."
+    />
+    <meta name="twitter:image" content="https://inside-odc.com/og.png" />
+
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta name="author" content="Abdoul Mouhamed FALL" />
 
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
@@ -41,6 +88,62 @@
           /* stockage bloqué : on garde le thème clair par défaut */
         }
       })();
+    </script>
+
+    <!-- ===== DONNÉES STRUCTURÉES =====
+         Ce que le site est, dit dans la forme que les moteurs et les
+         assistants savent lire sans interpréter la page.
+
+         Ce qui est déclaré ici est volontairement modeste. Le site parle d'un
+         centre numérique mais n'est pas édité par ce centre : la page le dit
+         elle-même — « outil indépendant, développé par Abdoul Mouhamed FALL,
+         il n'émane d'aucune entreprise ». Se déclarer « EducationalOrganization »
+         reviendrait donc à se présenter comme le centre lui-même, ce qui est
+         faux, et ce que les moteurs sanctionnent quand ils s'en aperçoivent.
+
+         On déclare donc ce qui est vrai : un site, et le logiciel qu'il
+         présente, avec son auteur.
+
+         « sameAs » — les profils officiels sur les réseaux sociaux — est
+         volontairement absent : aucune adresse de compte n'a été fournie, et
+         en inventer une pointerait vers un compte qui n'existe pas ou qui
+         appartient à quelqu'un d'autre. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://inside-odc.com/#site",
+            "url": "https://inside-odc.com/",
+            "name": "Inside ODC Sénégal",
+            "description": "Formation, fabrication et accompagnement de projets dans un centre numérique au Sénégal.",
+            "inLanguage": "fr-SN"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://inside-odc.com/#plateforme",
+            "name": "Inside ODC",
+            "applicationCategory": "BusinessApplication",
+            "operatingSystem": "Web",
+            "url": "https://inside-odc.com/",
+            "description": "Plateforme de suivi des activités, des bénéficiaires et des partenaires d'un centre numérique : listes de présence, attestations de participation, statistiques et rapports.",
+            "inLanguage": "fr-SN",
+            "author": {
+              "@type": "Person",
+              "name": "Abdoul Mouhamed FALL"
+            }
+          },
+          {
+            "@type": "WebPage",
+            "@id": "https://inside-odc.com/#accueil",
+            "url": "https://inside-odc.com/",
+            "name": "Inside ODC Sénégal — se former aux métiers du numérique",
+            "isPartOf": { "@id": "https://inside-odc.com/#site" },
+            "about": { "@id": "https://inside-odc.com/#plateforme" }
+          }
+        ]
+      }
     </script>
   </head>
   <body>

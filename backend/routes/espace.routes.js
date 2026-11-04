@@ -5,6 +5,12 @@ const { sendEmail } = require("../services/mail");
 const { getTemplate, composerEmail, boutonAction } = require("./emailTemplates.routes");
 const { attestationPourActivite, moduleRetenu } = require("../services/attestationActivite");
 const { ensureEspaceBeneficiaire } = require("../migrations/espaceBeneficiaire");
+/* La mesure d'audience de l'espace se fait ici, au serveur, et non dans le
+   navigateur : ces quatre nombres sont le parcours reel — combien demandent un
+   lien, combien ouvrent leur espace, combien repartent avec leur attestation.
+   Comptes a la source, ils sont exacts et nul ne peut les gonfler. « noter »
+   n'echoue jamais : une mesure ne doit pas pouvoir empecher un telechargement. */
+const { noter } = require("../services/audience");
 const {
   COOKIE, DUREE_LIEN_MINUTES, creerLien, consommerLien,
   signerSession, optionsCookie, exigerEspace, normaliser,
@@ -53,6 +59,12 @@ router.post("/lien", async (req, res) => {
       return res.json(reponse);
     }
 
+    /* Compte ici, et non apres la verification en base : le denominateur du
+       parcours doit etre « combien ont essaye », y compris avec une adresse
+       absente des listes. C'est ce chiffre-la qui dit si le formulaire se
+       comprend. */
+    noter("espace", "lien_demande");
+
     const { rows } = await avecSchema(() => pool.query(
       "SELECT COUNT(*)::int AS n FROM participants WHERE LOWER(email) = $1",
       [email]
@@ -81,6 +93,7 @@ router.post("/lien", async (req, res) => {
         `Si vous n'avez rien demandé, ignorez ce message.`,
     });
 
+    noter("espace", "lien_envoye");
     res.json(reponse);
   } catch (err) {
     /* Meme en cas de panne d'envoi, on ne dit rien de plus : le visiteur ne
@@ -101,6 +114,7 @@ router.post("/session", async (req, res) => {
       });
     }
     res.cookie(COOKIE, signerSession(email), optionsCookie());
+    noter("espace", "session_ouverte");
     res.json({ email });
   } catch (err) {
     console.error(err);
@@ -252,6 +266,8 @@ router.get("/attestation/:ficheId/:activiteId", exigerEspace, async (req, res) =
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="${nomFichier}"`);
     res.send(pdf);
+    /* Apres l'envoi : un document qui n'est pas parti n'a pas ete telecharge. */
+    noter("espace", "attestation");
   } catch (err) {
     console.error("[ESPACE] attestation :", err.message);
     res.status(500).json({ error: "La génération du document a échoué." });

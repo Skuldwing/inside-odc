@@ -20,6 +20,7 @@ const Dispositifs = lazy(() => import("./pages/Dispositifs"));
 const ModelesAttestation = lazy(() => import("./pages/ModelesAttestation"));
 const Partenaires = lazy(() => import("./pages/Partenaires"));
 const Budget = lazy(() => import("./pages/Budget"));
+const Audience = lazy(() => import("./pages/Audience"));
 const Espace = lazy(() => import("./pages/Espace"));
 const PartenaireDetail = lazy(() => import("./pages/PartenaireDetail"));
 const Utilisateurs = lazy(() => import("./pages/Utilisateurs"));
@@ -250,6 +251,17 @@ export default function App() {
             <SuperAdminRoute>
               <Suspense fallback={<PageLoader />}>
                 <Budget />
+              </Suspense>
+            </SuperAdminRoute>
+          }
+        />
+        {/* Le trafic du site, lui aussi reserve aux Admin +. */}
+        <Route
+          path="audience"
+          element={
+            <SuperAdminRoute>
+              <Suspense fallback={<PageLoader />}>
+                <Audience />
               </Suspense>
             </SuperAdminRoute>
           }

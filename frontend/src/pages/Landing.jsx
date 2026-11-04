@@ -15,68 +15,33 @@ import {
 } from "lucide-react";
 import ODCLogo from "../components/branding/ODCLogo";
 import { useAuth } from "../auth/useAuth";
+import { suivreAudience } from "../analytics/audience";
+import { useMeta, PAGES } from "../seo/meta";
+import { HERO, MANIFESTE, POLES, PUBLICS, PLATEFORME, FINAL } from "../content/centre";
 import "../styles/landing.css";
 
-/* ─────────────────────────────────────────────────────────────────────────
-   TEXTES A VALIDER PAR L'EQUIPE ODC
+/* Les textes du centre vivent dans content/centre.js, et nulle part ailleurs.
 
-   Tout ce qui decrit le centre est regroupe ici pour etre relu et corrige en
-   un seul endroit, sans toucher a la mise en page.
+   Ils en sont sortis parce qu'une version statique de cette page est écrite
+   dans le document au moment de la construction, pour les robots qui
+   n'exécutent pas de JavaScript — WhatsApp et Facebook quand ils composent
+   l'aperçu d'un lien partagé, et la plupart des robots des moteurs par
+   intelligence artificielle. Le greffon qui la produit lit ce même fichier :
+   les deux versions ne peuvent donc pas diverger.
 
-   Ces formulations decrivent le modele d'un centre numerique tel qu'il est
-   presente publiquement. Elles n'avancent volontairement aucun chiffre —
-   nombre de personnes formees, de projets accompagnes, dates — car aucune
-   source interne ne les a fournies. Mieux vaut une page sobre qu'une page
-   qui affiche des donnees inventees au nom du centre.
-   ───────────────────────────────────────────────────────────────────────── */
+   Ne restent ici que les icônes, qui sont du dessin et non du texte. */
+const ICONES_POLE = {
+  code: Code2,
+  fablab: Wrench,
+  accelerateur: Rocket,
+  investissement: TrendingUp,
+};
 
-const POLES = [
-  {
-    icon: Code2,
-    titre: "École du code",
-    texte:
-      "Une formation aux métiers du développement, gratuite et ouverte sans condition de diplôme, pour entrer dans le numérique par la pratique.",
-  },
-  {
-    icon: Wrench,
-    titre: "FabLab Solidaire",
-    texte:
-      "Un atelier de fabrication numérique : impression 3D, prototypage, électronique, et l'initiation des plus jeunes à la création.",
-  },
-  {
-    icon: Rocket,
-    titre: "Accélérateur",
-    texte:
-      "L'accompagnement des jeunes entreprises déjà lancées : mentorat, mise en relation, accès à l'écosystème du groupe.",
-  },
-  {
-    icon: TrendingUp,
-    titre: "Investissement",
-    texte:
-      "Le relais de financement pour les projets prêts à changer d'échelle, une fois le modèle éprouvé.",
-  },
-];
-
-const PUBLICS = [
-  {
-    icon: GraduationCap,
-    titre: "Celles et ceux qui se forment",
-    texte:
-      "Jeunes en recherche de compétences, en reconversion, ou simplement curieux d'un métier du numérique.",
-  },
-  {
-    icon: Lightbulb,
-    titre: "Les porteurs de projet",
-    texte:
-      "D'une idée griffonnée à une entreprise qui recrute, chaque étape trouve un interlocuteur au centre.",
-  },
-  {
-    icon: School,
-    titre: "Les scolaires et les enseignants",
-    texte:
-      "Ateliers d'initiation, découverte du code et de la fabrication numérique, encadrés par l'équipe.",
-  },
-];
+const ICONES_PUBLIC = {
+  formation: GraduationCap,
+  projet: Lightbulb,
+  scolaires: School,
+};
 
 /* Revele les elements au defilement. Un seul observateur pour toute la page,
    et les elements observes ne le sont plus une fois apparus. */
@@ -113,6 +78,20 @@ export default function Landing() {
   const heroRef = useRef(null);
 
   useRevelation();
+
+  /* Mesure d'audience : combien de visites, par ou elles arrivent, jusqu'ou
+     elles descendent dans la page, combien de temps elles restent. Aucun
+     identifiant de personne n'est envoye, et la synthese n'est lisible que par
+     un Admin +. Le detail de ce qui circule est en tete de analytics/audience.js.
+
+     Le montage se fait une seule fois : les dependances sont vides a dessein,
+     une visite ne redemarre pas parce qu'un etat de la page a change. */
+  useEffect(() => suivreAudience("accueil"), []);
+
+  /* Le titre et la description propres à cette page. Sans cela, toutes les
+     adresses du site s'annonçaient « Inside ODC » — dans l'onglet, dans un
+     favori, et dans les résultats de recherche. */
+  useMeta(PAGES.accueil);
 
   /* L'en-tete devient opaque des que la page bouge : au-dessus du hero
      sombre, un fond blanc permanent ecraserait l'image. */
@@ -167,7 +146,15 @@ export default function Landing() {
             <a href="#plateforme">La plateforme</a>
           </nav>
 
-          <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-connexion">
+          {/* « data-audience » : le nom du bouton pour la mesure d'audience.
+              Un seul ecouteur delegue les releve tous, et le serveur n'accepte
+              que les noms de sa liste. Rien n'est envoye sur la personne qui
+              clique — seul le compte du jour est incremente. */}
+          <Link
+            to={lienApp}
+            className="lp-btn lp-btn-primaire lp-btn-connexion"
+            data-audience="espace"
+          >
             <LogIn className="h-4 w-4" aria-hidden="true" />
             {libelleApp}
           </Link>
@@ -187,30 +174,36 @@ export default function Landing() {
         <div className="lp-conteneur lp-hero-inner">
           <p className="lp-eyebrow lp-monte" style={{ animationDelay: "80ms" }}>
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-            Inside ODC · Sénégal
+            {HERO.surtitre}
           </p>
 
           <h1 className="lp-titre lp-titre-large">
             <span className="lp-monte" style={{ animationDelay: "160ms" }}>
-              Apprendre, créer,
+              {HERO.titre[0]}
             </span>{" "}
             <span className="lp-monte lp-degrade" style={{ animationDelay: "260ms" }}>
-              entreprendre.
+              {HERO.titre[1]}
             </span>
           </h1>
 
           <p className="lp-chapo lp-monte" style={{ animationDelay: "380ms" }}>
-            Un même lieu pour se former aux métiers du numérique, fabriquer un premier
-            prototype et faire grandir un projet. Ouvert à celles et ceux qui veulent
-            s&apos;y mettre, quel que soit leur point de départ.
+            {HERO.chapo}
           </p>
 
           <div className="lp-actions lp-monte" style={{ animationDelay: "500ms" }}>
-            <a href="#centre" className="lp-btn lp-btn-primaire lp-btn-lg">
+            <a
+              href="#centre"
+              className="lp-btn lp-btn-primaire lp-btn-lg"
+              data-audience="decouvrir"
+            >
               Découvrir le centre
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
-            <Link to={lienApp} className="lp-btn lp-btn-fantome lp-btn-lg">
+            <Link
+              to={lienApp}
+              className="lp-btn lp-btn-fantome lp-btn-lg"
+              data-audience="espace-hero"
+            >
               {libelleApp}
             </Link>
           </div>
@@ -244,17 +237,17 @@ export default function Landing() {
       <section className="lp-section" id="centre">
         <div className="lp-conteneur">
           <div className="lp-manifeste" data-reveal>
-            <p className="lp-surtitre">Ce que suit la plateforme</p>
+            {/* Un titre de niveau 2, et non un paragraphe mis en forme : cette
+                section était la seule de la page sans titre, ce qui laissait un
+                trou dans sa structure pour qui la lit sans la voir — un lecteur
+                d'écran, un moteur de recherche. L'apparence est inchangée, la
+                classe est la même. */}
+            <h2 className="lp-surtitre">{MANIFESTE.surtitre}</h2>
             <p className="lp-manifeste-texte">
-              <strong>Inside ODC</strong> tient le registre d&apos;un centre numérique :
-              les formations qui s&apos;y donnent, les personnes qui les suivent, les
-              partenaires qui les portent et les machines qui servent. Une activité, une
-              liste de présence, et le reste suit — statistiques, attestations, rapports.
+              <strong>{MANIFESTE.nom}</strong>
+              {MANIFESTE.texte}
             </p>
-            <p className="lp-manifeste-note">
-              Outil indépendant, développé par Abdoul Mouhamed FALL. Il n&apos;émane
-              d&apos;aucune entreprise et n&apos;engage qu&apos;elle-même.
-            </p>
+            <p className="lp-manifeste-note">{MANIFESTE.note}</p>
           </div>
         </div>
       </section>
@@ -263,17 +256,14 @@ export default function Landing() {
       <section className="lp-section lp-section-douce" id="poles">
         <div className="lp-conteneur">
           <div className="lp-section-tete" data-reveal>
-            <p className="lp-surtitre">Les pôles</p>
-            <h2 className="lp-h2">Quatre portes d&apos;entrée, un seul parcours</h2>
-            <p className="lp-texte-section">
-              Chacun répond à un moment différent. On peut n&apos;en pousser qu&apos;une, ou
-              les traverser toutes.
-            </p>
+            <p className="lp-surtitre">{POLES.surtitre}</p>
+            <h2 className="lp-h2">{POLES.titre}</h2>
+            <p className="lp-texte-section">{POLES.chapo}</p>
           </div>
 
           <div className="lp-cartes">
-            {POLES.map((pole, i) => {
-              const Icone = pole.icon;
+            {POLES.items.map((pole, i) => {
+              const Icone = ICONES_POLE[pole.cle];
               return (
                 <article
                   className="lp-carte lp-carte-pole"
@@ -300,13 +290,13 @@ export default function Landing() {
       <section className="lp-section" id="publics">
         <div className="lp-conteneur">
           <div className="lp-section-tete" data-reveal>
-            <p className="lp-surtitre">Pour qui</p>
-            <h2 className="lp-h2">Le centre s&apos;adresse à qui pousse la porte</h2>
+            <p className="lp-surtitre">{PUBLICS.surtitre}</p>
+            <h2 className="lp-h2">{PUBLICS.titre}</h2>
           </div>
 
           <div className="lp-terrain">
-            {PUBLICS.map((item, i) => {
-              const Icone = item.icon;
+            {PUBLICS.items.map((item, i) => {
+              const Icone = ICONES_PUBLIC[item.cle];
               return (
                 <div key={item.titre} data-reveal style={{ transitionDelay: `${i * 100}ms` }}>
                   <span className="lp-terrain-icone">
@@ -327,18 +317,15 @@ export default function Landing() {
       <section className="lp-section lp-section-sombre" id="plateforme">
         <div className="lp-conteneur lp-plateforme">
           <div className="lp-plateforme-texte" data-reveal>
-            <p className="lp-surtitre lp-surtitre-clair">Les coulisses</p>
-            <h2 className="lp-h2 lp-h2-clair">Inside ODC, l&apos;outil de l&apos;équipe</h2>
-            <p className="lp-texte-section">
-              Derrière chaque atelier, il y a des inscriptions, des présences, des
-              partenaires et un bilan à rendre. Inside ODC rassemble ce suivi en un seul
-              endroit, pour que le temps passe avec les participants plutôt que sur des
-              tableurs.
-            </p>
-            <p className="lp-plateforme-acces">
-              L&apos;accès est réservé à l&apos;équipe du centre et à ses partenaires.
-            </p>
-            <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-lg">
+            <p className="lp-surtitre lp-surtitre-clair">{PLATEFORME.surtitre}</p>
+            <h2 className="lp-h2 lp-h2-clair">{PLATEFORME.titre}</h2>
+            <p className="lp-texte-section">{PLATEFORME.texte}</p>
+            <p className="lp-plateforme-acces">{PLATEFORME.acces}</p>
+            <Link
+              to={lienApp}
+              className="lp-btn lp-btn-primaire lp-btn-lg"
+              data-audience="espace-plateforme"
+            >
               {libelleApp}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -381,17 +368,17 @@ export default function Landing() {
       </section>
 
       {/* ===== APPEL FINAL ===== */}
-      <section className="lp-final">
+      {/* « id » pour que la mesure d'audience sache que le visiteur est
+          descendu jusqu'au bout : l'observateur ne regarde que les sections
+          qui en portent un. */}
+      <section className="lp-final" id="final">
         <div className="lp-conteneur lp-final-inner" data-reveal>
           <span className="lp-final-icone">
             <Users className="h-6 w-6" aria-hidden="true" />
           </span>
-          <h2>Le numérique s&apos;apprend en le faisant</h2>
-          <p>
-            Le centre ouvre ses ateliers, ses machines et son accompagnement à celles et
-            ceux qui veulent s&apos;y mettre.
-          </p>
-          <a href="#poles" className="lp-btn lp-btn-primaire lp-btn-lg">
+          <h2>{FINAL.titre}</h2>
+          <p>{FINAL.texte}</p>
+          <a href="#poles" className="lp-btn lp-btn-primaire lp-btn-lg" data-audience="poles">
             Voir les pôles
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </a>
@@ -409,12 +396,14 @@ export default function Landing() {
             </p>
           </div>
           <div className="lp-pied-liens">
-            <Link to={lienApp}>{libelleApp}</Link>
+            <Link to={lienApp} data-audience="espace">{libelleApp}</Link>
             {/* Qui édite ce site, et comment le joindre. Un visiteur — ou un
                 service de conformité qui vérifie un expéditeur — doit pouvoir
                 le trouver sans compte. */}
-            <Link to="/mentions-legales">Mentions légales</Link>
-            <a href="mailto:contact@inside-odc.com">contact@inside-odc.com</a>
+            <Link to="/mentions-legales" data-audience="mentions">Mentions légales</Link>
+            <a href="mailto:contact@inside-odc.com" data-audience="contact">
+              contact@inside-odc.com
+            </a>
             <p className="lp-pied-mentions">
               © {new Date().getFullYear()} Inside ODC Sénégal
             </p>

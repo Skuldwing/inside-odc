@@ -127,7 +127,15 @@ const AUTHENTIFICATION = {
     selecteurDkim: "mailjet",
     ou: "Mailjet, dans Expéditeurs et domaines",
   },
-  smtp: { spfInclude: "include:spf.brevo.com", selecteurDkim: "brevo", ou: "votre service d'envoi" },
+  /* Un serveur SMTP quelconque — Exchange, une boîte d'hébergeur, une machine
+     maison. On ne peut pas deviner son « include » SPF ni son sélecteur DKIM,
+     et les inventer serait pire que se taire : cette entrée proposait autrefois
+     ceux de Brevo, si bien que l'écran conseillait d'autoriser Brevo sur un
+     domaine qui n'envoie pas par Brevo, pendant que le serveur, lui, réclamait
+     Microsoft 365. Les deux moitiés du même diagnostic se contredisaient.
+     Le relais SMTP d'un prestataire, lui, n'arrive plus ici : il est reconnu
+     en amont et traité comme « brevo » ou « mailjet ». */
+  smtp: { spfInclude: null, selecteurDkim: null, ou: "votre service d'envoi" },
 };
 
 function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur) {
@@ -140,7 +148,9 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
   /* Avec Brevo, on ne propose jamais de toucher au SPF : ses messages partent
      avec un Return-Path à lui, et c'est DKIM qui porte l'alignement. Envoyer
      modifier un SPF en service pour rien serait un risque, pas une aide. */
-  if (!brevo && manque("spf")) {
+  /* Sans « include » connu, on ne propose rien : un SPF inventé est plus
+     dangereux qu'un SPF absent. */
+  if (!brevo && manque("spf") && mode.spfInclude) {
     const existant = controles.spf?.valeur;
     liste.push({
       type: "TXT",
@@ -172,7 +182,7 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
           note: n === 1 ? "Deux enregistrements, et de type CNAME — pas TXT." : null,
         });
       }
-    } else {
+    } else if (mode.selecteurDkim) {
       liste.push({
         type: "TXT",
         role: "DKIM — signature des messages",
@@ -181,6 +191,9 @@ function enregistrementsAPoser(domaine, controles, adresseRapports, fournisseur)
         source: mode.ou,
       });
     }
+    /* Sélecteur inconnu : on ne fabrique pas un nom d'enregistrement au
+       hasard. Le service d'envoi le donne, et le verdict dit déjà que la
+       signature manque. */
   }
 
   if (manque("verification_brevo")) {

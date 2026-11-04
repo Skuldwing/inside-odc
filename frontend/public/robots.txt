@@ -1,0 +1,48 @@
+# Inside ODC Sénégal — https://inside-odc.com
+#
+# Ce fichier n'existait pas. Comme l'hébergement renvoie l'application pour
+# toute adresse inconnue, /robots.txt servait le document HTML du site : les
+# robots recevaient « <!DOCTYPE html> » là où ils attendaient des directives,
+# d'où le « syntaxe invalide » des outils d'analyse. Un fichier réel, posé
+# dans /public, est servi tel quel et passe avant cette redirection.
+#
+# Trois adresses publiques, et tout le reste fermé. Ce qui suit n'est pas une
+# mesure de sécurité — un robot malveillant ne lit pas ce fichier, et la vraie
+# protection est au serveur — mais une indication aux moteurs : il n'y a rien
+# à indexer derrière une connexion, et chaque adresse de l'application renvoie
+# le même document, ce qui produirait des dizaines de pages en double.
+
+User-agent: *
+
+# ── L'espace de travail, réservé à l'équipe et aux partenaires ──
+Disallow: /login
+Disallow: /set-password
+Disallow: /dashboard
+Disallow: /activities
+Disallow: /participants
+Disallow: /assiduite
+Disallow: /partenaires
+Disallow: /dispositifs
+Disallow: /modeles-attestation
+Disallow: /campagnes
+Disallow: /utilisateurs
+Disallow: /formulaires
+Disallow: /vote
+Disallow: /audit
+Disallow: /fiabilite
+Disallow: /rapport-mensuel
+Disallow: /budget
+Disallow: /audience
+Disallow: /mbootay
+Disallow: /profil
+
+# ── Les adresses à usage unique ──
+# Un lien d'accès à l'espace bénéficiaire, un émargement, un formulaire
+# ouvert pour une séance : ces adresses portent un jeton, ne valent qu'une
+# fois, et n'ont aucun sens dans un index de moteur de recherche.
+Disallow: /*?jeton=
+Disallow: /checkin/
+Disallow: /f/
+Disallow: /desabonnement
+
+Sitemap: https://inside-odc.com/sitemap.xml
