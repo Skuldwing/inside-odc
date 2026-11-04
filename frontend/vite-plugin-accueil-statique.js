@@ -1,4 +1,4 @@
-import { HERO, MANIFESTE, POLES, PUBLICS, PLATEFORME, FINAL } from "./src/content/centre.js";
+import { HERO, CENTRE, POLES, PUBLICS, FINAL, EDITEUR } from "./src/content/centre.js";
 import { IDENTITE } from "./src/config/identite.js";
 
 /**
@@ -95,19 +95,13 @@ export function accueilStatique() {
     <p style="margin:0 0 32px;font-size:18px;line-height:1.6;color:#3a3a3a">${echapper(HERO.chapo)}</p>
 
     <section style="margin:0 0 40px">
-      <h2 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:${ENCRE}">${echapper(MANIFESTE.surtitre)}</h2>
-      <p style="margin:0 0 10px;font-size:16px;line-height:1.65;color:#3a3a3a"><strong>${echapper(MANIFESTE.nom)}</strong>${echapper(MANIFESTE.texte)}</p>
-      <p style="margin:0;font-size:14px;line-height:1.6;color:#6a6a6a">${echapper(MANIFESTE.note)}</p>
+      <h2 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:${ENCRE}">${echapper(CENTRE.titre)}</h2>
+      <p style="margin:0 0 10px;font-size:16px;line-height:1.65;color:#3a3a3a">${echapper(CENTRE.texte)}</p>
+      <p style="margin:0;font-size:14px;line-height:1.6;color:#6a6a6a">${echapper(CENTRE.note)}</p>
     </section>
 
     ${bloc(POLES)}
     ${bloc(PUBLICS)}
-
-    <section style="margin:0 0 40px">
-      <h2 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:${ENCRE}">${echapper(PLATEFORME.titre)}</h2>
-      <p style="margin:0 0 10px;font-size:16px;line-height:1.65;color:#3a3a3a">${echapper(PLATEFORME.texte)}</p>
-      <p style="margin:0;font-size:14px;line-height:1.6;color:#6a6a6a">${echapper(PLATEFORME.acces)}</p>
-    </section>
 
     <section style="margin:0 0 40px">
       <h2 style="margin:0 0 12px;font-size:22px;line-height:1.25;color:${ENCRE}">${echapper(FINAL.titre)}</h2>
@@ -119,6 +113,7 @@ export function accueilStatique() {
       <a href="/mentions-legales" style="color:#4a4a4a;margin-right:20px">Mentions légales</a>
       <a href="mailto:${IDENTITE.contact}" style="color:#4a4a4a">${IDENTITE.contact}</a>
     </nav>
+    <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#8a8a8a">${echapper(EDITEUR.mention)}</p>
   </div>`;
 
       const script = `

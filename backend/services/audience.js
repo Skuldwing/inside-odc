@@ -25,11 +25,16 @@ const EVENEMENTS = {
   /* Jusqu'ou le visiteur descend dans la page d'accueil. Une section compte
      une fois par visite : c'est « il y est arrive », pas « il l'a regardee
      douze fois ». */
-  section: ["top", "centre", "poles", "publics", "plateforme", "final"],
+  /* « plateforme » a disparu avec la section qui presentait l'outil interne :
+     la page d'accueil ne parle plus que du centre. Les quelques lignes deja
+     comptees sous ce nom restent en base sans gener — elles cessent
+     simplement d'etre affichees, puisque cette liste donne aussi l'ordre de
+     lecture. */
+  section: ["top", "centre", "poles", "publics", "final"],
 
   /* Ce sur quoi il clique. Les noms sont poses dans le gabarit de la page
      d'accueil, en attribut « data-audience ». */
-  clic: ["espace", "espace-hero", "espace-plateforme", "decouvrir", "poles", "mentions", "contact"],
+  clic: ["espace", "espace-hero", "decouvrir", "poles", "mentions", "contact"],
 
   /* Le parcours de l'espace beneficiaire. Compte au serveur, sur les routes
      qui existent deja : ces quatre nombres sont donc exacts et personne ne

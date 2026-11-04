@@ -39,14 +39,36 @@ export const HERO = {
     "Un même lieu pour se former aux métiers du numérique, fabriquer un premier prototype et faire grandir un projet. Ouvert à celles et ceux qui veulent s'y mettre, quel que soit leur point de départ.",
 };
 
-export const MANIFESTE = {
-  surtitre: "Ce que suit la plateforme",
-  /* Le gras porte sur le nom, en tête de phrase. */
-  nom: "Inside ODC",
+/* Cette section décrivait l'outil de suivi : « Inside ODC tient le registre
+   d'un centre numérique… ». La page d'accueil s'adresse au public, qui n'a
+   rien à faire du logiciel de l'équipe — elle ne parle donc plus que du
+   centre. La section « Les coulisses », qui présentait la plateforme interne,
+   a disparu pour la même raison. */
+export const CENTRE = {
+  surtitre: "Le centre",
+  titre: "Un lieu, des machines, une équipe",
   texte:
-    " tient le registre d'un centre numérique : les formations qui s'y donnent, les personnes qui les suivent, les partenaires qui les portent et les machines qui servent. Une activité, une liste de présence, et le reste suit — statistiques, attestations, rapports.",
-  note:
-    "Outil indépendant, développé par Abdoul Mouhamed FALL. Il n'émane d'aucune entreprise et n'engage qu'elle-même.",
+    "Des salles de formation, un atelier de fabrication numérique, et des personnes pour accompagner. On y vient pour apprendre un métier, pour fabriquer un premier objet, ou pour faire grandir un projet déjà lancé.",
+  note: "Quatre pôles, et chacun répond à un moment du parcours.",
+};
+
+/* Qui édite ce site.
+ *
+ * Cette phrase vivait dans la section ci-dessus, qui a été réécrite. Elle est
+ * descendue au pied de page plutôt que supprimée, et ce n'est pas un détail :
+ * c'est la seule mention, hors mentions légales, que ce site n'est pas celui
+ * d'Orange ni de Sonatel.
+ *
+ * Sans elle, il reste une page qui parle d'Orange Digital Center sur un
+ * domaine déposé au nom d'un particulier — un profil indiscernable d'une
+ * usurpation de marque, qui est précisément ce que vérifie un service de
+ * conformité avant d'autoriser un compte d'envoi. C'est ce qui avait déjà
+ * valu un refus. */
+export const EDITEUR = {
+  resume:
+    "Centre numérique au Sénégal : formation aux métiers du numérique, fabrication et accompagnement de projets.",
+  mention:
+    "Site indépendant, édité par Abdoul Mouhamed FALL. Il n'émane d'aucune entreprise et n'engage que lui-même.",
 };
 
 export const POLES = {
@@ -105,16 +127,6 @@ export const PUBLICS = {
         "Ateliers d'initiation, découverte du code et de la fabrication numérique, encadrés par l'équipe.",
     },
   ],
-};
-
-/* La vitrine ne doit pas faire oublier à quoi sert cette adresse : c'est aussi
-   la porte d'entrée de l'outil interne. */
-export const PLATEFORME = {
-  surtitre: "Les coulisses",
-  titre: "Inside ODC, l'outil de l'équipe",
-  texte:
-    "Derrière chaque atelier, il y a des inscriptions, des présences, des partenaires et un bilan à rendre. Inside ODC rassemble ce suivi en un seul endroit, pour que le temps passe avec les participants plutôt que sur des tableurs.",
-  acces: "L'accès est réservé à l'équipe du centre et à ses partenaires.",
 };
 
 export const FINAL = {

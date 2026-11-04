@@ -44,14 +44,12 @@ const SECTIONS = {
   centre: "Le centre",
   poles: "Les pôles",
   publics: "Pour qui",
-  plateforme: "La plateforme",
   final: "Appel final",
 };
 
 const CLICS = {
   espace: "« Mon espace » (en-tête et pied)",
   "espace-hero": "« Mon espace » (haut de page)",
-  "espace-plateforme": "« Mon espace » (section plateforme)",
   decouvrir: "« Découvrir le centre »",
   poles: "« Voir les pôles »",
   mentions: "Mentions légales",
