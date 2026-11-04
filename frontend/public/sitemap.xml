@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Les adresses publiques du site, et elles seules.
+
+  Trois, parce qu'il n'y en a que trois : tout le reste de l'application vit
+  derrière une connexion et n'a rien à faire dans un index. Un plan de site qui
+  annonce des pages fermées fait perdre du temps aux robots et abîme la lecture
+  que les moteurs ont du site.
+
+  « lastmod » n'est volontairement pas renseigné : une date inventée, ou figée
+  au jour de la mise en ligne, vaut moins que pas de date du tout — les moteurs
+  s'en servent pour décider quand revenir, et une date fausse les trompe.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://inside-odc.com/</loc>
+    <changefreq>monthly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://inside-odc.com/espace</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://inside-odc.com/mentions-legales</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+</urlset>

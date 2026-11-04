@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import ODCLogo from "../components/branding/ODCLogo";
 import { MENTIONS } from "../config/mentions";
 import { IDENTITE } from "../config/identite";
+import { useMeta, PAGES } from "../seo/meta";
 import "../styles/landing.css";
 
 /**
@@ -37,6 +38,10 @@ function Bloc({ titre, children }) {
 
 export default function MentionsLegales() {
   const m = MENTIONS;
+
+  /* Volontairement indexable : c'est la page qui permet à un tiers — un
+     destinataire, un service de conformité — de vérifier qui édite ce site. */
+  useMeta(PAGES.mentions);
 
   return (
     <div className="lp ml">

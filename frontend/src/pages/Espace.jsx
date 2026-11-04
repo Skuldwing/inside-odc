@@ -7,6 +7,7 @@ import {
 import api from "../api";
 import ODCLogo from "../components/branding/ODCLogo";
 import { suivreAudience } from "../analytics/audience";
+import { useMeta, PAGES } from "../seo/meta";
 
 /* L'espace des bénéficiaires.
  *
@@ -75,6 +76,11 @@ export default function Espace() {
      ne transite par ici. Aucun identifiant de beneficiaire n'est envoye : ni
      l'adresse de la session, ni le numero d'une fiche. */
   useEffect(() => suivreAudience("espace"), []);
+
+  /* Cette page doit pouvoir être trouvée : un bénéficiaire qui cherche « mon
+     attestation Inside ODC » doit tomber dessus. Les liens d'accès, eux, ne
+     sont pas indexables — ils portent un jeton, et robots.txt les écarte. */
+  useMeta(PAGES.espace);
 
   const demanderLien = async (e) => {
     e.preventDefault();

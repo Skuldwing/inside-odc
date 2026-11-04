@@ -5,6 +5,8 @@ import Header from "./Header";
 import OnboardingTour from "../components/OnboardingTour";
 import CommandPalette from "../components/ui/CommandPalette";
 import { useAuth } from "../auth/useAuth";
+import { appliquerMeta, PAGES } from "../seo/meta";
+import { IDENTITE } from "../config/identite";
 
 export default function Layout() {
   const { isAdmin, isTeamOdc } = useAuth();
@@ -41,6 +43,26 @@ export default function Layout() {
   const currentPageName =
     PAGE_TITLES.find(([prefix]) => location.pathname.startsWith(prefix))?.[1] ||
     location.pathname.replace("/", "");
+
+  /* Deux choses d'un coup, pour tout l'espace de travail.
+
+     L'onglet porte enfin le nom de l'écran ouvert. Toutes les pages du site
+     s'annonçaient « Inside ODC » : avec six onglets ouverts — et c'est le
+     quotidien ici — aucun n'était reconnaissable, et un favori ne disait rien
+     de ce qu'il rouvrait.
+
+     Et « noindex » : rien de ce qui vit derrière une connexion n'a sa place
+     dans un moteur de recherche. robots.txt le dit déjà, mais un robot qui
+     arrive par un lien n'est pas tenu de l'avoir lu, alors que la balise
+     voyage avec la page. */
+  useEffect(() => {
+    appliquerMeta({
+      ...PAGES.prive,
+      titre: currentPageName
+        ? `${currentPageName} — ${IDENTITE.nomCourt}`
+        : PAGES.prive.titre,
+    });
+  }, [currentPageName]);
 
   /* Ctrl/Cmd + K depuis n'importe ou, sauf quand on est deja en train de
      saisir du texte ailleurs. La touche « / » ouvre aussi la recherche, comme
