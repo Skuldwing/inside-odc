@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import ODCLogo from "../components/branding/ODCLogo";
 import { useAuth } from "../auth/useAuth";
+import { suivreAudience } from "../analytics/audience";
 import "../styles/landing.css";
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -114,6 +115,15 @@ export default function Landing() {
 
   useRevelation();
 
+  /* Mesure d'audience : combien de visites, par ou elles arrivent, jusqu'ou
+     elles descendent dans la page, combien de temps elles restent. Aucun
+     identifiant de personne n'est envoye, et la synthese n'est lisible que par
+     un Admin +. Le detail de ce qui circule est en tete de analytics/audience.js.
+
+     Le montage se fait une seule fois : les dependances sont vides a dessein,
+     une visite ne redemarre pas parce qu'un etat de la page a change. */
+  useEffect(() => suivreAudience("accueil"), []);
+
   /* L'en-tete devient opaque des que la page bouge : au-dessus du hero
      sombre, un fond blanc permanent ecraserait l'image. */
   useEffect(() => {
@@ -167,7 +177,15 @@ export default function Landing() {
             <a href="#plateforme">La plateforme</a>
           </nav>
 
-          <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-connexion">
+          {/* « data-audience » : le nom du bouton pour la mesure d'audience.
+              Un seul ecouteur delegue les releve tous, et le serveur n'accepte
+              que les noms de sa liste. Rien n'est envoye sur la personne qui
+              clique — seul le compte du jour est incremente. */}
+          <Link
+            to={lienApp}
+            className="lp-btn lp-btn-primaire lp-btn-connexion"
+            data-audience="espace"
+          >
             <LogIn className="h-4 w-4" aria-hidden="true" />
             {libelleApp}
           </Link>
@@ -206,11 +224,19 @@ export default function Landing() {
           </p>
 
           <div className="lp-actions lp-monte" style={{ animationDelay: "500ms" }}>
-            <a href="#centre" className="lp-btn lp-btn-primaire lp-btn-lg">
+            <a
+              href="#centre"
+              className="lp-btn lp-btn-primaire lp-btn-lg"
+              data-audience="decouvrir"
+            >
               Découvrir le centre
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </a>
-            <Link to={lienApp} className="lp-btn lp-btn-fantome lp-btn-lg">
+            <Link
+              to={lienApp}
+              className="lp-btn lp-btn-fantome lp-btn-lg"
+              data-audience="espace-hero"
+            >
               {libelleApp}
             </Link>
           </div>
@@ -338,7 +364,11 @@ export default function Landing() {
             <p className="lp-plateforme-acces">
               L&apos;accès est réservé à l&apos;équipe du centre et à ses partenaires.
             </p>
-            <Link to={lienApp} className="lp-btn lp-btn-primaire lp-btn-lg">
+            <Link
+              to={lienApp}
+              className="lp-btn lp-btn-primaire lp-btn-lg"
+              data-audience="espace-plateforme"
+            >
               {libelleApp}
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
@@ -381,7 +411,10 @@ export default function Landing() {
       </section>
 
       {/* ===== APPEL FINAL ===== */}
-      <section className="lp-final">
+      {/* « id » pour que la mesure d'audience sache que le visiteur est
+          descendu jusqu'au bout : l'observateur ne regarde que les sections
+          qui en portent un. */}
+      <section className="lp-final" id="final">
         <div className="lp-conteneur lp-final-inner" data-reveal>
           <span className="lp-final-icone">
             <Users className="h-6 w-6" aria-hidden="true" />
@@ -391,7 +424,7 @@ export default function Landing() {
             Le centre ouvre ses ateliers, ses machines et son accompagnement à celles et
             ceux qui veulent s&apos;y mettre.
           </p>
-          <a href="#poles" className="lp-btn lp-btn-primaire lp-btn-lg">
+          <a href="#poles" className="lp-btn lp-btn-primaire lp-btn-lg" data-audience="poles">
             Voir les pôles
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </a>
@@ -409,12 +442,14 @@ export default function Landing() {
             </p>
           </div>
           <div className="lp-pied-liens">
-            <Link to={lienApp}>{libelleApp}</Link>
+            <Link to={lienApp} data-audience="espace">{libelleApp}</Link>
             {/* Qui édite ce site, et comment le joindre. Un visiteur — ou un
                 service de conformité qui vérifie un expéditeur — doit pouvoir
                 le trouver sans compte. */}
-            <Link to="/mentions-legales">Mentions légales</Link>
-            <a href="mailto:contact@inside-odc.com">contact@inside-odc.com</a>
+            <Link to="/mentions-legales" data-audience="mentions">Mentions légales</Link>
+            <a href="mailto:contact@inside-odc.com" data-audience="contact">
+              contact@inside-odc.com
+            </a>
             <p className="lp-pied-mentions">
               © {new Date().getFullYear()} Inside ODC Sénégal
             </p>

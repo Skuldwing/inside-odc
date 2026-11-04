@@ -35,6 +35,7 @@ export default function Layout() {
     ["/audit", "Journaux d'audit"],
     ["/rapport-mensuel", "Rapport mensuel"],
     ["/budget", "Budget"],
+    ["/audience", "Audience du site"],
   ];
 
   const currentPageName =

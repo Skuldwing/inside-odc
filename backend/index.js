@@ -17,6 +17,7 @@ const importRoutes = require("./routes/import.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const budgetRoutes = require("./routes/budget.routes");
 const espaceRoutes = require("./routes/espace.routes");
+const audienceRoutes = require("./routes/audience.routes");
 const socialKpisRoutes = require("./routes/socialKpis.routes");
 const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const socialReportRoutes = require("./routes/socialReport.routes");
@@ -44,6 +45,7 @@ const { ensureListeTelleQuelle } = require("./migrations/listeTelleQuelle");
 const { ensureReservePartenaire } = require("./migrations/reservePartenaire");
 const { ensureBudget } = require("./migrations/budget");
 const { ensureEspaceBeneficiaire } = require("./migrations/espaceBeneficiaire");
+const { ensureAudience, entretenirAudience } = require("./migrations/audience");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -91,9 +93,21 @@ const voteRateLimiter = rateLimit({
   message: { error: "Trop de requêtes. Réessayez dans une minute." },
 });
 
-/* Route le trafic : /vote → limiteur souple, reste → limiteur global strict */
+/* Route le trafic : /vote → limiteur souple, reste → limiteur global strict.
+
+   /audience/signal sort du limiteur global et porte le sien, defini dans son
+   routeur. La mesure d'audience envoie un signal toutes les vingt-cinq
+   secondes de presence : une visite de dix minutes en depense une vingtaine,
+   et quinze visites suffiraient a epuiser les trois cents appels du limiteur
+   global. Comme une bonne part du trafic mobile senegalais sort par un petit
+   nombre d'adresses operateur, ce sont les visiteurs reels qui seraient coupes
+   — et avec eux le reste de l'API, pour la meme adresse.
+
+   L'exemption vise cette seule adresse, et non tout /audience : la synthese et
+   l'export restent sous le limiteur global, comme n'importe quelle page. */
 app.use((req, res, next) => {
   if (req.path.startsWith("/vote")) return voteRateLimiter(req, res, next);
+  if (req.path === "/audience/signal") return next();
   return globalRateLimiter(req, res, next);
 });
 
@@ -177,6 +191,9 @@ app.use("/dashboard", dashboardRoutes);
 app.use("/budget", budgetRoutes);
 /* Espace beneficiaire : public, protege par ses propres jetons. */
 app.use("/espace", espaceRoutes);
+/* Mesure d'audience : le signal est public, la synthese est reservee aux
+   Admin +. Les deux controles vivent dans le routeur. */
+app.use("/audience", audienceRoutes);
 app.use("/social-kpis", socialKpisRoutes);
 app.use("/social-dashboard", socialDashboardRoutes);
 app.use("/social-dashboard", socialReportRoutes);
@@ -851,6 +868,40 @@ pool.query(`
     console.log("Migration OK: espace beneficiaire");
   } catch (e) {
     console.error("Migration espace beneficiaire ECHOUEE :", e.message);
+  }
+})();
+
+/* ── La mesure d'audience, et son entretien ──
+   Deux perimetres seulement : la page d'accueil publique et l'espace des
+   beneficiaires. Rien n'est mesure sur la plateforme interne.
+
+   L'entretien resume les journees finies puis oublie le detail des visites de
+   plus de quatre-vingt-dix jours. Il tourne au demarrage et toutes les six
+   heures : sans lui, la table de detail grossirait indefiniment, et le
+   stockage Neon se paie au gigaoctet-mois.
+
+   « unref » pour que le minuteur n'empeche pas le processus de s'arreter : un
+   redeploiement n'a pas a attendre six heures. */
+(async () => {
+  try {
+    await ensureAudience();
+    console.log("Migration OK: audience");
+    const passer = async () => {
+      try {
+        const r = await entretenirAudience();
+        if (r.journees || r.visitesOubliees) {
+          console.log(
+            `[AUDIENCE] entretien : ${r.journees} journee(s) resumee(s), ${r.visitesOubliees} visite(s) oubliee(s)`
+          );
+        }
+      } catch (e) {
+        console.error("[AUDIENCE] entretien ECHOUE :", e.message);
+      }
+    };
+    await passer();
+    setInterval(passer, 6 * 60 * 60 * 1000).unref();
+  } catch (e) {
+    console.error("Migration audience ECHOUEE :", e.message);
   }
 })();
 

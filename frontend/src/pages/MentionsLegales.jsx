@@ -138,6 +138,29 @@ export default function MentionsLegales() {
           </p>
         </Bloc>
 
+        {/* Dire ce qui est mesuré, parce que quelque chose l'est. La mesure est
+            anonyme et de première partie, mais elle écrit deux valeurs dans le
+            navigateur du visiteur : il doit pouvoir le lire quelque part, et
+            ce quelque part est ici. */}
+        <Bloc titre="Mesure de fréquentation">
+          <p>
+            La fréquentation de cette page d&apos;accueil et de l&apos;espace réservé aux
+            bénéficiaires est mesurée par le site lui-même, sans service tiers : aucune
+            donnée de navigation ne quitte les serveurs de la plateforme, et rien
+            n&apos;est transmis à un annonceur ni à un réseau publicitaire.
+          </p>
+          <p>
+            La mesure est agrégée et ne comporte aucun identifiant de personne : sont
+            comptés le nombre de visites, leur durée, le domaine de provenance et le type
+            d&apos;appareil. Aucun cookie n&apos;est déposé. Le navigateur conserve
+            seulement un numéro tiré au hasard, le temps de l&apos;onglet ouvert, et la
+            date du dernier passage — rien qui permette de relier deux visites à une même
+            personne, ni d&apos;établir ce qu&apos;une personne a consulté. Le détail est
+            effacé au bout de quatre-vingt-dix jours, seuls les totaux par journée sont
+            conservés.
+          </p>
+        </Bloc>
+
         <footer className="ml-pied">
           <p>© {new Date().getFullYear()} {IDENTITE.nom}</p>
         </footer>

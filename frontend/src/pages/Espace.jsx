@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import api from "../api";
 import ODCLogo from "../components/branding/ODCLogo";
+import { suivreAudience } from "../analytics/audience";
 
 /* L'espace des bénéficiaires.
  *
@@ -67,6 +68,13 @@ export default function Espace() {
   }, [jeton, setParams]);
 
   useEffect(() => { demarrer(); }, [demarrer]);
+
+  /* Mesure d'audience : combien de passages et combien de temps. Le parcours
+     lui-meme — lien demande, espace ouvert, attestation telechargee — est
+     compte au serveur sur les routes qui existent deja, donc rien de tout cela
+     ne transite par ici. Aucun identifiant de beneficiaire n'est envoye : ni
+     l'adresse de la session, ni le numero d'une fiche. */
+  useEffect(() => suivreAudience("espace"), []);
 
   const demanderLien = async (e) => {
     e.preventDefault();

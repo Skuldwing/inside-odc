@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   KanbanSquare,
   Wallet,
+  Activity,
   X,
   ChevronLeft,
   ChevronRight,
@@ -93,6 +94,7 @@ const GROUPES = [
     adminPlus: true,
     items: [
       { name: "Budget", icon: Wallet, path: "/budget" },
+      { name: "Audience", icon: Activity, path: "/audience" },
     ],
   },
   {
