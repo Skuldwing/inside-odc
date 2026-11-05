@@ -1,5 +1,6 @@
 const techKi = require("./attestationTechKi");
 const kidsTech = require("./attestationKidsTech");
+const maquette = require("./attestationMaquette");
 
 /**
  * Quel dessin pour quel modele.
@@ -27,6 +28,19 @@ const STYLES = {
       "Illustré et coloré, pour les enfants — attestations de participation ou de Super Codeur.",
     generer: kidsTech.genererAttestationKidsTech,
     manquantes: kidsTech.ressourcesPresentes,
+  },
+  /* Le troisième n'a pas de dessin à lui : il prend celui que l'équipe
+     dépose. C'est l'intérêt — ajouter une maquette ne demande plus de
+     toucher au code, seulement de l'envoyer depuis l'écran. */
+  maquette: {
+    libelle: "Ma maquette",
+    description:
+      "Votre propre document, dessiné dans PowerPoint puis exporté en PDF. La plateforme y écrit les noms à la place des marqueurs.",
+    generer: maquette.genererAttestationMaquette,
+    manquantes: maquette.ressourcesPresentes,
+    /* Ce style ne vaut que pour un modèle qui porte un PDF : l'écran ne le
+       propose donc qu'une fois la maquette déposée. */
+    exigeFond: true,
   },
 };
 

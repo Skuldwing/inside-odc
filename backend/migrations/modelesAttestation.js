@@ -50,6 +50,33 @@ async function ensureModelesAttestation() {
        ADD COLUMN IF NOT EXISTS style TEXT NOT NULL DEFAULT 'tech-ki'`
   );
 
+  /* ===== LA MAQUETTE DE L'EQUIPE =====
+   *
+   * Jusqu'ici un modele ne choisissait qu'entre deux dessins ecrits dans le
+   * code. Pour changer un cadre, une couleur, la place du nom, il fallait
+   * modifier un fichier JavaScript — donc passer par un developpeur.
+   *
+   * Un modele peut desormais porter sa propre maquette : celle dessinee dans
+   * PowerPoint, exportee en PDF, et deposee telle quelle. Ce qui est imprime
+   * est exactement ce qui a ete dessine.
+   *
+   * Le PDF est stocke en base, comme le logo du partenaire et les photos
+   * d'activite : le disque de l'hebergement est efface a chaque
+   * redeploiement, un fichier n'y survivrait pas.
+   *
+   * « zones » retient ce que la lecture du PDF a trouve — les lignes a
+   * remplir, leur position, leur taille — et les reglages que l'ecran laisse
+   * retoucher. On l'enregistre plutot que de relire le PDF a chaque envoi :
+   * la lecture prend une seconde, et une attestation ne doit pas l'attendre. */
+  await pool.query(`
+    ALTER TABLE modeles_attestation
+      ADD COLUMN IF NOT EXISTS fond_pdf       BYTEA,
+      ADD COLUMN IF NOT EXISTS fond_pdf_nom   TEXT,
+      ADD COLUMN IF NOT EXISTS fond_depose_le TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS zones          JSONB NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS couleur_fond   TEXT NOT NULL DEFAULT '#FFFFFF'
+  `);
+
   /* Un dispositif choisit son modele. A defaut, celui marque par defaut. */
   await pool.query(
     `ALTER TABLE devices
