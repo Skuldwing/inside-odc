@@ -208,4 +208,50 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
   }
 }
 
+/* ===== CE QUI ENVERRA, ANNONCÉ AU DÉMARRAGE =====
+ *
+ * Il n'existait aucune trace de ce reglage dans les journaux : « fournisseur
+ * retenu » n'etait calcule qu'a l'interieur d'un envoi. Pour savoir ce que le
+ * serveur allait faire, il fallait ouvrir l'ecran de delivrabilite, en etant
+ * administrateur. Changer MAIL_PROVIDER chez l'hebergeur et vouloir verifier
+ * que le changement a bien ete repris n'avait donc pas de reponse simple.
+ *
+ * Et ce n'est pas une verification de confort. MAIL_PROVIDER est lu une seule
+ * fois, a l'ouverture de ce fichier : modifier la variable sans que le
+ * processus redemarre ne change rien, et rien ne le signalait.
+ *
+ * Aucune cle, aucun mot de passe : seulement qui envoie et au nom de qui.
+ */
+(function annoncerFournisseur() {
+  const choisi = fournisseurRetenu();
+  const details = { expediteur: MAIL_FROM || null };
+  if (choisi === "smtp") details.serveur = `${SMTP_HOST}:${SMTP_PORT}`;
+
+  if (choisi === "aucun") {
+    console.warn(
+      "[MAIL] Aucun service d'envoi utilisable." +
+        (PROVIDER
+          ? ` MAIL_PROVIDER vaut « ${PROVIDER} » mais ce service n'est pas configure completement.`
+          : " Renseignez MAIL_PROVIDER et les variables correspondantes.")
+    );
+    return;
+  }
+
+  console.log(`[MAIL] Envoi par « ${choisi} » — ${JSON.stringify(details)}`);
+
+  /* Le cas qui a coute le plus de temps ici : une cle Brevo en place, un
+     domaine verifie chez Brevo, des CNAME DKIM publies — et un envoi qui passe
+     quand meme par le port 587, que l'hebergeur ferme. Les messages ne partent
+     jamais, et Brevo n'en sait rien : il ne voit aucun appel, donc il n'envoie
+     pas non plus le courriel qui permettrait d'autoriser l'adresse du serveur. */
+  if (choisi === "smtp" && brevoPret) {
+    console.warn(
+      "[MAIL] Une cle Brevo est configuree mais inutilisee : l'envoi passe par SMTP. " +
+        "Si l'hebergeur ferme le port sortant — c'est le cas de Railway — aucun message " +
+        "ne partira et aucune alerte ne remontera. Passez MAIL_PROVIDER a « brevo », " +
+        "qui envoie en HTTPS, puis redemarrez le service."
+    );
+  }
+})();
+
 module.exports = { sendEmail, fournisseurRetenu };
