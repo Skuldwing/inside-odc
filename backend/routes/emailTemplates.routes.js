@@ -228,6 +228,88 @@ const DEFAULTS = {
        « blocDetails » plus bas. */
     variables: ["{{nom}}", "{{activite}}", "{{date}}", "{{partenaire}}", "{{organisateur}}", "{{details}}", "{{signalement}}", "{{dispositif}}", "{{duree}}"],
   },
+
+  /* ===== MBOOTAY =====
+   *
+   * Trois messages pour quatre situations : un projet créé et un projet
+   * réaffecté disent la même chose à celui qui le reçoit — « ce projet est
+   * le vôtre » —, seule la phrase d'ouverture change, et elle est composée
+   * à l'envoi.
+   *
+   * Ces messages partent à l'équipe interne, jamais à un bénéficiaire ni à un
+   * partenaire. Ils ne portent donc pas de lien de désabonnement : ce n'est
+   * pas de l'information, c'est du travail assigné, et s'en désinscrire
+   * reviendrait à ne plus être prévenu de ce qu'on doit faire. */
+  mbootay_projet: {
+    slug: "mbootay_projet",
+    label: "Mbootay — un projet vous est confié",
+    description:
+      "Envoyé quand quelqu'un vous désigne comme pilote d'un projet, à sa création ou plus tard.",
+    subject: "Vous pilotez le projet {{projet}}",
+    apercu: "Un projet vous est confié dans Mbootay.",
+    body_html: `            <p style="${P}">Bonjour <strong>{{nom}}</strong>,</p>
+            <p style="${P}">{{intro}}</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FFF7ED;border-left:3px solid ${ORANGE};border-radius:0 8px 8px 0;margin:4px 0 16px">
+              <tr>
+                <td style="padding:16px">
+                  <div style="font-family:${POLICE};font-size:12px;color:${GRIS};text-transform:uppercase;letter-spacing:0.6px">Projet</div>
+                  <div style="font-family:${POLICE};font-size:17px;font-weight:bold;line-height:24px;color:${ENCRE};padding-top:4px">{{projet}}</div>
+{{details}}
+                </td>
+              </tr>
+            </table>
+
+{{bouton}}`,
+    variables: ["{{nom}}", "{{projet}}", "{{intro}}", "{{details}}", "{{lien}}", "{{bouton}}"],
+  },
+
+  mbootay_equipe: {
+    slug: "mbootay_equipe",
+    label: "Mbootay — vous rejoignez une équipe",
+    description: "Envoyé quand quelqu'un vous ajoute à l'équipe d'un projet.",
+    subject: "Vous rejoignez l'équipe du projet {{projet}}",
+    apercu: "Vous avez été ajouté à l'équipe d'un projet dans Mbootay.",
+    body_html: `            <p style="${P}">Bonjour <strong>{{nom}}</strong>,</p>
+            <p style="${P}">{{intro}}</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#F8FAFC;border-left:3px solid ${ORANGE};border-radius:0 8px 8px 0;margin:4px 0 16px">
+              <tr>
+                <td style="padding:16px">
+                  <div style="font-family:${POLICE};font-size:12px;color:${GRIS};text-transform:uppercase;letter-spacing:0.6px">Projet</div>
+                  <div style="font-family:${POLICE};font-size:17px;font-weight:bold;line-height:24px;color:${ENCRE};padding-top:4px">{{projet}}</div>
+{{details}}
+                </td>
+              </tr>
+            </table>
+
+{{bouton}}`,
+    variables: ["{{nom}}", "{{projet}}", "{{intro}}", "{{details}}", "{{lien}}", "{{bouton}}"],
+  },
+
+  mbootay_tache: {
+    slug: "mbootay_tache",
+    label: "Mbootay — une tâche vous est confiée",
+    description:
+      "Envoyé quand quelqu'un vous assigne une tâche, à sa création ou en la réaffectant.",
+    subject: "Nouvelle tâche : {{tache}}",
+    apercu: "Une tâche vous est confiée dans Mbootay.",
+    body_html: `            <p style="${P}">Bonjour <strong>{{nom}}</strong>,</p>
+            <p style="${P}">{{intro}}</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FFF7ED;border-left:3px solid ${ORANGE};border-radius:0 8px 8px 0;margin:4px 0 16px">
+              <tr>
+                <td style="padding:16px">
+                  <div style="font-family:${POLICE};font-size:12px;color:${GRIS};text-transform:uppercase;letter-spacing:0.6px">Tâche</div>
+                  <div style="font-family:${POLICE};font-size:17px;font-weight:bold;line-height:24px;color:${ENCRE};padding-top:4px">{{tache}}</div>
+{{details}}
+                </td>
+              </tr>
+            </table>
+
+{{bouton}}`,
+    variables: ["{{nom}}", "{{tache}}", "{{projet}}", "{{intro}}", "{{details}}", "{{lien}}", "{{bouton}}"],
+  },
 };
 
 async function getTemplate(slug) {
@@ -276,13 +358,15 @@ function phraseOrganisateur(partenaire) {
  * à trous se lit comme une erreur de la plateforme plutôt que comme un
  * renseignement manquant.
  */
-function blocDetails({ date, dispositif, duree } = {}) {
-  const lignes = [
-    ["Date", date],
-    ["Dispositif", dispositif],
-    ["Durée", duree],
-  ].filter(([, v]) => String(v || "").trim());
-
+/**
+ * Un petit tableau « libellé / valeur ».
+ *
+ * Les lignes vides sont écartées plutôt qu'affichées à blanc : un gabarit ne
+ * sait pas poser de condition, et « Échéance : » suivi de rien se lit comme
+ * une panne.
+ */
+function blocLignes(paires = []) {
+  const lignes = paires.filter(([, v]) => String(v ?? "").trim());
   if (!lignes.length) return "";
 
   return `                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px 0 0">
@@ -291,6 +375,14 @@ ${lignes.map(([cle, valeur]) => `                    <tr>
                       <td style="padding:2px 0;font-family:${POLICE};font-size:13px;line-height:20px;color:${ENCRE};font-weight:bold">${valeur}</td>
                     </tr>`).join("\n")}
                   </table>`;
+}
+
+function blocDetails({ date, dispositif, duree } = {}) {
+  return blocLignes([
+    ["Date", date],
+    ["Dispositif", dispositif],
+    ["Durée", duree],
+  ]);
 }
 
 /**
@@ -422,5 +514,5 @@ router.delete("/:slug/reset", authMiddleware, requireAdmin, async (req, res) => 
 
 module.exports = {
   router, getTemplate, renderTemplate, composerEmail,
-  phraseOrganisateur, blocDetails, lienSignalement, boutonAction,
+  phraseOrganisateur, blocDetails, blocLignes, lienSignalement, boutonAction,
 };

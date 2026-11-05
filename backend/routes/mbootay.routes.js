@@ -3,6 +3,13 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const requireTeamOdc = require("../middleware/teamOdc.middleware");
 const { logAudit } = require("../services/audit");
+/* Prévenir celui à qui on confie quelque chose. Aucune de ces fonctions n'est
+   attendue : un service d'envoi en panne ne doit pas empêcher de créer un
+   projet. Les règles — jamais à soi-même, jamais sans changement réel — sont
+   en tête de services/mbootayNotifications.js. */
+const {
+  notifierPiloteProjet, notifierNouveauxMembres, notifierTacheAssignee,
+} = require("../services/mbootayNotifications");
 
 const router = express.Router();
 
@@ -129,6 +136,9 @@ router.post("/projects", async (req, res) => {
 
     const created = result.rows[0];
     logAudit(req, "CREATE", "mbootay_projects", created.id, created.title, { status: created.status });
+    /* Le pilote est prévenu — sauf si c'est celui qui vient de créer le projet,
+       ce qui est le cas le plus courant. */
+    notifierPiloteProjet({ projet: created, auteurId: req.user.id, nouveau: true });
     res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -146,6 +156,14 @@ router.put("/projects/:id", async (req, res) => {
     if (!title?.trim()) return res.status(400).json({ error: "Titre requis" });
     const resolvedStatus = PROJECT_STATUSES.includes(status) ? status : "en_cours";
 
+    /* Le pilote d'avant, pour ne prévenir que si on en change réellement.
+       Sans cette lecture, corriger une date d'échéance renverrait un message
+       « vous pilotez ce projet » à quelqu'un qui le pilote depuis un mois. */
+    const avant = await pool.query(
+      "SELECT owner_id FROM mbootay_projects WHERE id = $1", [id]
+    );
+    const pilotePrecedent = avant.rows[0]?.owner_id ?? null;
+
     const result = await pool.query(
       `UPDATE mbootay_projects
        SET title = $1, description = $2, status = $3, owner_id = $4,
@@ -158,6 +176,9 @@ router.put("/projects/:id", async (req, res) => {
 
     const updated = result.rows[0];
     logAudit(req, "UPDATE", "mbootay_projects", updated.id, updated.title, { status: updated.status });
+    if (Number(updated.owner_id) !== Number(pilotePrecedent)) {
+      notifierPiloteProjet({ projet: updated, auteurId: req.user.id, nouveau: false });
+    }
     res.json(updated);
   } catch (err) {
     console.error(err);
@@ -198,22 +219,64 @@ router.get("/projects/:id/members", async (req, res) => {
 });
 
 router.put("/projects/:id/members", async (req, res) => {
+  /* L'écran envoie la liste complète, pas les ajouts : la mise à jour efface
+     puis réécrit. Deux conséquences traitées ici.
+
+     D'abord la transaction. L'effacement et la réécriture étaient deux ordres
+     séparés : si le second échouait — un identifiant qui n'existe plus, une
+     coupure réseau — l'équipe du projet était perdue, et la réponse d'erreur
+     ne disait pas qu'elle venait de l'être. Les deux ne font plus qu'un.
+
+     Ensuite la comparaison. Pour ne prévenir que les nouveaux venus, il faut
+     savoir qui était déjà là : sans cela, cocher une case de plus renverrait
+     un message à toute l'équipe. */
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     const { user_ids = [] } = req.body;
+    const voulus = [...new Set(user_ids.map(Number).filter(Number.isInteger))];
 
-    await pool.query("DELETE FROM mbootay_members WHERE project_id = $1", [id]);
-    if (user_ids.length > 0) {
-      const values = user_ids.map((_, i) => `($1, $${i + 2})`).join(", ");
-      await pool.query(
+    await client.query("BEGIN");
+
+    const avant = await client.query(
+      "SELECT user_id FROM mbootay_members WHERE project_id = $1", [id]
+    );
+    const dejaLa = new Set(avant.rows.map((r) => Number(r.user_id)));
+
+    await client.query("DELETE FROM mbootay_members WHERE project_id = $1", [id]);
+    if (voulus.length > 0) {
+      const values = voulus.map((_, i) => `($1, $${i + 2})`).join(", ");
+      await client.query(
         `INSERT INTO mbootay_members (project_id, user_id) VALUES ${values}`,
-        [id, ...user_ids]
+        [id, ...voulus]
       );
     }
+
+    await client.query("COMMIT");
+
+    const ajoutes = voulus.filter((u) => !dejaLa.has(u));
+    if (ajoutes.length) {
+      const projet = await pool.query(
+        `SELECT p.id, p.title, p.status, p.due_date, u.full_name AS owner_name
+           FROM mbootay_projects p
+           LEFT JOIN users u ON u.id = p.owner_id
+          WHERE p.id = $1`,
+        [id]
+      );
+      if (projet.rows.length) {
+        notifierNouveauxMembres({
+          projet: projet.rows[0], ajoutes, auteurId: req.user.id,
+        });
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
   }
 });
 
@@ -255,7 +318,17 @@ router.post("/projects/:id/tasks", async (req, res) => {
         req.user.id,
       ]
     );
-    res.status(201).json(result.rows[0]);
+
+    const creee = result.rows[0];
+    if (creee.assigned_to) {
+      const projet = await pool.query(
+        "SELECT id, title FROM mbootay_projects WHERE id = $1", [req.params.id]
+      );
+      notifierTacheAssignee({
+        tache: creee, projet: projet.rows[0], auteurId: req.user.id,
+      });
+    }
+    res.status(201).json(creee);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -269,6 +342,15 @@ router.put("/tasks/:taskId", async (req, res) => {
     if (!title?.trim()) return res.status(400).json({ error: "Titre requis" });
 
     const resolvedStatus = TASK_STATUSES.includes(status) ? status : "a_faire";
+
+    /* À qui elle était confiée avant : on ne prévient que si cela change.
+       Corriger l'intitulé d'une tâche ne doit pas la réannoncer à celui qui
+       l'a déjà sur sa liste. */
+    const avant = await pool.query(
+      "SELECT assigned_to FROM mbootay_tasks WHERE id = $1", [req.params.taskId]
+    );
+    const assignePrecedent = avant.rows[0]?.assigned_to ?? null;
+
     const result = await pool.query(
       `UPDATE mbootay_tasks
        SET title = $1, description = $2, status = $3, priority = $4,
@@ -286,7 +368,17 @@ router.put("/tasks/:taskId", async (req, res) => {
       ]
     );
     if (!result.rows.length) return res.status(404).json({ error: "Tâche introuvable" });
-    res.json(result.rows[0]);
+
+    const modifiee = result.rows[0];
+    if (Number(modifiee.assigned_to) !== Number(assignePrecedent)) {
+      const projet = await pool.query(
+        "SELECT id, title FROM mbootay_projects WHERE id = $1", [modifiee.project_id]
+      );
+      notifierTacheAssignee({
+        tache: modifiee, projet: projet.rows[0], auteurId: req.user.id,
+      });
+    }
+    res.json(modifiee);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
