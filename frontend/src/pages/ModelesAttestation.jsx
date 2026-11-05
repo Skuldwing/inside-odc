@@ -71,7 +71,35 @@ const MAQUETTES = {
     exemples: ["ATTESTATION DE", "SUPER CODEUR"],
     aideLogo: "Il se place à côté du logo du centre, en bas à gauche.",
   },
+  /* Le troisième n'a pas de dessin à lui : il prend celui qu'on dépose. Les
+     cases de titre et de signataire ne le concernent donc pas — c'est la
+     maquette qui les porte. */
+  maquette: {
+    libelle: "Ma maquette",
+    resume: "Votre document, dessiné dans PowerPoint puis exporté en PDF.",
+    titreBandeau: "Bandeau (sans effet sur une maquette)",
+    aideBandeau:
+      "Ces cases ne servent pas avec votre propre maquette : les textes y sont déjà dessinés. Seuls les marqueurs entre doubles accolades sont remplacés.",
+    exemples: ["", ""],
+    aideLogo: "Sans effet : le logo est déjà dans votre maquette.",
+  },
 };
+
+/* Les polices et alignements proposés pour chaque ligne. Les mêmes clés que
+   le serveur : toute valeur qu'il ne reconnaît pas serait ignorée. */
+const POLICES_MAQUETTE = [
+  ["helvetica-gras", "Sans empattement, gras"],
+  ["helvetica", "Sans empattement"],
+  ["times-gras", "Avec empattements, gras"],
+  ["times", "Avec empattements"],
+  ["manuscrite", "Manuscrite"],
+];
+
+const ALIGNEMENTS_MAQUETTE = [
+  ["centre", "Centré"],
+  ["gauche", "À gauche"],
+  ["droite", "À droite"],
+];
 
 const maquetteDe = (cle) => MAQUETTES[cle] || MAQUETTES["tech-ki"];
 
@@ -283,6 +311,14 @@ export default function ModelesAttestation() {
      televersement, sinon le navigateur reaffiche l'image precedente. */
   const [versionLogo, setVersionLogo] = useState(0);
 
+  /* La maquette déposée par l'équipe. « inconnus » retient les marqueurs que
+     la lecture n'a pas reconnus : ils ne vivent que dans la réponse du dépôt,
+     et c'est la seule occasion de les corriger avant le premier envoi. */
+  const fichierMaquette = useRef(null);
+  const [depotEnCours, setDepotEnCours] = useState(false);
+  const [apercuMaquetteEnCours, setApercuMaquetteEnCours] = useState(false);
+  const [inconnus, setInconnus] = useState([]);
+
   const courant = useMemo(
     () => modeles.find((m) => m.id === selection) || null,
     [modeles, selection]
@@ -406,6 +442,97 @@ export default function ModelesAttestation() {
       toast.success("Logo enregistré.");
     } catch (err) {
       toast.error(err.response?.data?.error || "Logo refusé (PNG ou JPEG, 2 Mo maximum).");
+    }
+  };
+
+  /* ===== LA MAQUETTE DE L'ÉQUIPE ===== */
+
+  const envoyerMaquette = async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f || !courant) return;
+    if (f.size > 10 * 1024 * 1024) {
+      return toast.error("Maquette trop lourde (10 Mo maximum).");
+    }
+    const fd = new FormData();
+    fd.append("maquette", f, f.name);
+    setDepotEnCours(true);
+    try {
+      const { data } = await api.post(`/modeles-attestation/${courant.id}/maquette`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      /* Ce que la lecture n'a pas reconnu ne vit que dans cette réponse : on
+         le garde à l'écran plutôt que de le laisser filer dans un toast qui
+         disparaît en trois secondes. */
+      setInconnus(data.inconnus || []);
+      await charger(courant.id);
+      const n = (data.zones || []).length;
+      toast.success(
+        n ? `Maquette enregistrée — ${n} ligne${n > 1 ? "s" : ""} à remplir.`
+          : "Maquette enregistrée, mais aucun marqueur n'y a été trouvé."
+      );
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Maquette refusée.");
+    } finally {
+      setDepotEnCours(false);
+    }
+  };
+
+  const retirerMaquette = async () => {
+    if (!courant) return;
+    try {
+      await api.delete(`/modeles-attestation/${courant.id}/maquette`);
+      setInconnus([]);
+      await charger(courant.id);
+      toast.success("Maquette retirée. Le modèle revient au dessin Tech-Ki.");
+    } catch {
+      toast.error("Suppression de la maquette impossible.");
+    }
+  };
+
+  /* Retoucher une ligne : la police, la couleur, l'alignement. Enregistré
+     aussitôt — l'aperçu qui suit doit montrer le réglage qu'on vient de
+     choisir, pas le précédent. */
+  const reglerZone = async (idZone, champ, valeur) => {
+    if (!courant) return;
+    const zones = (courant.zones || []).map((z) =>
+      z.id === idZone ? { ...z, [champ]: valeur } : z
+    );
+    try {
+      await api.put(`/modeles-attestation/${courant.id}/maquette/zones`, { zones });
+      await charger(courant.id);
+    } catch {
+      toast.error("Réglage non enregistré.");
+    }
+  };
+
+  const reglerCouleurFond = async (valeur) => {
+    if (!courant) return;
+    try {
+      await api.put(`/modeles-attestation/${courant.id}/maquette/zones`, {
+        couleur_fond: valeur,
+        zones: courant.zones || [],
+      });
+      await charger(courant.id);
+    } catch {
+      toast.error("Réglage non enregistré.");
+    }
+  };
+
+  const voirApercuMaquette = async () => {
+    if (!courant) return;
+    setApercuMaquetteEnCours(true);
+    try {
+      const res = await api.get(`/modeles-attestation/${courant.id}/maquette/apercu`, {
+        responseType: "blob",
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error("L'aperçu n'a pas pu être composé.");
+    } finally {
+      setApercuMaquetteEnCours(false);
     }
   };
 
@@ -565,6 +692,212 @@ export default function ModelesAttestation() {
                     ))}
                   </div>
                 </div>
+
+                {/* ===== Votre propre maquette =====
+                    Montré dès que « Ma maquette » est choisie, ou dès qu'un PDF
+                    est déposé — c'est le dépôt qui bascule le style, pas
+                    l'inverse. */}
+                {(form.style === "maquette" || courant?.a_fond) && (
+                  <div className="rounded-xl border border-dashed border-orange-300 bg-orange-50/40 p-4">
+                    <p className="text-sm font-medium text-slate-900">Votre maquette</p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Dessinez l'attestation dans PowerPoint, écrivez{" "}
+                      <code className="rounded bg-white px-1">{"{{prenom}}"}</code> et{" "}
+                      <code className="rounded bg-white px-1">{"{{nom}}"}</code> là où le nom
+                      doit apparaître, puis <strong>Fichier → Exporter → PDF</strong> et
+                      déposez le PDF ici.
+                    </p>
+
+                    {selection === "nouveau" ? (
+                      <p className="mt-3 text-xs text-slate-500">
+                        Enregistrez le modèle d'abord : la maquette s'ajoute ensuite.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <input
+                            ref={fichierMaquette}
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={envoyerMaquette}
+                          />
+                          <button
+                            type="button"
+                            className="btn-ghost border bg-white"
+                            onClick={() => fichierMaquette.current?.click()}
+                            disabled={depotEnCours}
+                          >
+                            {depotEnCours ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Upload className="h-4 w-4" />
+                            )}
+                            {courant?.a_fond ? "Remplacer" : "Déposer le PDF"}
+                          </button>
+                          {courant?.a_fond && (
+                            <>
+                              <button
+                                type="button"
+                                className="btn-ghost border bg-white"
+                                onClick={voirApercuMaquette}
+                                disabled={apercuMaquetteEnCours}
+                              >
+                                {apercuMaquetteEnCours ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Eye className="h-4 w-4" />
+                                )}
+                                Aperçu
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-ghost border bg-white"
+                                onClick={retirerMaquette}
+                              >
+                                <X className="h-4 w-4" /> Retirer
+                              </button>
+                            </>
+                          )}
+                          {courant?.fond_pdf_nom && (
+                            <span className="truncate text-xs text-slate-500">
+                              {courant.fond_pdf_nom}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Ce que la lecture n'a pas reconnu. Dit ici et pas
+                            dans un message qui s'efface : un marqueur inventé
+                            s'imprimerait tel quel sur l'attestation. */}
+                        {inconnus.length > 0 && (
+                          <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                            <strong>Marqueur{inconnus.length > 1 ? "s" : ""} non reconnu
+                            {inconnus.length > 1 ? "s" : ""} :</strong>{" "}
+                            {inconnus.join(", ")}. {inconnus.length > 1 ? "Ils resteront" : "Il restera"}{" "}
+                            imprimé{inconnus.length > 1 ? "s" : ""} tel{inconnus.length > 1 ? "s" : ""}{" "}
+                            quel{inconnus.length > 1 ? "s" : ""} sur l'attestation. Les noms acceptés
+                            sont listés ci-dessous.
+                          </div>
+                        )}
+
+                        {courant?.a_fond && (
+                          <>
+                            <div className="mt-4">
+                              <label className="text-xs font-medium text-slate-700">
+                                Couleur du fond, sous les lignes remplacées
+                              </label>
+                              <div className="mt-1 flex items-center gap-2">
+                                <input
+                                  type="color"
+                                  className="h-8 w-14 cursor-pointer rounded border border-slate-300"
+                                  value={courant.couleur_fond || "#FFFFFF"}
+                                  onChange={(e) => reglerCouleurFond(e.target.value.toUpperCase())}
+                                />
+                                <span className="text-xs text-slate-500">
+                                  Chaque ligne remplacée est d'abord recouverte de cette couleur.
+                                  Sur un fond photo ou dégradé, le rectangle se verrait : regardez
+                                  l'aperçu.
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="mt-4">
+                              <p className="text-xs font-medium text-slate-700">
+                                {(courant.zones || []).length} ligne
+                                {(courant.zones || []).length > 1 ? "s" : ""} à remplir
+                              </p>
+                              {(courant.zones || []).length === 0 ? (
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Aucun marqueur trouvé. Vérifiez que le PDF contient bien du
+                                  texte — une maquette aplatie en image n'en porte pas.
+                                </p>
+                              ) : (
+                                <ul className="mt-2 space-y-2">
+                                  {(courant.zones || []).map((z) => (
+                                    <li
+                                      key={z.id}
+                                      className="rounded-lg border border-slate-200 bg-white p-2.5"
+                                    >
+                                      <code className="block truncate text-xs text-slate-800">
+                                        {z.gabarit}
+                                      </code>
+                                      {!z.seul && (
+                                        /* Dit parce que c'est la seule
+                                           surprise possible : les mots fixes
+                                           de cette ligne seront réécrits avec
+                                           la police choisie, pas celle de la
+                                           maquette. */
+                                        <p className="mt-1 text-[11px] leading-snug text-amber-700">
+                                          Cette ligne porte aussi du texte fixe : il sera réécrit
+                                          avec la police choisie ici. Pour garder exactement celle
+                                          de votre maquette, placez le marqueur seul dans sa zone
+                                          de texte.
+                                        </p>
+                                      )}
+                                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <select
+                                          className="input w-auto max-w-[13rem] py-1 text-xs"
+                                          value={z.police}
+                                          onChange={(e) => reglerZone(z.id, "police", e.target.value)}
+                                        >
+                                          {POLICES_MAQUETTE.map(([v, l]) => (
+                                            <option key={v} value={v}>{l}</option>
+                                          ))}
+                                        </select>
+                                        <select
+                                          className="input w-auto max-w-[9rem] py-1 text-xs"
+                                          value={z.alignement}
+                                          onChange={(e) => reglerZone(z.id, "alignement", e.target.value)}
+                                        >
+                                          {ALIGNEMENTS_MAQUETTE.map(([v, l]) => (
+                                            <option key={v} value={v}>{l}</option>
+                                          ))}
+                                        </select>
+                                        <input
+                                          type="color"
+                                          className="h-7 w-10 cursor-pointer rounded border border-slate-300"
+                                          value={z.couleur || "#0F172A"}
+                                          onChange={(e) =>
+                                            reglerZone(z.id, "couleur", e.target.value.toUpperCase())
+                                          }
+                                          aria-label="Couleur du texte"
+                                        />
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </div>
+                          </>
+                        )}
+
+                        <details className="mt-4">
+                          <summary className="cursor-pointer text-xs font-medium text-slate-700">
+                            Les marqueurs que vous pouvez écrire
+                          </summary>
+                          <ul className="mt-2 grid gap-1 text-xs text-slate-600 sm:grid-cols-2">
+                            {[
+                              ["{{prenom}}", "Prénom du bénéficiaire"],
+                              ["{{nom}}", "Nom, en capitales"],
+                              ["{{nom_complet}}", "Prénom et nom"],
+                              ["{{activite}}", "Intitulé de la formation"],
+                              ["{{date}}", "Date de la séance"],
+                              ["{{lieu}}", "Lieu"],
+                              ["{{duree}}", "Durée en heures"],
+                              ["{{dispositif}}", "Dispositif"],
+                              ["{{organisateur}}", "Partenaire ou formateur"],
+                              ["{{aujourdhui}}", "Date d'édition"],
+                            ].map(([m, l]) => (
+                              <li key={m}>
+                                <code className="rounded bg-white px-1">{m}</code> — {l}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Le titre du document, en deux morceaux — leur rôle dépend de
                     la maquette choisie juste au-dessus. */}

@@ -6,6 +6,10 @@ const requireAdmin = require("../middleware/role.middleware");
 const { logAudit } = require("../services/audit");
 const { ensureModelesAttestation } = require("../migrations/modelesAttestation");
 const { genererAttestation, styleRetenu, stylesDisponibles } = require("../services/attestationModele");
+const {
+  analyserFond, composerAttestation, valeursExemple,
+  VARIABLES, POLICES, ALIGNEMENTS,
+} = require("../services/attestationPdfModele");
 const { sendEmail, fournisseurRetenu } = require("../services/mail");
 const { trierAdresses } = require("../services/adressesValides");
 const { interpreterErreurEnvoi } = require("../services/deliverability");
@@ -23,6 +27,26 @@ const upload = multer({
     else cb(Object.assign(new Error("Logo au format PNG ou JPEG"), { status: 400 }));
   },
 });
+
+/* Un fichier refuse doit expliquer pourquoi.
+ *
+ * Multer leve son refus AVANT que la route ne s'execute : le « try » de la
+ * route ne le voit jamais, l'erreur remonte au gestionnaire general d'Express,
+ * et celui-ci repond une page HTML. L'ecran recevait donc « erreur » la ou le
+ * message disait exactement quoi faire — « depuis PowerPoint : Fichier,
+ * Exporter, PDF ». C'est la seule phrase qui compte dans ce refus.
+ *
+ * Quatre parametres : c'est ainsi qu'Express reconnait un gestionnaire
+ * d'erreur, et il doit suivre immediatement le lecteur qu'il couvre. */
+function refusDeFichier(err, req, res, next) {
+  if (res.headersSent) return next(err);
+  if (err?.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({
+      error: "Fichier trop lourd. Allégez les images de la maquette, ou réexportez-la.",
+    });
+  }
+  res.status(400).json({ error: err?.message || "Fichier refusé." });
+}
 
 /* La migration de demarrage n'est pas attendue : si elle n'est pas passee, la
    page renverrait une erreur serveur sans rien expliquer. On la rejoue une
@@ -46,8 +70,28 @@ async function avecSchema(travail) {
 const CHAMPS = `
   id, nom, style, bandeau_avant, bandeau_apres, programme, organisation, mention,
   signataire_nom, signataire_fonction, par_defaut,
-  (logo_partenaire IS NOT NULL) AS a_logo
+  (logo_partenaire IS NOT NULL) AS a_logo,
+  /* La maquette non plus n'est jamais renvoyee dans la liste : un PDF par
+     modele dans chaque reponse JSON pèserait plusieurs mega-octets. On dit
+     seulement qu'elle existe, et ce qu'elle porte. */
+  (fond_pdf IS NOT NULL) AS a_fond,
+  fond_pdf_nom, fond_depose_le, couleur_fond, zones
 `;
+
+/* La maquette, acceptee uniquement en PDF.
+   Dix mega-octets : un export PowerPoint avec photos de fond les atteint
+   rarement, mais une maquette au scan les depasserait. */
+const deposerFond = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === "application/pdf") cb(null, true);
+    else cb(Object.assign(
+      new Error("La maquette doit être un PDF. Depuis PowerPoint : Fichier, Exporter, PDF."),
+      { status: 400 }
+    ));
+  },
+});
 
 const TEXTES = [
   "nom", "bandeau_avant", "bandeau_apres", "programme",
@@ -253,8 +297,183 @@ router.delete("/:id", authMiddleware, requireAdmin, async (req, res) => {
   }
 });
 
+/* ===== LA MAQUETTE DE L'ÉQUIPE =====
+ *
+ * Déposer un PDF, y lire les lignes à remplir, et les retoucher.
+ *
+ * La lecture se fait une fois, au dépôt, et son résultat est enregistré. Elle
+ * prend près d'une seconde sur un document chargé : la refaire à chaque
+ * attestation ferait attendre un envoi de cent personnes près de deux minutes
+ * pour rien, puisque la maquette ne change pas entre deux envois.
+ */
+router.post(
+  "/:id/maquette",
+  authMiddleware,
+  requireAdmin,
+  deposerFond.single("maquette"),
+  refusDeFichier,
+  async (req, res) => {
+    try {
+      if (!req.file) return res.status(400).json({ error: "Fichier requis" });
+      const id = Number(req.params.id);
+
+      let lecture;
+      try {
+        lecture = await analyserFond(req.file.buffer);
+      } catch (err) {
+        /* Un PDF protégé, corrompu, ou produit par un outil exotique. On le
+           dit plutôt que de l'enregistrer et de laisser la panne pour le jour
+           de l'envoi. */
+        console.warn("[MAQUETTE] lecture impossible :", err.message);
+        return res.status(400).json({
+          error:
+            "Ce PDF n'a pas pu être lu. S'il est protégé par mot de passe, enlevez la protection ; " +
+            "sinon, réexportez-le depuis PowerPoint.",
+        });
+      }
+
+      const r = await avecSchema(() =>
+        pool.query(
+          `UPDATE modeles_attestation
+              SET fond_pdf = $2, fond_pdf_nom = $3, fond_depose_le = NOW(),
+                  zones = $4::jsonb,
+                  /* Déposer une maquette, c'est vouloir s'en servir. */
+                  style = 'maquette'
+            WHERE id = $1 RETURNING ${CHAMPS}`,
+          [id, req.file.buffer, req.file.originalname.slice(0, 160), JSON.stringify(lecture.zones)]
+        )
+      );
+      if (!r.rows.length) return res.status(404).json({ error: "Modèle introuvable" });
+
+      logAudit(req, "UPDATE", "modeles_attestation", id, r.rows[0].nom, {
+        motif: "maquette déposée",
+        fichier: req.file.originalname,
+        lignes_a_remplir: lecture.zones.length,
+      });
+
+      res.json({
+        ...r.rows[0],
+        pages: lecture.pages,
+        /* Ce qui n'a pas été reconnu, pour que ce soit corrigé avant le
+           premier envoi et non découvert par un bénéficiaire. */
+        inconnus: lecture.inconnus,
+        variables: VARIABLES,
+      });
+    } catch (err) {
+      if (err?.status === 400) return res.status(400).json({ error: err.message });
+      console.error("[MAQUETTE]", err);
+      res.status(500).json({ error: "Erreur serveur" });
+    }
+  }
+);
+
+/* Retoucher les réglages d'une ligne : police, couleur, alignement. La
+   position et le gabarit viennent de la lecture du PDF et ne se modifient pas
+   ici — les changer à la main désalignerait l'écriture de la maquette. */
+router.put("/:id/maquette/zones", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const actuel = await avecSchema(() =>
+      pool.query("SELECT zones FROM modeles_attestation WHERE id = $1", [id])
+    );
+    if (!actuel.rows.length) return res.status(404).json({ error: "Modèle introuvable" });
+
+    const posees = Array.isArray(req.body?.zones) ? req.body.zones : [];
+    const reglages = new Map(posees.map((z) => [z.id, z]));
+    const fusionnees = (actuel.rows[0].zones || []).map((z) => {
+      const neuf = reglages.get(z.id) || {};
+      return {
+        ...z,
+        police: POLICES[neuf.police] ? neuf.police : z.police,
+        alignement: ALIGNEMENTS.includes(neuf.alignement) ? neuf.alignement : z.alignement,
+        couleur: /^#[0-9a-f]{6}$/i.test(String(neuf.couleur || "")) ? neuf.couleur : z.couleur,
+      };
+    });
+
+    const couleurFond = /^#[0-9a-f]{6}$/i.test(String(req.body?.couleur_fond || ""))
+      ? req.body.couleur_fond
+      : undefined;
+
+    const r = await avecSchema(() =>
+      pool.query(
+        `UPDATE modeles_attestation
+            SET zones = $2::jsonb,
+                couleur_fond = COALESCE($3, couleur_fond)
+          WHERE id = $1 RETURNING ${CHAMPS}`,
+        [id, JSON.stringify(fusionnees), couleurFond || null]
+      )
+    );
+    oublierModeles();
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error("[MAQUETTE ZONES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.delete("/:id/maquette", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await avecSchema(() =>
+      pool.query(
+        `UPDATE modeles_attestation
+            SET fond_pdf = NULL, fond_pdf_nom = NULL, fond_depose_le = NULL,
+                zones = '[]'::jsonb,
+                /* Sans maquette, le style « maquette » n'a plus de sens : on
+                   revient au dessin d'origine plutôt que de laisser un modèle
+                   qui échouerait au premier envoi. */
+                style = 'tech-ki'
+          WHERE id = $1 RETURNING ${CHAMPS}`,
+        [id]
+      )
+    );
+    if (!r.rows.length) return res.status(404).json({ error: "Modèle introuvable" });
+    oublierModeles();
+    logAudit(req, "UPDATE", "modeles_attestation", id, r.rows[0].nom, { motif: "maquette retirée" });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error("[MAQUETTE]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* L'aperçu : la maquette remplie de valeurs d'exemple.
+   C'est lui qui rend visibles en deux secondes les deux défauts que la lecture
+   ne peut pas deviner — un recouvrement qui se voit sur un fond non uni, et
+   une police qui jure avec le reste du document. */
+router.get("/:id/maquette/apercu", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = await avecSchema(() =>
+      pool.query(
+        "SELECT nom, fond_pdf, zones, couleur_fond FROM modeles_attestation WHERE id = $1",
+        [id]
+      )
+    );
+    const m = r.rows[0];
+    if (!m?.fond_pdf) return res.status(404).json({ error: "Aucune maquette déposée" });
+
+    const pdf = await composerAttestation({
+      fond: m.fond_pdf,
+      zones: m.zones || [],
+      valeurs: valeursExemple(),
+      couleurFond: m.couleur_fond || "#FFFFFF",
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="apercu-maquette.pdf"');
+    res.send(pdf);
+  } catch (err) {
+    console.error("[MAQUETTE APERCU]", err);
+    res.status(500).json({ error: "La composition de l'aperçu a échoué." });
+  }
+});
+
 /* ===== LOGO DU PARTENAIRE ===== */
-router.post("/:id/logo", authMiddleware, requireAdmin, upload.single("logo"), async (req, res) => {
+/* Même garde que pour la maquette : sans elle, un fichier trop lourd ou d'un
+   format refusé renvoyait une page HTML au lieu du motif. */
+router.post("/:id/logo", authMiddleware, requireAdmin, upload.single("logo"), refusDeFichier,
+  async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "Fichier requis" });
     const id = Number(req.params.id);
@@ -527,7 +746,50 @@ router.post("/envoyer", authMiddleware, requireAdmin, async (req, res) => {
  * celui par defaut. Renvoie null si la table n'existe pas encore — le rendu
  * retombe alors sur ses valeurs d'origine.
  */
+/* Le modèle retenu pour une activité, gardé quelques secondes.
+ *
+ * Un envoi groupé appelle cette fonction une fois par bénéficiaire, toujours
+ * pour la même activité. Sans ce cache, une maquette de trois méga-octets
+ * repartait de la base cent fois pour une séance de cent personnes : trois
+ * cents méga-octets transférés, et autant d'attente, pour un document qui ne
+ * change pas entre deux destinataires.
+ *
+ * Quelques secondes suffisent : elles couvrent un envoi groupé, et une
+ * maquette modifiée pendant ce temps-là ne serait de toute façon pas celle
+ * qu'on voulait appliquer à la moitié de la liste. */
+const CACHE_MODELE_MS = 30_000;
+const cacheModeles = new Map();
+
+function cacheLire(cle) {
+  const trouve = cacheModeles.get(cle);
+  if (!trouve) return null;
+  if (Date.now() > trouve.expire) {
+    cacheModeles.delete(cle);
+    return null;
+  }
+  return trouve.valeur;
+}
+
+function cacheEcrire(cle, valeur) {
+  /* Le cache ne doit pas devenir un entrepôt : une plateforme avec cinquante
+     dispositifs garderait cinquante PDF en mémoire. On le vide quand il
+     grossit, le coût d'une relecture étant bien moindre que celui d'une fuite
+     de mémoire. */
+  if (cacheModeles.size > 12) cacheModeles.clear();
+  cacheModeles.set(cle, { valeur, expire: Date.now() + CACHE_MODELE_MS });
+}
+
+/* Toute écriture sur un modèle le périme : sans cela, une maquette remplacée
+   mettrait une demi-minute à être prise en compte, et personne ne
+   comprendrait pourquoi l'aperçu et l'envoi ne montrent pas la même chose. */
+function oublierModeles() {
+  cacheModeles.clear();
+}
+
 async function modelePourActivite(activity) {
+  const cle = `d${activity?.device_id || 0}`;
+  const garde = cacheLire(cle);
+  if (garde !== null) return garde;
   try {
     if (activity?.device_id) {
       const r = await pool.query(
@@ -536,10 +798,15 @@ async function modelePourActivite(activity) {
           WHERE d.id = $1`,
         [activity.device_id]
       );
-      if (r.rows.length) return r.rows[0];
+      if (r.rows.length) {
+        cacheEcrire(cle, r.rows[0]);
+        return r.rows[0];
+      }
     }
     const d = await pool.query("SELECT * FROM modeles_attestation WHERE par_defaut LIMIT 1");
-    return d.rows[0] || null;
+    const retenu = d.rows[0] || null;
+    cacheEcrire(cle, retenu);
+    return retenu;
   } catch (err) {
     if (tableAbsente(err)) return null;
     throw err;
