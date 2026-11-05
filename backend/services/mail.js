@@ -65,9 +65,36 @@ function verifierAlignement() {
   }
 }
 
+/* ===== QUAND LA CONNEXION N'ABOUTIT PAS =====
+ *
+ * Distinguer « le serveur a refuse » de « on n'a jamais pu lui parler ».
+ *
+ * Un refus — mot de passe faux, expediteur non autorise, destinataire rejete —
+ * est un probleme de configuration : il faut le corriger, pas le contourner.
+ * Basculer ailleurs ne ferait que masquer une faute qui reviendra.
+ *
+ * Une connexion qui n'aboutit pas, elle, ne dit rien de la configuration : le
+ * port est ferme, le reseau coupe, l'hote injoignable. Aucun reglage de la
+ * plateforme n'y changera quoi que ce soit, et c'est la qu'un autre chemin a
+ * du sens.
+ */
+const CONNEXION_IMPOSSIBLE =
+  /ETIMEDOUT|ECONNREFUSED|ECONNRESET|ESOCKET|EHOSTUNREACH|ENETUNREACH|EAI_AGAIN|Greeting never received|Connection timeout/i;
+
+function connexionImpossible(err) {
+  /* Nodemailer range l'essentiel hors du message : « Connection timeout » ne
+     porte pas son code ETIMEDOUT. On regarde les trois. */
+  return CONNEXION_IMPOSSIBLE.test(
+    [err?.code, err?.message, err?.command].filter(Boolean).join(" ")
+  );
+}
+
+let basculeExpliquee = false;
+
 async function sendEmail({ toEmail, toName, subject, html, text, attachments = [], bcc = [], cc = [], headers = {}, replyTo = null }) {
   const fournisseur = fournisseurRetenu();
   const repondreA = replyTo || MAIL_REPLY_TO;
+  const enveloppe = { toEmail, toName, subject, html, text, attachments, bcc, cc, headers, repondreA };
 
   if (fournisseur === "smtp") {
     verifierAlignement();
@@ -92,26 +119,54 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
     });
 
     const formatAddr = (r) => r.name ? `"${r.name}" <${r.email}>` : r.email;
-    await transporter.sendMail({
-      from: `"${MAIL_FROM_NAME}" <${MAIL_FROM}>`,
-      to: toName ? `"${toName}" <${toEmail}>` : toEmail,
-      replyTo: repondreA || undefined,
-      bcc: bcc.length ? bcc.map(formatAddr).join(", ") : undefined,
-      cc:  cc.length  ? cc.map(formatAddr).join(", ")  : undefined,
-      subject,
-      html,
-      text,
-      attachments,
-      headers,
-    });
-    return;
+    try {
+      await transporter.sendMail({
+        from: `"${MAIL_FROM_NAME}" <${MAIL_FROM}>`,
+        to: toName ? `"${toName}" <${toEmail}>` : toEmail,
+        replyTo: repondreA || undefined,
+        bcc: bcc.length ? bcc.map(formatAddr).join(", ") : undefined,
+        cc:  cc.length  ? cc.map(formatAddr).join(", ")  : undefined,
+        subject,
+        html,
+        text,
+        attachments,
+        headers,
+      });
+      return "smtp";
+    } catch (err) {
+      /* Le port sortant est ferme et une cle Brevo est la : on passe par
+         l'API plutot que de perdre le message.
+
+         Ce n'est pas un contournement de confort. Sur cet hebergement, le
+         port 587 ne s'ouvrira pas : tant que MAIL_PROVIDER vaut « smtp »,
+         plus rien ne part, et Brevo ne voit aucun appel — donc il n'envoie
+         pas non plus l'alerte qui permettrait de comprendre. Le reglage
+         propre reste de pointer MAIL_PROVIDER sur « brevo » ; en attendant,
+         les messages arrivent. */
+      if (!brevoPret || !connexionImpossible(err)) throw err;
+
+      if (!basculeExpliquee) {
+        basculeExpliquee = true;
+        console.warn(
+          `[MAIL] ${SMTP_HOST}:${SMTP_PORT} injoignable (${err.code || err.message}). ` +
+            "Repli sur l'API Brevo, qui envoie en HTTPS. Les messages partent, mais " +
+            "le reglage reste a corriger : passez MAIL_PROVIDER a « brevo » pour " +
+            "eviter d'attendre l'echec SMTP avant chaque envoi."
+        );
+      } else {
+        console.warn("[MAIL] SMTP injoignable, repli sur Brevo.");
+      }
+
+      await envoyerParBrevo(enveloppe);
+      return "brevo (repli)";
+    }
   }
 
   if (fournisseur === "aucun") {
     console.warn(
       "[MAIL] Aucun service d'envoi configure (MAIL_PROVIDER / BREVO_API_KEY / MAILJET_* / SMTP_*). Message ignore."
     );
-    return;
+    return "aucun";
   }
 
   if (fournisseur === "mailjet") {
@@ -164,9 +219,19 @@ async function sendEmail({ toEmail, toName, subject, html, text, attachments = [
         .join(" ; ");
       throw new Error(`Mailjet error ${verdict.Status}: ${motifs || corps}`);
     }
-    return;
+    return "mailjet";
   }
 
+  await envoyerParBrevo(enveloppe);
+  return "brevo";
+}
+
+/* L'envoi par l'API de Brevo, extrait de « sendEmail » pour servir aussi de
+   repli quand le port SMTP sortant est ferme. Un seul chemin de code : ce qui
+   part par repli est exactement ce qui serait parti par choix. */
+async function envoyerParBrevo({ toEmail, toName, subject, html, text,
+                                 attachments = [], bcc = [], cc = [],
+                                 headers = {}, repondreA = null }) {
   const payload = {
     sender: { email: MAIL_FROM, name: MAIL_FROM_NAME },
     to: [{ email: toEmail, name: toName || toEmail }],

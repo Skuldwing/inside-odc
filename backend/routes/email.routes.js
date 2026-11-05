@@ -155,7 +155,7 @@ router.post("/test", authMiddleware, requireAdmin, async (req, res) => {
     }
 
     const horodatage = new Date().toLocaleString("fr-FR");
-    await sendEmail({
+    const parQuoi = await sendEmail({
       toEmail: destinataire,
       toName: destinataire,
       subject: "Inside ODC — essai d'envoi",
@@ -164,13 +164,23 @@ router.post("/test", authMiddleware, requireAdmin, async (req, res) => {
       text: `La plateforme Inside ODC parvient a envoyer du courrier. Expedie le ${horodatage}.`,
     });
 
+    /* Ce qui a reellement envoye, pas ce qui etait prevu. Quand le port SMTP
+       est ferme, l'envoi se replie sur l'API Brevo : annoncer « smtp » alors
+       que Brevo a expedie laisserait chercher une panne du cote du port, et
+       c'est exactement le genre de contradiction qui a deja coute une
+       journee ici. */
+    const replie = parQuoi === "brevo (repli)";
     res.json({
       success: true,
       destinataire,
       expediteur: config.expediteur,
-      fournisseur: fournisseurRetenu(),
-      message:
-        "Le service d'envoi a accepte le message. S'il n'arrive pas, regardez le dossier indesirables : c'est alors l'authentification du domaine qui est en cause, pas l'envoi.",
+      fournisseur: parQuoi || fournisseurRetenu(),
+      repli: replie,
+      message: replie
+        ? "Le message est parti — mais par l'API Brevo, après l'échec de la connexion SMTP. " +
+          "Le réglage reste à corriger : passez MAIL_PROVIDER à « brevo » pour ne plus " +
+          "attendre cet échec avant chaque envoi."
+        : "Le service d'envoi a accepte le message. S'il n'arrive pas, regardez le dossier indesirables : c'est alors l'authentification du domaine qui est en cause, pas l'envoi.",
     });
   } catch (err) {
     console.error("[ESSAI ENVOI]", err);
