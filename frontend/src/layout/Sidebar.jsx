@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   KanbanSquare,
+  Rocket,
   Wallet,
   Activity,
   X,
@@ -63,7 +64,8 @@ const GROUPES = [
     titre: "Équipe ODC",
     equipe: true,
     items: [
-      { name: "Mbootay", icon: KanbanSquare, path: "/mbootay", matchPrefix: true },
+      { name: "Mbootay 🐼", icon: KanbanSquare, path: "/mbootay", matchPrefix: true },
+      { name: "XATELLE SPACE 🧡", icon: Rocket, path: "/cm-xalette" },
     ],
   },
   {

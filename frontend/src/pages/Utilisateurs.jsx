@@ -35,7 +35,20 @@ const ROLES = [
   { value: "viewer",  label: "Lecteur",          cls: "bg-slate-100 text-slate-600 border-slate-200" },
 ];
 
-const EMPTY_FORM = { full_name: "", email: "", role: "viewer", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false, device_ids: [] };
+const JOB_TITLES = [
+  "Directeur / Directrice",
+  "Directeur adjoint / Directrice adjointe",
+  "Assistant / Assistante",
+  "Responsable de programme",
+  "Chef / Cheffe de projet",
+  "Coordinateur / Coordinatrice",
+  "Chargé / Chargée de communication",
+  "Comptable",
+  "Secrétaire",
+  "Autre fonction",
+];
+
+const EMPTY_FORM = { full_name: "", email: "", role: "viewer", job_title: "", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false, device_ids: [] };
 
 export default function Utilisateurs() {
   const toast = useToast();
@@ -89,6 +102,7 @@ export default function Utilisateurs() {
       if (!q) return true;
       return (u.full_name || "").toLowerCase().includes(q)
           || (u.email || "").toLowerCase().includes(q)
+          || (u.job_title || "").toLowerCase().includes(q)
           || (u.partner || "").toLowerCase().includes(q);
     });
   }, [users, search, roleFilter, statusFilter, onlineFilter]);
@@ -104,7 +118,7 @@ export default function Utilisateurs() {
   };
 
   const openEdit = (u) => {
-    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc, device_ids: u.device_ids || [] });
+    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, job_title: u.job_title || "", partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc, device_ids: u.device_ids || [] });
     setEditing(u.id);
     setFormError("");
     setInviteData(null);
@@ -216,29 +230,30 @@ export default function Utilisateurs() {
       <div className="space-y-6">
 
         {/* Header */}
-        <section className="surface-glass p-5 lg:p-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <section className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950 p-5 shadow-lg shadow-slate-900/10 lg:p-6">
+          <div className="pointer-events-none absolute -right-10 -top-16 h-52 w-52 rounded-full bg-orange-500/20 blur-3xl" />
+          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Administration</p>
-              <h1 className="mt-1 text-2xl lg:text-3xl font-semibold text-slate-900">Utilisateurs</h1>
-              <p className="mt-1 text-sm text-slate-500">Gestion des accès, rôles et invitations.</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Administration</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-white lg:text-3xl">Utilisateurs</h1>
+              <p className="mt-1 text-sm text-slate-300">Gérez les accès, fonctions et invitations de l’équipe.</p>
             </div>
-            <button onClick={openCreate} className="btn-primary">
+            <button onClick={openCreate} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400">
               <Plus className="w-4 h-4" /> Nouvel utilisateur
             </button>
           </div>
         </section>
 
         {/* Stats */}
-        <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <MiniStat label="Total filtrés" value={stats.total} />
-          <MiniStat label="Actifs" value={stats.active} />
-          <MiniStat label="Inactifs" value={stats.inactive} />
-          <MiniStat label="En ligne" value={stats.online} online />
+        <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <MiniStat label="Total filtrés" value={stats.total} tone="orange" />
+          <MiniStat label="Actifs" value={stats.active} tone="green" />
+          <MiniStat label="Inactifs" value={stats.inactive} tone="slate" />
+          <MiniStat label="En ligne" value={stats.online} tone="blue" online />
         </section>
 
         {/* Filtres */}
-        <section className="card p-4 lg:p-5">
+        <section className="rounded-2xl border border-orange-100 bg-white p-4 shadow-sm lg:p-5">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" />
@@ -321,7 +336,7 @@ export default function Utilisateurs() {
               </div>
             ) : (
               /* ── Étape 1 : formulaire ── */
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/60 to-white p-4">
                 {formError && (
                   <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" /> {formError}
@@ -338,11 +353,20 @@ export default function Utilisateurs() {
                   <input required type="email" className="input mt-1" placeholder="email@exemple.com" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
                 </div>
 
+                <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium">Rôle</label>
+                  <label className="text-sm font-semibold text-slate-700">Accès à la plateforme</label>
                   <select className="select mt-1" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
                     {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-700">Fonction dans l’équipe</label>
+                  <input list="user-job-titles" className="input mt-1" placeholder="Ex. Directrice, Assistant…" value={form.job_title} onChange={e => setForm(f => ({ ...f, job_title: e.target.value }))} />
+                  <datalist id="user-job-titles">
+                    {JOB_TITLES.map(title => <option key={title} value={title} />)}
+                  </datalist>
+                </div>
                 </div>
 
                 {(form.role === "partner" || form.role === "coach") && (
@@ -610,22 +634,23 @@ export default function Utilisateurs() {
         )}
 
         {/* Table */}
-        <section className="card overflow-x-auto">
-          <table className="table">
-            <thead className="table-head">
+        <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <table className="table min-w-[900px]">
+            <thead className="bg-slate-950 text-xs uppercase tracking-wide text-slate-200">
               <tr>
-                <th className="text-left px-4 py-3">Utilisateur</th>
-                <th className="text-left px-4 py-3">Rôle</th>
-                <th className="text-left px-4 py-3">Partenaire</th>
-                <th className="text-left px-4 py-3">Statut</th>
-                <th className="text-left px-4 py-3">Présence</th>
-                <th className="text-right px-4 py-3">Actions</th>
+                <th className="text-left px-4 py-3.5 font-bold">Utilisateur</th>
+                <th className="text-left px-4 py-3.5 font-bold">Accès</th>
+                <th className="text-left px-4 py-3.5 font-bold">Fonction</th>
+                <th className="text-left px-4 py-3.5 font-bold">Partenaire</th>
+                <th className="text-left px-4 py-3.5 font-bold">Statut</th>
+                <th className="text-left px-4 py-3.5 font-bold">Présence</th>
+                <th className="text-right px-4 py-3.5 font-bold">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <EmptyState
                       bare
                       icon={UsersRound}
@@ -648,7 +673,7 @@ export default function Utilisateurs() {
               ) : filteredUsers.map(u => {
                 const roleMeta = ROLES.find(r => r.value === u.role);
                 return (
-                  <tr key={u.id} className="table-row">
+                  <tr key={u.id} className="border-t border-slate-100 transition-colors odd:bg-white even:bg-slate-50/60 hover:bg-orange-50/60">
                     <td className="px-4 py-3">
                       <div className="font-medium flex items-center gap-2">
                         <User className="w-4 h-4 text-orange-500 flex-shrink-0" />
@@ -660,7 +685,7 @@ export default function Utilisateurs() {
                     </td>
 
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleMeta?.cls || "bg-slate-100 text-slate-600"}`}>
+                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${roleMeta?.cls || "bg-slate-100 text-slate-600"}`}>
                         <Shield className="w-3 h-3" />
                         {roleMeta?.label || u.role}
                       </span>
@@ -673,6 +698,12 @@ export default function Utilisateurs() {
                           Mbootay
                         </span>
                       )}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      {u.job_title ? (
+                        <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-800">{u.job_title}</span>
+                      ) : <span className="text-xs text-slate-400">À préciser</span>}
                     </td>
 
                     <td className="px-4 py-3 text-sm">
@@ -767,15 +798,20 @@ function formatLastSeen(lastSeenAt) {
   return `il y a ${days} j`;
 }
 
-function MiniStat({ label, value, online }) {
+function MiniStat({ label, value, tone = "orange", online }) {
+  const styles = {
+    orange: "border-orange-200 bg-gradient-to-br from-orange-50 to-white text-orange-700",
+    green: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white text-emerald-700",
+    slate: "border-slate-200 bg-gradient-to-br from-slate-50 to-white text-slate-700",
+    blue: "border-sky-200 bg-gradient-to-br from-sky-50 to-white text-sky-700",
+  };
   return (
-    <div className={`card p-4 ${online ? "border-emerald-200 bg-emerald-50/40" : ""}`}>
-      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <div className="mt-2 flex items-center gap-2">
-        {online
-          ? <><span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200 flex-shrink-0" /><p className="text-2xl font-semibold text-emerald-700">{value}</p></>
-          : <><UsersRound className="h-4 w-4 text-orange-500" /><p className="text-2xl font-semibold text-slate-900">{value}</p></>
-        }
+    <div className={`rounded-xl border p-3 shadow-sm sm:p-3.5 ${styles[tone] || styles.orange}`}>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">{label}</p>
+      <div className="mt-1 flex items-center gap-2">
+        {online && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />}
+        {!online && <UsersRound className="h-4 w-4 text-current opacity-80" />}
+        <p className="text-2xl font-extrabold leading-tight">{value}</p>
       </div>
     </div>
   );

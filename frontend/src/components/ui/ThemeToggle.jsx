@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 
 const KEY = "theme";
 const EVENT = "inside-odc:theme";
@@ -7,9 +7,10 @@ const EVENT = "inside-odc:theme";
 function readPreference() {
   try {
     const saved = localStorage.getItem(KEY);
-    return saved === "dark" || saved === "light" ? saved : "system";
+    if (saved === "dark" || saved === "light") return saved;
+    return systemPrefersDark() ? "dark" : "light";
   } catch {
-    return "system";
+    return "light";
   }
 }
 
@@ -67,7 +68,6 @@ export function useTheme() {
 const OPTIONS = [
   { key: "light", label: "Clair", icon: Sun },
   { key: "dark", label: "Sombre", icon: Moon },
-  { key: "system", label: "Système", icon: Monitor },
 ];
 
 export default function ThemeToggle({ className = "" }) {

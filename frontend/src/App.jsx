@@ -42,6 +42,7 @@ const Fiabilite = lazy(() => import("./pages/Fiabilite"));
 const Mbootay = lazy(() => import("./pages/Mbootay"));
 const Profil = lazy(() => import("./pages/Profil"));
 const MbootayProjet = lazy(() => import("./pages/MbootayProjet"));
+const CMXalette = lazy(() => import("./pages/CMXalette"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
 const ParticipantProfile = lazy(() => import("./pages/ParticipantProfile"));
 
@@ -225,6 +226,16 @@ export default function App() {
             <TeamOdcRoute>
               <Suspense fallback={<PageLoader />}>
                 <MbootayProjet />
+              </Suspense>
+            </TeamOdcRoute>
+          }
+        />
+        <Route
+          path="cm-xalette"
+          element={
+            <TeamOdcRoute>
+              <Suspense fallback={<PageLoader />}>
+                <CMXalette />
               </Suspense>
             </TeamOdcRoute>
           }

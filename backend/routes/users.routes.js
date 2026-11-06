@@ -12,6 +12,19 @@ const crypto = require("crypto");
 const { logAudit } = require("../services/audit");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 
+let userJobTitleSchemaPromise;
+async function ensureUserJobTitleColumn() {
+  if (!userJobTitleSchemaPromise) {
+    userJobTitleSchemaPromise = pool
+      .query("ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT")
+      .catch((err) => {
+        userJobTitleSchemaPromise = null;
+        throw err;
+      });
+  }
+  await userJobTitleSchemaPromise;
+}
+
 
 /* Adresse publique du site, telle qu'elle apparaitra dans les liens envoyes
    par email — invitations, creation de mot de passe. Le repli n'est qu'un
@@ -108,13 +121,14 @@ async function hasUsersIsActiveColumn() {
 /* ===== GET USERS ===== */
 router.get("/", async (req, res) => {
   try {
+    await ensureUserJobTitleColumn();
     const hasIsActive = await hasUsersIsActiveColumn();
     const statusExpr = hasIsActive
       ? "CASE WHEN u.is_active = true THEN 'active' ELSE 'inactive' END"
       : "'active'";
 
     const result = await avecTableDispositifs(() => pool.query(
-      `SELECT u.id, u.email, u.full_name, u.role, u.partner_id,
+      `SELECT u.id, u.email, u.full_name, u.role, u.job_title, u.partner_id,
               u.objective_beneficiaries,
               u.last_seen_at,
               COALESCE(u.is_team_odc, false) AS is_team_odc,
@@ -147,6 +161,7 @@ router.post("/", async (req, res) => {
     const {
       full_name,
       email,
+      job_title = "",
       role = "viewer",
       partner_id = null,
       partner = null,
@@ -158,6 +173,7 @@ router.post("/", async (req, res) => {
     if (!email) {
       return res.status(400).json({ error: "Email requis" });
     }
+    await ensureUserJobTitleColumn();
 
     // L'acces Mbootay est reserve aux profils internes : jamais un partenaire.
     const teamOdc = role !== "partner" && Boolean(is_team_odc);
@@ -179,19 +195,19 @@ router.post("/", async (req, res) => {
     const result = hasIsActive
       ? await pool.query(
           `
-          INSERT INTO users (email, password, role, partner_id, full_name, is_active, is_team_odc)
-          VALUES ($1,$2,$3,$4,$5,$6,$7)
-          RETURNING id, email, role, full_name, partner_id, is_team_odc
+          INSERT INTO users (email, password, role, partner_id, full_name, job_title, is_active, is_team_odc)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          RETURNING id, email, role, full_name, job_title, partner_id, is_team_odc
           `,
-          [email, hash, role, resolvedPartnerId, full_name || null, isActive, teamOdc]
+          [email, hash, role, resolvedPartnerId, full_name || null, String(job_title || "").trim() || null, isActive, teamOdc]
         )
       : await pool.query(
           `
-          INSERT INTO users (email, password, role, partner_id, full_name, is_team_odc)
-          VALUES ($1,$2,$3,$4,$5,$6)
-          RETURNING id, email, role, full_name, partner_id, is_team_odc
+          INSERT INTO users (email, password, role, partner_id, full_name, job_title, is_team_odc)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)
+          RETURNING id, email, role, full_name, job_title, partner_id, is_team_odc
           `,
-          [email, hash, role, resolvedPartnerId, full_name || null, teamOdc]
+          [email, hash, role, resolvedPartnerId, full_name || null, String(job_title || "").trim() || null, teamOdc]
         );
 
     const createdUser = result.rows[0];
@@ -238,6 +254,7 @@ router.put("/:id", async (req, res) => {
     const {
       full_name,
       email,
+      job_title = "",
       role,
       partner_id = null,
       partner = null,
@@ -250,6 +267,7 @@ router.put("/:id", async (req, res) => {
     if (!email) {
       return res.status(400).json({ error: "Email requis" });
     }
+    await ensureUserJobTitleColumn();
 
     // L'acces Mbootay est reserve aux profils internes : jamais un partenaire.
     const teamOdc = role !== "partner" && Boolean(is_team_odc);
@@ -274,19 +292,19 @@ router.put("/:id", async (req, res) => {
     const result = hasIsActive
       ? await pool.query(
           `UPDATE users
-           SET email = $1, role = $2, partner_id = $3, full_name = $4,
-               is_active = $5, objective_beneficiaries = $6, is_team_odc = $7
-           WHERE id = $8
-           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries, is_team_odc`,
-          [email, role, resolvedPartnerId, full_name || null, isActive, coachObjective, teamOdc, id]
+           SET email = $1, role = $2, partner_id = $3, full_name = $4, job_title = $5,
+               is_active = $6, objective_beneficiaries = $7, is_team_odc = $8
+           WHERE id = $9
+           RETURNING id, email, role, full_name, job_title, partner_id, objective_beneficiaries, is_team_odc`,
+          [email, role, resolvedPartnerId, full_name || null, String(job_title || "").trim() || null, isActive, coachObjective, teamOdc, id]
         )
       : await pool.query(
           `UPDATE users
-           SET email = $1, role = $2, partner_id = $3, full_name = $4,
-               objective_beneficiaries = $5, is_team_odc = $6
-           WHERE id = $7
-           RETURNING id, email, role, full_name, partner_id, objective_beneficiaries, is_team_odc`,
-          [email, role, resolvedPartnerId, full_name || null, coachObjective, teamOdc, id]
+           SET email = $1, role = $2, partner_id = $3, full_name = $4, job_title = $5,
+               objective_beneficiaries = $6, is_team_odc = $7
+           WHERE id = $8
+           RETURNING id, email, role, full_name, job_title, partner_id, objective_beneficiaries, is_team_odc`,
+          [email, role, resolvedPartnerId, full_name || null, String(job_title || "").trim() || null, coachObjective, teamOdc, id]
         );
 
     if (result.rows.length === 0) {

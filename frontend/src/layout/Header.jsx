@@ -62,6 +62,18 @@ export default function Header({ onMenuClick, onOpenSearch }) {
         icon: Users,
         to: "/participants",
       },
+      {
+        id: "my-tasks",
+        label: "Voir mes tâches",
+        icon: FileText,
+        to: "/mbootay?section=taches",
+      },
+      {
+        id: "weekly-follow-up",
+        label: "Suivi de la semaine",
+        icon: Calendar,
+        to: "/mbootay?section=suivi",
+      },
     ];
 
     if (role === "admin") {
@@ -110,8 +122,8 @@ export default function Header({ onMenuClick, onOpenSearch }) {
       ref={headerRef}
       className="app-topbar sticky top-0 z-30 border-b backdrop-blur-xl"
     >
-      <div className="flex min-h-[72px] items-center justify-start gap-3 px-4 lg:gap-5 lg:px-8">
-        <div className="flex shrink-0 items-center gap-3">
+      <div className="flex min-h-[64px] items-center justify-start gap-1 px-3 sm:gap-3 sm:px-4 lg:gap-5 lg:px-8">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-3">
           <button
             className="lg:hidden text-slate-600 transition-transform hover:text-slate-900 active:scale-90"
             onClick={onMenuClick}
@@ -120,56 +132,32 @@ export default function Header({ onMenuClick, onOpenSearch }) {
             <Menu />
           </button>
 
-          {/* Marque compacte, reste a cote de la recherche quelle que soit la largeur. */}
-          <div className="flex min-w-0 items-center">
-            <span className="app-brand-wordmark" aria-label="ODC">
-              <span className="app-brand-initial">O</span><span>DC</span>
-            </span>
-          </div>
+          <img src="/logo-odc-sonatel.png" alt="Orange Digital Center Sonatel" className="h-7 w-[112px] object-cover object-center sm:h-8 sm:w-[132px]" />
         </div>
 
-        <div className="flex min-w-0 flex-1 items-center justify-start gap-2 lg:gap-3">
+        <div className="flex min-w-0 flex-1 items-center justify-start gap-1 sm:gap-2 lg:gap-3">
           {/* L'ancien champ n'interrogeait aucune donnee : il testait quatre
               chaines en dur et renvoyait tout le reste sur Participants. Il
               ouvre desormais la vraie recherche. */}
           <button
             type="button"
             onClick={onOpenSearch}
-            className="hidden items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left transition hover:border-orange-300 xl:flex xl:min-w-[220px] xl:max-w-[440px] xl:flex-1"
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2 py-2 text-left transition hover:border-orange-300 sm:gap-2 sm:px-3 xl:min-w-[220px] xl:max-w-[440px]"
           >
             <Search className="h-4 w-4 flex-shrink-0 text-slate-500" aria-hidden="true" />
-            <span className="flex-1 text-sm text-slate-500">Rechercher…</span>
-            <kbd className="flex-shrink-0 rounded-md border border-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-500">
+            <span className="min-w-0 flex-1 truncate text-xs text-slate-500 sm:text-sm">Rechercher…</span>
+            <kbd className="hidden flex-shrink-0 rounded-md border border-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-500 xl:block">
               {shortcutLabel}
             </kbd>
           </button>
 
-          {/* Sous xl, le champ n'a pas la place : une icone suffit. */}
-          <button
-            type="button"
-            onClick={onOpenSearch}
-            aria-label="Rechercher"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-orange-300 xl:hidden"
-          >
-            <Search className="h-4 w-4" aria-hidden="true" />
-          </button>
-
-          <div className="relative hidden sm:block" ref={actionsRef}>
-            {role === "admin" && (
-              <button
-                className="inline-flex btn-primary"
-                onClick={() => navigate("/formulaires?action=new")}
-              >
-                <FileText className="w-4 h-4" />
-                Formulaire
-              </button>
-            )}
+          <div className="relative" ref={actionsRef}>
             <button
-              className="inline-flex btn-ghost border border-slate-200 bg-white text-slate-600"
+              className="inline-flex btn-ghost border border-slate-200 bg-white px-2 text-slate-600 sm:px-3"
               onClick={() => setActionsOpen((prev) => !prev)}
             >
               <Sparkles className="w-4 h-4 text-orange-500" />
-              Actions
+              <span className="hidden sm:inline">Actions</span>
             </button>
             {actionsOpen && (
               <div className="anim-dropdown absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 bg-white p-2 shadow-lg z-50">

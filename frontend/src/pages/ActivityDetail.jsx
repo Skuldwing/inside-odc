@@ -793,13 +793,13 @@ export default function ActivityDetail() {
       </div>
 
       {/* Hero Header Card */}
-      <section className="surface-glass p-6 rounded-2xl relative overflow-hidden border border-slate-200/80 shadow-sm">
+      <section className="surface-glass p-4 md:p-5 rounded-2xl relative overflow-hidden border border-slate-200/80 shadow-md">
         {/* Accent décoratif orange : un cercle dégradé subtil en arrière-plan
             qui rappelle l'identité Sonatel/ODC sans surcharger la lecture. */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-orange-100/50 to-transparent rounded-full -translate-y-1/3 translate-x-1/3 pointer-events-none" />
-        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-          <div className="space-y-3 flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+          <div className="space-y-2 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className={`badge font-semibold ${statusColors[activity.status] || "bg-slate-100 text-slate-700"}`}>
                 {statusLabel}
               </span>
@@ -825,7 +825,7 @@ export default function ActivityDetail() {
               )}
             </div>
 
-            <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 leading-tight">
+            <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-orange-700 leading-tight">
               {activity.title}
             </h1>
 
@@ -835,7 +835,7 @@ export default function ActivityDetail() {
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-slate-500 pt-1">
+            <div className="flex flex-wrap items-center gap-y-1 gap-x-5 text-xs text-slate-500">
               <span className="flex items-center gap-1.5 font-medium text-slate-700">
                 <Calendar className="w-4 h-4 text-orange-500" />
                 {activity.date_fin && activity.date_fin !== activity.activity_date
@@ -844,19 +844,19 @@ export default function ActivityDetail() {
               </span>
               {activity.location && (
                 <span className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-slate-400" />
+                  <MapPin className="w-4 h-4 text-orange-600" />
                   {activity.location}
                 </span>
               )}
               {activity.duration_hours && (
                 <span className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4 text-slate-400" />
+                  <Clock className="w-4 h-4 text-orange-600" />
                   {activity.duration_hours}h de formation
                 </span>
               )}
               {activity.coach_name && (
                 <span className="flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-slate-400" />
+                  <User className="w-4 h-4 text-orange-600" />
                   Coach / Formateur : {activity.coach_name}
                 </span>
               )}
@@ -864,7 +864,7 @@ export default function ActivityDetail() {
           </div>
 
           {/* Quick Actions Panel */}
-          <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
+          <div className="flex flex-col sm:flex-row lg:flex-col gap-1.5 shrink-0">
             <button
               onClick={openAddModal}
               className="btn-primary text-sm flex items-center justify-center gap-2 shadow-sm"
@@ -885,17 +885,17 @@ export default function ActivityDetail() {
       </section>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="stat-card flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs uppercase font-semibold tracking-wider">Inscrits & Présences</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
-              <Users className="w-4 h-4 text-orange-600" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="stat-card !p-3 rounded-xl border-orange-200 bg-gradient-to-br from-orange-50 to-white hover:translate-y-0 hover:shadow-md hover:shadow-orange-100/60">
+          <div className="flex items-center justify-between gap-1 text-slate-600">
+            <span className="text-[11px] uppercase font-bold tracking-wide">Inscrits & Présences</span>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-100">
+              <Users className="w-3.5 h-3.5 text-orange-600" />
             </div>
           </div>
-          <div className="mt-3">
-            <p className="text-3xl font-bold text-slate-900">{stats.total}</p>
-            <p className="text-xs text-slate-500 mt-1">
+          <div className="mt-1.5">
+            <p className="text-2xl font-extrabold leading-tight text-orange-700">{stats.total}</p>
+            <p className="text-[11px] text-slate-600 mt-0.5">
               {activity.personnes_distinctes != null && activity.personnes_distinctes !== stats.total
                 ? `${activity.personnes_distinctes} personnes distinctes`
                 : "Participants enregistrés"}
@@ -903,22 +903,22 @@ export default function ActivityDetail() {
           </div>
         </div>
 
-        <div className="stat-card flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs uppercase font-semibold tracking-wider">Parité Femmes / Hommes</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
-              <Sparkles className="w-4 h-4 text-orange-600" />
+        <div className="stat-card !p-3 rounded-xl border-fuchsia-200 bg-gradient-to-br from-fuchsia-50 to-white hover:translate-y-0 hover:shadow-md hover:shadow-fuchsia-100/60">
+          <div className="flex items-center justify-between gap-1 text-slate-600">
+            <span className="text-[11px] uppercase font-bold tracking-wide">Parité Femmes / Hommes</span>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-fuchsia-100">
+              <Sparkles className="w-3.5 h-3.5 text-fuchsia-600" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-1.5">
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-bold text-orange-600">
+              <span className="text-2xl font-extrabold leading-tight text-fuchsia-700">
                 {stats.total > 0 ? Math.round((stats.femmes / stats.total) * 100) : 0}%
               </span>
-              <span className="text-xs text-slate-500">Femmes ({stats.femmes})</span>
+              <span className="text-[11px] text-slate-600">Femmes ({stats.femmes})</span>
             </div>
             {/* Visual ratio bar */}
-            <div className="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden flex">
+            <div className="w-full bg-slate-100 h-1.5 rounded-full mt-1.5 overflow-hidden flex">
               <div
                 className="bg-orange-500 h-full transition-all"
                 style={{ width: `${stats.total > 0 ? (stats.femmes / stats.total) * 100 : 0}%` }}
@@ -931,18 +931,18 @@ export default function ActivityDetail() {
           </div>
         </div>
 
-        <div className="stat-card flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs uppercase font-semibold tracking-wider">Attestations</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
-              <CheckCircle className="w-4 h-4 text-emerald-600" />
+        <div className="stat-card !p-3 rounded-xl border-emerald-200 bg-gradient-to-br from-emerald-50 to-white hover:translate-y-0 hover:shadow-md hover:shadow-emerald-100/60">
+          <div className="flex items-center justify-between gap-1 text-slate-600">
+            <span className="text-[11px] uppercase font-bold tracking-wide">Attestations</span>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-100">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
             </div>
           </div>
-          <div className="mt-3">
-            <p className="text-3xl font-bold text-slate-900">
-              {stats.attestations_envoyees} <span className="text-sm font-normal text-slate-500">/ {stats.avec_email}</span>
+          <div className="mt-1.5">
+            <p className="text-2xl font-extrabold leading-tight text-emerald-700">
+              {stats.attestations_envoyees} <span className="text-xs font-semibold text-emerald-700/70">/ {stats.avec_email}</span>
             </p>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-[11px] text-slate-600 mt-0.5">
               {stats.avec_email > 0
                 ? `${Math.round((stats.attestations_envoyees / stats.avec_email) * 100)}% des personnes avec email`
                 : "Aucun email renseigné"}
@@ -950,14 +950,14 @@ export default function ActivityDetail() {
           </div>
         </div>
 
-        <div className="stat-card flex flex-col justify-between">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs uppercase font-semibold tracking-wider">Statut Émargement</span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
-              <QrCode className="w-4 h-4 text-orange-600" />
+        <div className="stat-card !p-3 rounded-xl border-sky-200 bg-gradient-to-br from-sky-50 to-white hover:translate-y-0 hover:shadow-md hover:shadow-sky-100/60">
+          <div className="flex items-center justify-between gap-1 text-slate-600">
+            <span className="text-[11px] uppercase font-bold tracking-wide">Statut Émargement</span>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-100">
+              <QrCode className="w-3.5 h-3.5 text-sky-600" />
             </div>
           </div>
-          <div className="mt-3">
+          <div className="mt-1.5">
             <span
               className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
                 formInfo.is_open
@@ -968,7 +968,7 @@ export default function ActivityDetail() {
               <span className={`w-2 h-2 rounded-full ${formInfo.is_open ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
               {formInfo.is_open ? "Formulaire Ouvert" : "Formulaire Fermé"}
             </span>
-            <p className="text-xs text-slate-500 mt-1 truncate" title={checkinFullUrl}>
+            <p className="text-[11px] text-slate-600 mt-0.5 truncate" title={checkinFullUrl}>
               /checkin/{activity.id}
             </p>
           </div>
@@ -976,14 +976,14 @@ export default function ActivityDetail() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="border-b border-slate-200">
-        <nav className="flex space-x-6" aria-label="Onglets de l'activité">
+      <div className="border-b border-orange-100">
+        <nav className="flex gap-2 overflow-x-auto pb-2" aria-label="Onglets de l'activité">
           <button
             onClick={() => setActiveTab("presences")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
               activeTab === "presences"
-                ? "border-orange-500 text-orange-600"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "bg-orange-500 text-white shadow-md shadow-orange-200"
+                : "bg-white text-orange-800 hover:bg-orange-100"
             }`}
           >
             <Users className="w-4 h-4" />
@@ -995,10 +995,10 @@ export default function ActivityDetail() {
 
           <button
             onClick={() => setActiveTab("formulaire")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
               activeTab === "formulaire"
-                ? "border-orange-500 text-orange-600"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "bg-orange-500 text-white shadow-md shadow-orange-200"
+                : "bg-white text-orange-800 hover:bg-orange-100"
             }`}
           >
             <FileText className="w-4 h-4" />
@@ -1010,10 +1010,10 @@ export default function ActivityDetail() {
 
           <button
             onClick={() => setActiveTab("checklist")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
               activeTab === "checklist"
-                ? "border-orange-500 text-orange-600"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "bg-orange-500 text-white shadow-md shadow-orange-200"
+                : "bg-white text-orange-800 hover:bg-orange-100"
             }`}
           >
             <CheckCircle2 className="w-4 h-4" />
@@ -1033,10 +1033,10 @@ export default function ActivityDetail() {
 
           <button
             onClick={() => setActiveTab("infos")}
-            className={`py-3 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+            className={`inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
               activeTab === "infos"
-                ? "border-orange-500 text-orange-600"
-                : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+                ? "bg-orange-500 text-white shadow-md shadow-orange-200"
+                : "bg-white text-orange-800 hover:bg-orange-100"
             }`}
           >
             <Layers className="w-4 h-4" />
@@ -1506,7 +1506,7 @@ export default function ActivityDetail() {
 
           {/* Création / modification d'une tâche */}
           {taskForm && !isViewer && (
-            <form onSubmit={saveTask} className="card p-5 space-y-4 border-orange-200">
+            <form onSubmit={saveTask} className="space-y-4 rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50/70 to-white p-4 shadow-sm sm:p-5">
               <h4 className="font-semibold text-slate-900 text-sm">
                 {taskForm.id ? "Modifier la tâche" : "Nouvelle tâche"}
               </h4>
@@ -1637,13 +1637,13 @@ export default function ActivityDetail() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                      <th className="px-4 py-3 font-semibold">Tâche</th>
-                      <th className="w-52 px-4 py-3 font-semibold">Responsable</th>
-                      <th className="w-40 px-4 py-3 font-semibold">Échéance</th>
-                      <th className="w-40 px-4 py-3 font-semibold">État</th>
+                    <tr className="bg-orange-50 text-left text-xs uppercase tracking-wider text-orange-800">
+                      <th className="px-4 py-3.5 font-bold">Tâche</th>
+                      <th className="w-52 px-4 py-3.5 font-bold">Responsable</th>
+                      <th className="w-40 px-4 py-3.5 font-bold">Échéance</th>
+                      <th className="w-40 px-4 py-3.5 font-bold">État</th>
                       {!isViewer && (
-                        <th className="w-24 px-4 py-3 text-right font-semibold">Actions</th>
+                        <th className="w-24 px-4 py-3.5 text-right font-bold">Actions</th>
                       )}
                     </tr>
                   </thead>
@@ -1655,10 +1655,10 @@ export default function ActivityDetail() {
                         new Date(task.due_date) < new Date(new Date().toDateString());
                       const style = TASK_STATUS_STYLE[task.status] || TASK_STATUS_STYLE.a_faire;
                       return (
-                        <tr key={task.id} className="transition-colors hover:bg-orange-50/40">
+                        <tr key={task.id} className="transition-colors odd:bg-white even:bg-slate-50/60 hover:bg-orange-50">
                           <td className="px-4 py-3 align-middle">
                             <p
-                              className={`font-medium ${
+                              className={`font-semibold ${
                                 task.status === "termine"
                                   ? "text-slate-400 line-through"
                                   : "text-slate-800"
@@ -2241,7 +2241,7 @@ export default function ActivityDetail() {
               </button>
             </div>
 
-            <form onSubmit={handleAddParticipant} className="space-y-3">
+            <form onSubmit={handleAddParticipant} className="space-y-3 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/60 to-white p-4">
               {addMode === "existing" ? (
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-slate-700">Sélectionner un participant existant</label>

@@ -21,6 +21,7 @@ export default function Layout() {
      francais affichait donc "Activities" et "Dashboard". Les libelles sont
      desormais explicites, et les sous-routes retombent sur leur section. */
   const PAGE_TITLES = [
+    ["/cm-xalette", "XATELLE SPACE"],
     ["/mbootay", "Mbootay"],
     ["/activities", "Activités"],
     ["/dashboard", "Tableau de bord"],

@@ -741,11 +741,13 @@ pool.query(`
         parent_id   INTEGER REFERENCES mbootay_weekly_items(id) ON DELETE CASCADE,
         title       TEXT NOT NULL,
         done        BOOLEAN NOT NULL DEFAULT FALSE,
+        event_date  DATE,
         position    INTEGER NOT NULL DEFAULT 0,
         created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
         created_at  TIMESTAMPTZ DEFAULT NOW()
       )
     `);
+    await pool.query(`ALTER TABLE mbootay_weekly_items ADD COLUMN IF NOT EXISTS event_date DATE`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_mbootay_weekly_items_plan ON mbootay_weekly_items(plan_id, position)`);
     console.log("Migration OK: planning hebdomadaire Mbootay");
 

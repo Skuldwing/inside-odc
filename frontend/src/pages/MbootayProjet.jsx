@@ -15,7 +15,7 @@ import { fr } from "date-fns/locale";
 import {
   ArrowLeft,
   Plus,
-  Columns3,
+  ListTodo,
   CalendarDays,
   Users,
   Pencil,
@@ -34,11 +34,11 @@ import { projectStatusMeta } from "./Mbootay";
 import { useToast, useConfirm, Button } from "../components/ui";
 
 const TASK_COLUMNS = [
-  { key: "a_faire", label: "À faire", dot: "bg-slate-400" },
-  { key: "en_cours", label: "En cours", dot: "bg-orange-500" },
-  { key: "en_pause", label: "En pause", dot: "bg-amber-500" },
-  { key: "termine", label: "Terminé", dot: "bg-emerald-500" },
-  { key: "annule", label: "Annulé", dot: "bg-slate-300" },
+  { key: "a_faire", label: "À faire", dot: "bg-slate-500", panel: "bg-slate-100", border: "border-slate-300", header: "bg-slate-700", add: "border-slate-400 text-slate-700 hover:border-slate-600 hover:text-slate-900" },
+  { key: "en_cours", label: "En cours", dot: "bg-orange-500", panel: "bg-orange-50", border: "border-orange-200", header: "bg-orange-600", add: "border-orange-300 text-orange-800 hover:border-orange-500 hover:text-orange-900" },
+  { key: "en_pause", label: "En pause", dot: "bg-amber-500", panel: "bg-amber-50", border: "border-amber-200", header: "bg-amber-600", add: "border-amber-300 text-amber-800 hover:border-amber-500 hover:text-amber-900" },
+  { key: "termine", label: "Terminé", dot: "bg-emerald-500", panel: "bg-emerald-50", border: "border-emerald-200", header: "bg-emerald-700", add: "border-emerald-300 text-emerald-800 hover:border-emerald-500 hover:text-emerald-900" },
+  { key: "annule", label: "Annulé", dot: "bg-rose-500", panel: "bg-rose-50", border: "border-rose-200", header: "bg-rose-700", add: "border-rose-300 text-rose-800 hover:border-rose-500 hover:text-rose-900" },
 ];
 
 const TASK_PRIORITIES = [
@@ -278,7 +278,7 @@ export default function MbootayProjet() {
       )}
 
       {/* En-tête */}
-      <div className="relative isolate space-y-5 overflow-hidden rounded-3xl bg-slate-950 p-5 text-white shadow-xl shadow-slate-900/10 sm:p-7">
+      <div className="relative isolate w-full space-y-1.5 overflow-hidden rounded-2xl bg-slate-950 p-2.5 text-white shadow-lg shadow-slate-900/10 sm:space-y-2 sm:p-3">
         <div className="absolute -right-10 -top-16 -z-10 h-60 w-60 rounded-full bg-orange-500/25 blur-3xl" />
         <Link
           to="/mbootay"
@@ -288,13 +288,18 @@ export default function MbootayProjet() {
           Mbootay
         </Link>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">{project?.title}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h1 className="min-w-0 flex-1 text-xl font-bold tracking-tight text-white sm:text-2xl">{project?.title}</h1>
+              <button onClick={() => openCreateTask()} className="btn-primary shrink-0 px-3 py-2 text-sm">
+                <Plus className="h-4 w-4" /> Nouvelle tâche
+              </button>
+            </div>
             {project?.description && (
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">{project.description}</p>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-slate-300 sm:text-sm">{project.description}</p>
             )}
-            <div className="flex flex-wrap items-center gap-2 mt-3">
+            <div className="flex flex-wrap items-center gap-1 mt-1.5">
               <span className={`badge border-transparent ${meta.badge}`}>
                 <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${meta.dot}`} />
                 {meta.label}
@@ -308,13 +313,13 @@ export default function MbootayProjet() {
               {project?.partner_name && (
                 <span className="badge border-white/20 bg-white/10 text-slate-100">
                   <Building2 className="w-3 h-3 mr-1.5" />
-                  {project.partner_name}
+                  Partenaire · {project.partner_name}
                 </span>
               )}
               {project?.device_name && (
                 <span className="badge border-white/20 bg-white/10 text-slate-100">
                   <Layers className="w-3 h-3 mr-1.5" />
-                  {project.device_name}
+                  Dispositif · {project.device_name}
                 </span>
               )}
               {project?.due_date && (
@@ -326,43 +331,39 @@ export default function MbootayProjet() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button onClick={openMembers} className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3.5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15">
-              <Users className="w-4 h-4" />
-              Membres ({members.length})
-            </button>
-            <button onClick={() => openCreateTask()} className="btn-primary">
-              <Plus className="w-4 h-4" />
-              Nouvelle tâche
-            </button>
-          </div>
         </div>
 
         {members.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3.5 py-3" aria-label="Membres du projet">
-            <span className="mr-1 text-xs font-semibold text-slate-300">Équipe du projet</span>
+          <section className="w-full rounded-xl border border-orange-200 bg-white p-2 shadow-sm" aria-label="Membres assignés au projet">
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <h2 className="flex items-center gap-1.5 text-xs font-bold text-slate-900"><Users className="h-3.5 w-3.5 text-orange-600" />Équipe assignée</h2>
+              <span className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-900">{members.length}</span>
+              <button type="button" onClick={openMembers} className="rounded-md border border-slate-200 p-1 text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700" aria-label="Modifier l’équipe assignée" title="Modifier l’équipe"><Pencil className="h-3 w-3" /></button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
             {members.map((member) => {
               const name = member.full_name || member.email || "Membre";
               const initials = name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
               const isCurrentUser = Number(member.id) === Number(user?.id);
               return (
-                <span key={member.id} className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${isCurrentUser ? "border-orange-300/60 bg-orange-400/15 text-orange-100" : "border-white/10 bg-white/5 text-slate-100"}`}>
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ${isCurrentUser ? "bg-orange-500 text-white" : "bg-white/15 text-white"}`}>{initials}</span>
-                  {name}{isCurrentUser ? " · Moi" : ""}
-                </span>
+                <div key={member.id} className={`flex min-w-0 flex-1 basis-[200px] items-center gap-1.5 rounded-full border px-2 py-1 ${isCurrentUser ? "border-orange-500 bg-orange-50 text-orange-950 ring-1 ring-orange-200" : "border-slate-200 bg-slate-50 text-slate-900"}`}>
+                  <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[9px] font-extrabold ${isCurrentUser ? "bg-orange-600 text-white" : "bg-slate-700 text-white"}`}>{initials}</span>
+                  <span className="max-w-[150px] truncate text-xs font-bold">{name}</span>{isCurrentUser && <span className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-wide text-white">Moi</span>}
+                </div>
               );
             })}
-          </div>
+            </div>
+          </section>
         )}
 
         <div>
-          <div className="mb-1.5 flex items-center justify-between text-xs text-slate-300">
+          <div className="mb-0.5 flex items-center justify-between text-[10px] text-slate-300">
             <span className="font-semibold">Avancement</span>
             <span className="font-semibold text-white">
               {progress.done}/{progress.total} tâches · {progress.pct}%
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/20">
+          <div className="h-1.5 overflow-hidden rounded-full bg-white/20">
             <div
               className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-600 transition-all duration-500"
               style={{ width: `${progress.pct}%` }}
@@ -372,17 +373,22 @@ export default function MbootayProjet() {
       </div>
 
       {/* Bascule de vue */}
-      <div className="flex items-center gap-2 rounded-2xl border border-slate-300 bg-slate-100 p-2">
-        <ViewToggle active={view === "kanban"} onClick={() => setView("kanban")} icon={Columns3}>
-          Kanban
-        </ViewToggle>
-        <ViewToggle active={view === "calendrier"} onClick={() => setView("calendrier")} icon={CalendarDays}>
-          Calendrier
-        </ViewToggle>
+      <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-300 bg-white/95 p-2 shadow-md backdrop-blur">
+        <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-1">
+        <ViewToggle active={view === "kanban"} onClick={() => setView("kanban")} icon={ListTodo}>
+            Tâches
+          </ViewToggle>
+          <ViewToggle active={view === "calendrier"} onClick={() => setView("calendrier")} icon={CalendarDays}>
+            Calendrier
+          </ViewToggle>
+        </div>
+        {view === "calendrier" && <button onClick={() => openCreateTask()} className="btn-primary min-h-10 px-4">
+          <Plus className="h-4 w-4" /> Ajouter une tâche
+        </button>}
       </div>
 
       {view === "kanban" ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+        <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4">
           {TASK_COLUMNS.map((column) => {
             const columnTasks = tasks.filter((t) => (t.status || "a_faire") === column.key);
             return (
@@ -399,16 +405,17 @@ export default function MbootayProjet() {
                   setDraggedId(null);
                   setDragOverColumn(null);
                 }}
-                className={`min-h-[240px] rounded-2xl border-2 p-3.5 transition ${
+                className={`min-h-[240px] w-[280px] max-w-[82vw] shrink-0 snap-start rounded-2xl border-2 p-3.5 transition ${column.border} ${column.panel} ${
                   dragOverColumn === column.key
                     ? "border-orange-500 bg-orange-100"
-                    : "border-slate-300 bg-slate-100"
+                    : ""
                 }`}
               >
-                <div className="mb-3 flex items-center gap-2 rounded-xl bg-slate-900 px-3 py-2.5 text-white">
+                <div className={`mb-3 flex items-center gap-2 rounded-xl px-3 py-2.5 text-white shadow-sm ${column.header}`}>
                   <span className={`h-2.5 w-2.5 rounded-full ring-2 ring-white/25 ${column.dot}`} />
                   <p className="text-sm font-bold">{column.label}</p>
                   <span className="ml-auto rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold text-white">{columnTasks.length}</span>
+                  <button type="button" onClick={() => openCreateTask(column.key)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/15 text-white hover:bg-white/25" aria-label={`Ajouter une tâche ${column.label.toLowerCase()}`} title={`Ajouter dans « ${column.label} »`}><Plus className="h-4 w-4" /></button>
                 </div>
 
                 <div className="space-y-2">
@@ -416,6 +423,7 @@ export default function MbootayProjet() {
                     <TaskCard
                       key={task.id}
                       task={task}
+                      isMine={Number(task.assigned_to) === Number(user?.id)}
                       onDragStart={() => setDraggedId(task.id)}
                       onDragEnd={() => {
                         setDraggedId(null);
@@ -424,16 +432,11 @@ export default function MbootayProjet() {
                       dragging={String(draggedId) === String(task.id)}
                       onEdit={() => openEditTask(task)}
                       onDelete={() => handleDeleteTask(task)}
+                      onStatusChange={(status) => handleMoveTask(task.id, status)}
                     />
                   ))}
                 </div>
 
-                <button
-                  onClick={() => openCreateTask(column.key)}
-                  className="mt-2 w-full rounded-xl border-2 border-dashed border-slate-400 bg-white/70 px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:border-orange-500 hover:bg-white hover:text-orange-800"
-                >
-                  + Ajouter une tâche
-                </button>
               </div>
             );
           })}
@@ -455,7 +458,7 @@ export default function MbootayProjet() {
           title={editingTask ? "Modifier la tâche" : "Nouvelle tâche"}
           onClose={() => setTaskModalOpen(false)}
         >
-          <form onSubmit={handleTaskSubmit} className="space-y-4">
+          <form onSubmit={handleTaskSubmit} className="space-y-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/60 to-white p-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Titre *</label>
               <input
@@ -477,31 +480,34 @@ export default function MbootayProjet() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Statut</label>
-                <select
-                  className="select"
-                  value={taskForm.status}
-                  onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}
-                >
-                  {TASK_COLUMNS.map((c) => (
-                    <option key={c.key} value={c.key}>{c.label}</option>
-                  ))}
-                </select>
+            <fieldset className="min-w-0 space-y-1.5">
+              <legend className="mb-1 block text-sm font-medium text-slate-700">Statut</legend>
+              <div role="radiogroup" aria-label="Statut de la tâche" className="flex flex-nowrap gap-2 overflow-x-auto pb-1">
+                {TASK_COLUMNS.map((column) => {
+                  const selected = taskForm.status === column.key;
+                  const selectedTone = {
+                    a_faire: "border-slate-700 bg-slate-700 text-white",
+                    en_cours: "border-orange-600 bg-orange-600 text-white",
+                    en_pause: "border-amber-600 bg-amber-500 text-white",
+                    termine: "border-emerald-700 bg-emerald-700 text-white",
+                    annule: "border-rose-700 bg-rose-700 text-white",
+                  }[column.key];
+                  return <button key={column.key} type="button" role="radio" aria-checked={selected} onClick={() => setTaskForm({ ...taskForm, status: column.key })} className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${selected ? selectedTone : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"}`}><span className={`h-2 w-2 rounded-full ${column.dot} ${selected ? "ring-2 ring-white/60" : ""}`} />{column.label}</button>;
+                })}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Priorité</label>
-                <select
-                  className="select"
-                  value={taskForm.priority}
-                  onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}
-                >
-                  {TASK_PRIORITIES.map((p) => (
-                    <option key={p.key} value={p.key}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
+            </fieldset>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Priorité</label>
+              <select
+                className="select"
+                value={taskForm.priority}
+                onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}
+              >
+                {TASK_PRIORITIES.map((p) => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -602,27 +608,29 @@ function ViewToggle({ active, onClick, icon: Icon, children }) {
   );
 }
 
-function TaskCard({ task, onDragStart, onDragEnd, dragging, onEdit, onDelete }) {
+function TaskCard({ task, isMine = false, onDragStart, onDragEnd, dragging, onEdit, onDelete, onStatusChange }) {
   const prio = priorityMeta(task.priority);
   const due = toDateOnly(task.due_date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const late = due && due < today && !["termine", "annule"].includes(task.status);
+  const isCompleted = task.status === "termine";
+  const isCancelled = task.status === "annule";
 
   return (
     <div
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      className={`group cursor-grab rounded-xl border-2 border-slate-300 bg-white p-3.5 shadow-sm transition hover:border-orange-400 hover:shadow-md active:cursor-grabbing ${
-        dragging ? "opacity-40" : ""
+      className={`group cursor-grab rounded-xl border-2 p-3.5 shadow-sm transition hover:border-orange-400 hover:shadow-md active:cursor-grabbing ${
+        dragging ? "opacity-40" : isCompleted ? "border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200" : isMine ? "border-orange-500 bg-orange-50 ring-2 ring-orange-200" : isCancelled ? "border-rose-300 bg-rose-50" : "border-slate-300 bg-white"
       }`}
     >
       <div className="flex items-start gap-2">
         <GripVertical className="mt-0.5 h-4 w-4 flex-shrink-0 text-slate-500" />
         <p
           className={`flex-1 text-sm font-semibold leading-5 ${
-            ["termine", "annule"].includes(task.status) ? "text-slate-600 line-through decoration-2" : "text-slate-950"
+            isCancelled ? "text-slate-700 line-through decoration-2 decoration-slate-600" : isCompleted ? "text-slate-950" : "text-slate-950"
           }`}
         >
           {task.title}
@@ -638,6 +646,17 @@ function TaskCard({ task, onDragStart, onDragEnd, dragging, onEdit, onDelete }) 
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pl-5">
+        <select
+          value={task.status || "a_faire"}
+          onChange={(event) => onStatusChange(event.target.value)}
+          onPointerDown={(event) => event.stopPropagation()}
+          onDragStart={(event) => event.preventDefault()}
+          aria-label={`Statut de la tâche ${task.title}`}
+          className="max-w-full rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 outline-none focus:border-orange-400"
+        >
+          {TASK_COLUMNS.map((status) => <option key={status.key} value={status.key}>{status.label}</option>)}
+        </select>
+        {isMine && <span className="inline-flex items-center gap-1 rounded-full bg-orange-600 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wide text-white shadow-sm"><Users className="h-3 w-3" />À moi</span>}
         <span className={`badge border-transparent ${prio.badge}`}>{prio.label}</span>
         {due && (
           <span

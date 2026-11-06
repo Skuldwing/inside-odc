@@ -72,11 +72,11 @@ body {
   }
 
   .input {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-orange-300 focus:outline-none focus:ring-4 focus:ring-orange-100;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition hover:border-orange-200 focus:border-orange-400 focus:bg-orange-50/20 focus:outline-none focus:ring-4 focus:ring-orange-100;
   }
 
   .select {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 transition focus:border-orange-300 focus:outline-none focus:ring-4 focus:ring-orange-100;
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 transition hover:border-orange-200 focus:border-orange-400 focus:bg-orange-50/20 focus:outline-none focus:ring-4 focus:ring-orange-100;
   }
 
   .btn {

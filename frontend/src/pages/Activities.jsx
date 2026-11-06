@@ -52,8 +52,6 @@ import {
   useToast,
   useConfirm,
   EmptyState,
-  DensityToggle,
-  useDensity,
 } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 
@@ -76,9 +74,10 @@ export default function Activities({
   const [partnerFilter, setPartnerFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const { listGap, cardPadding } = useDensity();
+  const listGap = "gap-2";
+  const cardPadding = "p-3";
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 25;
+  const ITEMS_PER_PAGE = 20;
   const [activities, setActivities] = useState([]);
   const [devices, setDevices] = useState([]);
   const [partners, setPartners] = useState([]);
@@ -348,7 +347,6 @@ export default function Activities({
   }, [devices, activities]);
 
   const filteredActivities = useMemo(() => {
-    setCurrentPage(1);
     const q = search.trim().toLowerCase();
     return activities.filter((a) => {
       if (role === "admin" && partnerFilter) {
@@ -362,6 +360,15 @@ export default function Activities({
       return true;
     });
   }, [activities, role, partnerFilter, deviceFilter, status, search]);
+  const totalPages = Math.ceil(filteredActivities.length / ITEMS_PER_PAGE);
+  const sectionPageActivities = filteredActivities.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activities, role, partnerFilter, deviceFilter, status, search, viewMode]);
 
   /* La vue « Par section » affiche chaque activité sous forme de rectangle
      (grille de cartes), par opposition à la liste complète qui aligne des
@@ -1034,18 +1041,18 @@ export default function Activities({
           portée sans remonter en haut de la page. L'écart est lu depuis la
           variable CSS publiée par l'en-tête, jamais deviné en dur. */}
       <section
-        className="surface-glass sticky z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm lg:p-5"
+        className="sticky z-20 rounded-2xl border border-slate-800 bg-slate-950 p-3 text-white shadow-lg shadow-slate-900/10 lg:p-3.5"
         style={{ top: "var(--app-header-h, 4rem)" }}
       >
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600 ring-1 ring-orange-100">
-              <CalendarDays className="h-5 w-5" />
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-300 ring-1 ring-orange-300/20">
+              <CalendarDays className="h-4 w-4" />
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-700">Suivi des programmes</p>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 lg:text-[1.7rem]">Activités</h1>
-              <p className="mt-0.5 text-sm text-slate-500">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-orange-300">Suivi des programmes</p>
+              <h1 className="text-xl font-bold tracking-tight text-white lg:text-2xl">Activités</h1>
+              <p className="mt-0.5 text-xs text-slate-300">
                 Planification, présence et suivi des activités terrain.
               </p>
             </div>
@@ -1054,12 +1061,12 @@ export default function Activities({
             <div
               role="group"
               aria-label="Mode d'affichage"
-              className="flex max-w-full flex-shrink-0 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1"
+              className="flex max-w-full flex-shrink-0 overflow-x-auto rounded-xl border border-white/15 bg-white/5 p-1"
             >
               <button
                 type="button"
                 onClick={() => setViewMode("sections")}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${viewMode === "sections" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900"}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${viewMode === "sections" ? "bg-orange-500 text-white shadow-sm" : "text-slate-200 hover:bg-white/10 hover:text-white"}`}
               >
                 <Layers className="w-4 h-4" />
                 Par section
@@ -1067,7 +1074,7 @@ export default function Activities({
               <button
                 type="button"
                 onClick={() => setViewMode("liste")}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${viewMode === "liste" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900"}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${viewMode === "liste" ? "bg-orange-500 text-white shadow-sm" : "text-slate-200 hover:bg-white/10 hover:text-white"}`}
               >
                 <List className="w-4 h-4" />
                 Liste complète
@@ -1075,13 +1082,12 @@ export default function Activities({
               <button
                 type="button"
                 onClick={() => setViewMode("calendrier")}
-                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${viewMode === "calendrier" ? "bg-orange-500 text-white shadow-sm" : "text-slate-600 hover:bg-white hover:text-slate-900"}`}
+                className={`flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${viewMode === "calendrier" ? "bg-orange-500 text-white shadow-sm" : "text-slate-200 hover:bg-white/10 hover:text-white"}`}
               >
                 <CalendarDays className="w-4 h-4" />
                 Calendrier
               </button>
             </div>
-            <DensityToggle className="flex-shrink-0" />
             {!isViewer && (
               <button className="btn-primary" onClick={openUploadModal}>
                 <Plus className="w-4 h-4" />
@@ -1273,7 +1279,7 @@ export default function Activities({
           )}
           {!loading && filteredActivities.length > 0 && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {filteredActivities.map((activity) => (
+              {sectionPageActivities.map((activity) => (
                 <ActivityGridCard
                   key={activity.id}
                   activity={activity}
@@ -1285,12 +1291,17 @@ export default function Activities({
               ))}
             </div>
           )}
+          {!loading && totalPages > 1 && (
+            <ActivityPager
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalActivities={filteredActivities.length}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </div>
       ) : (
         (() => {
-          const totalPages = Math.ceil(
-            filteredActivities.length / ITEMS_PER_PAGE,
-          );
           const paginated = filteredActivities.slice(
             (currentPage - 1) * ITEMS_PER_PAGE,
             currentPage * ITEMS_PER_PAGE,
@@ -1356,7 +1367,7 @@ export default function Activities({
                 <div className="flex items-center justify-between pt-2">
                   <p className="text-sm text-slate-500">
                     {filteredActivities.length} activités — page {currentPage} /{" "}
-                    {totalPages}
+                    {totalPages} · 20 par page
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -1397,7 +1408,7 @@ export default function Activities({
           {uploadResult ? (
             <ImportResultSummary result={uploadResult} />
           ) : (
-            <form onSubmit={handleUpload} className="space-y-4">
+            <form onSubmit={handleUpload} className="space-y-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/70 to-white p-4">
               <FormActivityFields
                 role={role}
                 form={form}
@@ -1638,7 +1649,7 @@ export default function Activities({
           <form
             id="edit-activity-form"
             onSubmit={handleEditSave}
-            className="space-y-4"
+            className="space-y-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/50 via-white to-amber-50/40 p-3 sm:p-4"
           >
             <FormActivityFields
               role={role}
@@ -3188,9 +3199,9 @@ function ChecklistEditor({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 space-y-3">
-      <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-100">
-        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+    <div className="space-y-3 rounded-2xl border border-orange-100 bg-gradient-to-br from-white to-orange-50/60 p-4 shadow-sm shadow-orange-100/40">
+      <div className="flex items-center gap-2.5 border-b border-orange-100 pb-2.5">
+        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-100 text-orange-700 ring-1 ring-orange-200/70">
           <CheckCircle2 className="h-4 w-4" />
         </div>
         <div className="flex-1">
@@ -3380,7 +3391,7 @@ function FormSection({ icon: Icon, title, children, hint }) {
           <Icon className="h-4 w-4" />
         </div>
         <div className="flex-1">
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+          <h3 className="text-sm font-bold text-slate-900">{title}</h3>
           {hint && <p className="text-xs text-slate-500">{hint}</p>}
         </div>
       </div>
@@ -3842,19 +3853,19 @@ function CalendarView({
    hover qui l'élève avec une ombre orange. */
 function CountCard({ label, value, icon: Icon, accent = "orange" }) {
   const accents = {
-    orange: "bg-orange-100 text-orange-600",
-    slate: "bg-slate-100 text-slate-500",
-    emerald: "bg-emerald-100 text-emerald-600",
+    orange: "border-orange-200 bg-gradient-to-br from-orange-50 to-white text-orange-700",
+    slate: "border-sky-200 bg-gradient-to-br from-sky-50 to-white text-sky-700",
+    emerald: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white text-emerald-700",
   };
   return (
-    <div className="stat-card">
+    <div className={`stat-card !p-3 rounded-xl hover:translate-y-0 hover:shadow-md ${accents[accent] || accents.orange}`}>
       {Icon && (
-        <div className={`stat-card-icon ${accents[accent] || accents.orange}`}>
-          <Icon className="h-5 w-5" />
+        <div className={`stat-card-icon !top-3 !right-3 !h-8 !w-8 rounded-lg ${accents[accent] || accents.orange}`}>
+          <Icon className="h-4 w-4" />
         </div>
       )}
-      <p className="stat-card-label">{label}</p>
-      <p className="stat-card-value text-slate-900">{value}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">{label}</p>
+      <p className={`mt-1 text-2xl font-extrabold leading-tight ${accents[accent]?.split(" ").find((c) => c.startsWith("text-")) || "text-orange-700"}`}>{value}</p>
     </div>
   );
 }
@@ -4045,6 +4056,40 @@ function QrModal({ activity, onClose }) {
   );
 }
 
+function ActivityPager({ currentPage, totalPages, totalActivities, onPageChange }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+      <p className="text-sm font-medium text-slate-600">
+        {totalActivities} activités — page {currentPage} / {totalPages} · 20 par page
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={currentPage === 1}
+          onClick={() => {
+            onPageChange((page) => page - 1);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" /> Précédent
+        </button>
+        <button
+          type="button"
+          disabled={currentPage === totalPages}
+          onClick={() => {
+            onPageChange((page) => page + 1);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40"
+        >
+          Suivant <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ActivityGridCard({
   activity,
   canEdit,
@@ -4068,7 +4113,7 @@ function ActivityGridCard({
         : "—";
 
   return (
-    <div className="activity-card flex h-full flex-col gap-3 p-4 pl-5">
+    <div className="activity-card flex h-full flex-col gap-2 p-3 pl-4">
       <div className="activity-card-accent" />
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 break-words font-semibold text-slate-900">
@@ -4084,7 +4129,7 @@ function ActivityGridCard({
         </span>
       </div>
 
-      <p className="text-sm text-slate-500">
+      <p className="text-xs text-slate-500">
         {activity.coach_name
           ? `Formateur : ${activity.coach_name}`
           : `${activity.partner} · ${activity.device}`}
@@ -4092,14 +4137,14 @@ function ActivityGridCard({
 
       {activity.description && (
         <p
-          className="line-clamp-2 text-sm text-slate-600"
+          className="line-clamp-1 text-xs text-slate-600"
           title={activity.description}
         >
           {activity.description}
         </p>
       )}
 
-      <p className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+      <p className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <span className="flex items-center gap-1">
           <MapPin size={14} />
           {activity.location}
@@ -4112,19 +4157,16 @@ function ActivityGridCard({
         </span>
       </p>
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
-        <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+      <div className="mt-auto flex items-center justify-start gap-3 border-t border-slate-100 pt-2">
+        <span className="inline-flex items-center gap-1.5 text-base font-bold text-slate-900">
           <Users className="h-4 w-4 text-orange-500" />
           {participantsLabel}
-          <span className="text-xs font-normal text-slate-500">
-            participant{participantsLabel === 1 ? "" : "s"}
-          </span>
         </span>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {onOpenDetail && (
             <button
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-3.5 text-xs font-semibold text-white shadow-sm shadow-orange-200 transition-all hover:from-orange-600 hover:to-orange-700 hover:shadow-md hover:shadow-orange-300 active:scale-95"
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-4 text-sm font-bold text-white shadow-sm shadow-orange-200 transition-all hover:from-orange-600 hover:to-orange-700 hover:shadow-md hover:shadow-orange-300 active:scale-95"
               onClick={onOpenDetail}
               title="Voir la fiche détaillée : liste de présence, formulaire et documents"
             >
@@ -4188,12 +4230,12 @@ function ActivityCard({
   return (
     <div className={`activity-card ${cardPadding} pl-6`}>
       <div className="activity-card-accent" />
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0 lg:flex-1">
           <p className="font-semibold text-slate-900 text-lg break-words">
             {activity.title}
           </p>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 mt-0.5">
             {activity.coach_name
               ? `Formateur : ${activity.coach_name}`
               : `${activity.partner} · ${activity.device}`}
@@ -4204,7 +4246,7 @@ function ActivityCard({
                complet reste accessible au survol et sur la fiche de
                modification. */
             <p
-              className="mt-2 line-clamp-2 text-sm text-slate-600"
+              className="mt-1 line-clamp-1 text-xs text-slate-600"
               title={activity.description}
             >
               {activity.description}
@@ -4239,13 +4281,13 @@ function ActivityCard({
             </p>
           )}
 
-          <p className="text-xs text-slate-500 mt-3 flex flex-wrap items-center gap-4">
-            <span className="flex items-center gap-1">
-              <MapPin size={14} />
+          <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium">
+            <span className="flex items-center gap-1.5 text-teal-700">
+              <MapPin size={15} />
               {activity.location}
             </span>
-            <span className="flex items-center gap-1">
-              <Calendar size={14} />
+            <span className="flex items-center gap-1.5 text-orange-700">
+              <Calendar size={15} />
               {activity.date_fin && activity.date_fin !== activity.date
                 ? `Du ${activity.date} au ${activity.date_fin}`
                 : activity.date || "-"}
@@ -4255,7 +4297,7 @@ function ActivityCard({
           {/* État du dossier : les pastilles sont rangées ici, sous l'identité
               de l'activité. Une teinte par sens — vert = validé, ambre = à
               vérifier, rouge = problème, neutre = sans objet. */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <span
               className={`badge ${
                 statusColors[activity.status] ||
@@ -4317,12 +4359,12 @@ function ActivityCard({
             regroupées. Les pastilles d'état sont remontées à gauche : sur une
             seule ligne elles se mélangeaient aux boutons et perdaient leur
             sens. Les boutons-icônes partagent la classe .icon-btn. */}
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 lg:flex-shrink-0 lg:justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 lg:flex-shrink-0 lg:justify-end">
           <div className="text-right">
             {activity.participants > 0 ? (
               <>
-                <p className="text-2xl font-bold text-slate-900 inline-flex items-center gap-1">
-                  <Users className="h-5 w-5 text-orange-500" />
+                <p className="text-xl font-bold text-slate-900 inline-flex items-center gap-1">
+                  <Users className="h-4 w-4 text-orange-500" />
                   {activity.personnes_distinctes ?? activity.participants}
                 </p>
                 <p className="text-xs text-slate-500">Participants</p>
@@ -4343,18 +4385,18 @@ function ActivityCard({
             ) : activity.participants_manual != null ? (
               <>
                 <p
-                  className="text-2xl font-bold text-slate-500 inline-flex items-center gap-1"
+                  className="text-xl font-bold text-slate-500 inline-flex items-center gap-1"
                   title="Nombre estimé — liste non encore importée"
                 >
-                  <Users className="h-5 w-5 text-slate-400" />~
+                  <Users className="h-4 w-4 text-slate-400" />~
                   {activity.participants_manual}
                 </p>
                 <p className="text-xs text-slate-500">Estimé</p>
               </>
             ) : (
               <>
-                <p className="text-2xl font-bold text-slate-300 inline-flex items-center gap-1">
-                  <Users className="h-5 w-5 text-slate-300" />—
+                <p className="text-xl font-bold text-slate-300 inline-flex items-center gap-1">
+                  <Users className="h-4 w-4 text-slate-300" />—
                 </p>
                 <p className="text-xs text-slate-500">Participants</p>
               </>
