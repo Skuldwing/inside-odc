@@ -22,6 +22,39 @@ function cookieOptions() {
   };
 }
 
+/* Le meme compte, decrit de la meme facon, que la reponse vienne de la
+   connexion ou de la sonde de session.
+ *
+ * Ces deux routes construisaient chacune son objet, a la main, et elles
+ * avaient diverge : « /login » ne renvoyait pas « is_super_admin ». Le defaut
+ * etait invisible la plupart du temps, parce que « /auth/me » repassait
+ * derriere au chargement suivant — mais « AuthProvider » n'appelle cette
+ * sonde qu'a son montage, et « login() » ecrase l'objet complet par celui de
+ * la connexion. Entre les deux, l'application croyait donc qu'un Admin + n'en
+ * etait pas un : le groupe « Direction » de la barre laterale — Budget,
+ * Audience — disparaissait jusqu'au premier rechargement complet de la page.
+ *
+ * Decrire un compte en un seul endroit interdit cette divergence. Toute
+ * information ajoutee ici arrive par les deux chemins a la fois.
+ *
+ * « ?? » plutot que « || » : « false » et « null » sont des reponses, pas des
+ * absences, et « is_super_admin » vaut justement « false » pour la plupart des
+ * comptes. La colonne peut aussi manquer — le temps d'un ALTER TABLE au
+ * demarrage — et c'est alors « undefined » que l'on remplace. */
+function profilDuCompte(ligne) {
+  return {
+    id: ligne.id,
+    email: ligne.email,
+    full_name: ligne.full_name,
+    role: ligne.role,
+    partner_id: ligne.partner_id,
+    is_team_odc: ligne.is_team_odc ?? false,
+    is_super_admin: ligne.is_super_admin ?? false,
+    job_title: ligne.job_title ?? null,
+    avatar_updated_at: ligne.avatar_updated_at ?? null,
+  };
+}
+
 /* ================= LOGIN ================= */
 router.post("/login", async (req, res) => {
   try {
@@ -60,16 +93,7 @@ router.post("/login", async (req, res) => {
 
     res.json({
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        role: user.role,
-        partner_id: user.partner_id,
-        is_team_odc: user.is_team_odc ?? false,
-        job_title: user.job_title ?? null,
-        avatar_updated_at: user.avatar_updated_at ?? null,
-      },
+      user: profilDuCompte(user),
     });
   } catch (err) {
     console.error(err);
@@ -150,7 +174,7 @@ router.get("/me", authMiddleware, async (req, res) => {
       return res.status(401).json({ error: "Session invalide" });
     }
 
-    res.json({ user: result.rows[0] });
+    res.json({ user: profilDuCompte(result.rows[0]) });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
