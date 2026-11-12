@@ -28,6 +28,7 @@ const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes
 const auditRoutes = require("./routes/audit.routes");
 const reliabilityRoutes = require("./routes/reliability.routes");
 const mbootayRoutes = require("./routes/mbootay.routes");
+const goto27Routes = require("./routes/goto27.routes");
 const profileRoutes = require("./routes/profile.routes");
 const searchRoutes = require("./routes/search.routes");
 const emailRoutes = require("./routes/email.routes");
@@ -209,6 +210,7 @@ app.use("/email-templates", emailTemplatesRoutes);
 app.use("/audit-logs", auditRoutes);
 app.use("/reliability", reliabilityRoutes);
 app.use("/mbootay", mbootayRoutes);
+app.use("/goto27", goto27Routes);
 app.use("/profile", profileRoutes);
 app.use("/search", searchRoutes);
 app.use("/email", emailRoutes);

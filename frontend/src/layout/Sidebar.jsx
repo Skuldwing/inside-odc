@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   KanbanSquare,
   Rocket,
+  Sparkles,
   Wallet,
   Activity,
   X,
@@ -62,10 +63,10 @@ const GROUPES = [
   },
   {
     titre: "Équipe ODC",
-    equipe: true,
     items: [
-      { name: "Mbootay 🐼", icon: KanbanSquare, path: "/mbootay", matchPrefix: true },
-      { name: "XATELLE SPACE 🧡", icon: Rocket, path: "/cm-xalette" },
+      { name: "Mbootay 🐼", icon: KanbanSquare, path: "/mbootay", matchPrefix: true, teamOnly: true },
+      { name: "XALLETTE SPACE 🧡", icon: Rocket, path: "/cm-xalette", teamOnly: true },
+      { name: "GOTO27", icon: Sparkles, path: "/goto27", roles: ["admin", "partner"] },
     ],
   },
   {
@@ -226,7 +227,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
               if (groupe.adminPlus && !isSuperAdmin) return null;
 
               const items = groupe.items.filter(
-                (item) => !item.roles || item.roles.includes(safeRole)
+                (item) => (!item.roles || item.roles.includes(safeRole)) && (!item.teamOnly || isTeamOdc)
               );
               if (!items.length) return null;
 

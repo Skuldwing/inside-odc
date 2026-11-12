@@ -43,6 +43,7 @@ const Mbootay = lazy(() => import("./pages/Mbootay"));
 const Profil = lazy(() => import("./pages/Profil"));
 const MbootayProjet = lazy(() => import("./pages/MbootayProjet"));
 const CMXalette = lazy(() => import("./pages/CMXalette"));
+const GOTO27 = lazy(() => import("./pages/GOTO27"));
 const ActivityDetail = lazy(() => import("./pages/ActivityDetail"));
 const ParticipantProfile = lazy(() => import("./pages/ParticipantProfile"));
 
@@ -54,6 +55,14 @@ function Ailleurs() {
   const { isAuthenticated, authReady } = useAuth();
   if (!authReady) return <PageLoader />;
   return <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />;
+}
+
+function GOTO27Route({ children }) {
+  const { role, isAuthenticated, authReady } = useAuth();
+  if (!authReady) return <PageLoader label="Vérification des accès…" />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (role !== "admin" && role !== "partner") return <Navigate to="/dashboard" replace />;
+  return children;
 }
 
 export default function App() {
@@ -238,6 +247,16 @@ export default function App() {
                 <CMXalette />
               </Suspense>
             </TeamOdcRoute>
+          }
+        />
+        <Route
+          path="goto27"
+          element={
+            <GOTO27Route>
+              <Suspense fallback={<PageLoader />}>
+                <GOTO27 />
+              </Suspense>
+            </GOTO27Route>
           }
         />
 

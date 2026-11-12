@@ -187,6 +187,15 @@ router.post("/", async (req, res) => {
       resolvedPartnerId = partnerResult.rows[0]?.id || null;
     }
 
+    if (role === "partner") {
+      const linkedPartner = resolvedPartnerId
+        ? await pool.query("SELECT 1 FROM partners WHERE id = $1", [resolvedPartnerId])
+        : { rowCount: 0 };
+      if (!linkedPartner.rowCount) {
+        return res.status(400).json({ error: "Sélectionnez un partenaire existant pour ce compte." });
+      }
+    }
+
     const tempPassword = crypto.randomBytes(24).toString("hex");
     const hash = await bcrypt.hash(tempPassword, 10);
     const isActive = status !== "inactive";
@@ -216,6 +225,7 @@ router.post("/", async (req, res) => {
     );
 
     let inviteLink = null;
+    let emailSent = false;
     try {
       const appUrl = adresseDuSite();
       const token = await createPasswordToken(createdUser.id);
@@ -232,6 +242,7 @@ router.post("/", async (req, res) => {
         html: composerEmail(tpl, vars),
         text: `Bonjour ${full_name || email}\nDéfinir le mot de passe: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
       });
+      emailSent = true;
     } catch (err) {
       console.error("Erreur envoi email création utilisateur", err);
     }
@@ -240,7 +251,7 @@ router.post("/", async (req, res) => {
       email: createdUser.email,
       role: createdUser.role,
     });
-    res.status(201).json({ ...createdUser, invite_link: inviteLink });
+    res.status(201).json({ ...createdUser, invite_link: inviteLink, email_sent: emailSent });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
