@@ -202,7 +202,7 @@ export default function Activities({
       const res = await api.get("/activities");
       const today = new Date().toISOString().slice(0, 10);
       const partnerScoped = role === "partner" ||
-        (user?.partner_id != null && role !== "coach");
+        (user?.partner_id != null && !["admin", "coach"].includes(role));
       const rows = partnerScoped
         ? (res.data || []).filter((activity) => String(activity.partner_id) === String(user?.partner_id || ""))
         : (res.data || []);

@@ -115,6 +115,7 @@ function requireWriteAccess(req, res, next) {
 }
 
 function isOwner(req, activity) {
+  if (req.user.role === "admin") return true;
   if (req.user.partner_id != null && req.user.role !== "coach") {
     return String(activity.partner_id) === String(req.user.partner_id);
   }
@@ -206,7 +207,7 @@ router.get("/", authMiddleware, async (req, res) => {
     const params = [];
 
     const partnerScoped = accessRole === "partner" ||
-      (linkedPartnerId != null && accessRole !== "coach");
+      (linkedPartnerId != null && !["admin", "coach"].includes(accessRole));
     if (partnerScoped) {
       if (!linkedPartnerId) return res.json([]);
       query += " WHERE a.partner_id = $1";
