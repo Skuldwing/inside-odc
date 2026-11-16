@@ -490,7 +490,7 @@ export default function ModelesAttestation() {
     }
   };
 
-  /* Retoucher une ligne : la police, la couleur, l'alignement. Enregistré
+  /* Retoucher une ligne : police, couleur, alignement, recouvrement. Enregistré
      aussitôt — l'aperçu qui suit doit montrer le réglage qu'on vient de
      choisir, pas le précédent. */
   const reglerZone = async (idZone, champ, valeur) => {
@@ -707,6 +707,16 @@ export default function ModelesAttestation() {
                       doit apparaître, puis <strong>Fichier → Exporter → PDF</strong> et
                       déposez le PDF ici.
                     </p>
+                    {/* Dit ici, avant le dépôt, parce que c'est le seul geste
+                        qu'on ne devine pas et qu'il décide du résultat sur
+                        toutes les maquettes un peu dessinées. */}
+                    <p className="mt-2 text-xs text-slate-600">
+                      Si le marqueur tombe sur un fond dessiné ou dégradé, faites un clic
+                      droit dessus dans PowerPoint →{" "}
+                      <strong>Organiser → Mettre à l'arrière-plan</strong>. Il disparaît de
+                      la maquette mais reste lisible par la plateforme, qui écrira le nom à
+                      sa place exacte sans rien recouvrir.
+                    </p>
 
                     {selection === "nouveau" ? (
                       <p className="mt-3 text-xs text-slate-500">
@@ -795,8 +805,10 @@ export default function ModelesAttestation() {
                                 />
                                 <span className="text-xs text-slate-500">
                                   Chaque ligne remplacée est d'abord recouverte de cette couleur.
-                                  Sur un fond photo ou dégradé, le rectangle se verrait : regardez
-                                  l'aperçu.
+                                  Sur un fond photo ou dégradé, aucune couleur plate ne convient :
+                                  rangez plutôt le marqueur à l'arrière-plan de votre maquette, et
+                                  décochez le recouvrement sur la ligne. Dans tous les cas,
+                                  regardez l'aperçu.
                                 </span>
                               </div>
                             </div>
@@ -863,6 +875,28 @@ export default function ModelesAttestation() {
                                           aria-label="Couleur du texte"
                                         />
                                       </div>
+                                      {/* Le recouvrement n'a de sens que si le
+                                          marqueur se voit. Sur une maquette à
+                                          fond dégradé, le rectangle blanc est
+                                          pire que le mal : on range alors le
+                                          marqueur derrière le décor dans
+                                          PowerPoint, et on décoche ici. */}
+                                      <label className="mt-2 flex items-start gap-2 text-[11px] leading-snug text-slate-600">
+                                        <input
+                                          type="checkbox"
+                                          className="mt-0.5 h-3.5 w-3.5 cursor-pointer rounded border-slate-300"
+                                          checked={z.recouvrir !== false}
+                                          onChange={(e) =>
+                                            reglerZone(z.id, "recouvrir", e.target.checked)
+                                          }
+                                        />
+                                        <span>
+                                          Recouvrir le marqueur avant d'écrire. À décocher si
+                                          vous l'avez rangé à l'arrière-plan de la maquette :
+                                          il est alors déjà invisible, et le rectangle ne
+                                          ferait que tacher le décor.
+                                        </span>
+                                      </label>
                                     </li>
                                   ))}
                                 </ul>

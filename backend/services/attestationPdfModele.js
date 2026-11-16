@@ -51,6 +51,33 @@ const path = require("path");
  * « {{prenom}} » n'y figure sous aucune forme reconnaissable. Le document
  * imprimé, lui, est exact, et c'est ce qu'on remet à quelqu'un.
  *
+ *
+ * QUAND LE FOND N'EST PAS BLANC
+ *
+ * Le recouvrement suppose un fond uni. Les maquettes de l'équipe n'en ont pas
+ * toujours : celle de Kids Tech porte une aquarelle en dégradé derrière
+ * l'emplacement du nom — #E6F2EF en moyenne, quarante-sept points d'écart d'un
+ * bord à l'autre. Aucune couleur plate ne la recouvre sans laisser une tache,
+ * et l'aperçu la montrait sans détour.
+ *
+ * Il n'y a de rectangle que parce que le marqueur se voit. Un marqueur qui ne
+ * se voit pas n'a rien à cacher — et PowerPoint sait le faire : on range la
+ * zone de texte à l'arrière-plan, derrière le décor. Elle disparaît à
+ * l'impression, mais son texte reste dans le PDF, à sa position exacte : un
+ * PDF n'efface pas ce qu'il recouvre, et la lecture de la couche de texte
+ * ignore l'ordre d'empilement. Vérifié sur cette maquette : marqueurs posés
+ * puis rangés au fond, l'export rendu au pixel près identique à l'original
+ * — zéro octet de différence sur trois millions et demi — et les deux zones
+ * retrouvées aux mêmes coordonnées, à deux centièmes de point.
+ *
+ * D'où « recouvrir », par ligne. Vrai par défaut, parce qu'un marqueur laissé
+ * en évidence doit être caché. Faux quand il est déjà invisible : la maquette
+ * est alors reproduite intacte, dégradé compris.
+ *
+ * La transparence du texte, essayée d'abord, ne convient pas : l'export la
+ * traite comme une absence et ne met rien dans le PDF. Il ne reste alors plus
+ * rien à analyser.
+ *
  * La police du marqueur, elle, ne peut pas être réutilisée : un PDF n'embarque
  * que les lettres dont il se sert, et « {{prenom}} » n'en contient que huit.
  * On choisit donc la police d'écriture par champ, parmi celles embarquées ici.
@@ -254,6 +281,10 @@ async function analyserFond(octets) {
         police: POLICE_DEFAUT,
         couleur: COULEUR_TEXTE_DEFAUT,
         alignement: "centre",
+        /* Vrai par défaut : un marqueur trouvé est un marqueur qui se voit,
+           jusqu'à preuve du contraire — et la preuve, c'est l'œil de la
+           personne qui dépose, devant l'aperçu. */
+        recouvrir: true,
       });
     }
   }
@@ -270,6 +301,10 @@ function normaliserZone(zone) {
     police: POLICES[zone.police] ? zone.police : POLICE_DEFAUT,
     alignement: ALIGNEMENTS.includes(zone.alignement) ? zone.alignement : "centre",
     couleur: /^#?[0-9a-f]{6}$/i.test(String(zone.couleur || "")) ? zone.couleur : COULEUR_TEXTE_DEFAUT,
+    /* Seul un « false » explicite retire le recouvrement. Une zone enregistrée
+       avant l'arrivée de ce réglage n'a pas le champ : elle garde donc le
+       comportement sous lequel elle a été réglée et vérifiée. */
+    recouvrir: zone.recouvrir !== false,
   };
 }
 
@@ -325,17 +360,21 @@ async function composerAttestation({ fond, zones = [], valeurs = {}, couleurFond
     const page = pages[(zone.page || 1) - 1];
     if (!page) continue;
 
-    /* Effacer la ligne, toujours — y compris quand il ne reste rien à écrire.
-       Sans cela, une ligne dont aucune valeur n'est connue garderait ses
-       marqueurs imprimés. */
-    const marge = zone.taille * 0.12;
-    page.drawRectangle({
-      x: zone.x - marge,
-      y: zone.y - zone.taille * 0.3,
-      width: zone.largeur + marge * 2,
-      height: zone.taille * 1.3,
-      color: masque,
-    });
+    /* Effacer la ligne, même quand il ne reste rien à écrire : sans cela, une
+       ligne dont aucune valeur n'est connue garderait ses marqueurs imprimés.
+       Sauf si le marqueur est déjà invisible — rangé à l'arrière-plan de la
+       maquette. Le rectangle n'aurait alors rien à cacher, et ne ferait que
+       poser une tache sur le décor. */
+    if (zone.recouvrir) {
+      const marge = zone.taille * 0.12;
+      page.drawRectangle({
+        x: zone.x - marge,
+        y: zone.y - zone.taille * 0.3,
+        width: zone.largeur + marge * 2,
+        height: zone.taille * 1.3,
+        color: masque,
+      });
+    }
 
     const texte = remplir(zone.gabarit, valeurs);
     if (!texte) continue;

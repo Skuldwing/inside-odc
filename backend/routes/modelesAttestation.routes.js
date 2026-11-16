@@ -387,6 +387,12 @@ router.put("/:id/maquette/zones", authMiddleware, requireAdmin, async (req, res)
         police: POLICES[neuf.police] ? neuf.police : z.police,
         alignement: ALIGNEMENTS.includes(neuf.alignement) ? neuf.alignement : z.alignement,
         couleur: /^#[0-9a-f]{6}$/i.test(String(neuf.couleur || "")) ? neuf.couleur : z.couleur,
+        /* Le recouvrement se décoche quand le marqueur est déjà invisible.
+           On n'accepte qu'un vrai booléen : une case absente du corps de la
+           requête ne doit pas valoir « décoché », sans quoi un enregistrement
+           portant sur une autre ligne retirerait le masque de celle-ci. */
+        recouvrir:
+          typeof neuf.recouvrir === "boolean" ? neuf.recouvrir : z.recouvrir !== false,
       };
     });
 
