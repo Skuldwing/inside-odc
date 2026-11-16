@@ -11,9 +11,9 @@ import Modal from "../ui/Modal";
  *
  * Les nouveaux ecrans utilisent directement <Modal>.
  */
-export default function AdminModal({ title, onClose, children, maxWidth = "max-w-lg" }) {
+export default function AdminModal({ title, onClose, children, footer, maxWidth = "max-w-lg" }) {
   return (
-    <Modal open onClose={onClose} title={title} maxWidth={maxWidth}>
+    <Modal open onClose={onClose} title={title} maxWidth={maxWidth} footer={footer}>
       {children}
     </Modal>
   );
