@@ -49,7 +49,7 @@ async function ensureSchema() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
-    `).catch((error) => {
+    `).then(() => pool.query("ALTER TABLE partners ADD COLUMN IF NOT EXISTS goto27_hidden BOOLEAN NOT NULL DEFAULT FALSE")).catch((error) => {
       schemaPromise = null;
       throw error;
     });
@@ -82,8 +82,9 @@ router.use(authMiddleware, autoriserAdminOuPartenaire);
 router.get("/partners", async (req, res) => {
   if (req.user.role !== "admin") return res.status(403).json({ error: "Accès réservé à l'administrateur." });
   try {
+    await ensureSchema();
     const result = await pool.query(
-      `SELECT p.id, p.name, COUNT(DISTINCT d.id)::int AS documents_count,
+      `SELECT p.id, p.name, p.goto27_hidden, COUNT(DISTINCT d.id)::int AS documents_count,
               COALESCE((array_agg(member_list.accounts))[1], '[]'::json) AS accounts
        FROM partners p
        LEFT JOIN goto27_documents d ON d.partner_id = p.id
@@ -97,14 +98,14 @@ router.get("/partners", async (req, res) => {
     );
     res.json(result.rows);
   } catch (error) {
-    if (error.code !== "42P01") {
+    if (error.code !== "42P01" && error.code !== "42703") {
       console.error("[GOTO27 PARTNERS]", error);
       return res.status(500).json({ error: "Impossible de charger les partenaires." });
     }
     try {
       await ensureSchema();
       const result = await pool.query(
-        `SELECT p.id, p.name, COUNT(DISTINCT d.id)::int AS documents_count,
+        `SELECT p.id, p.name, p.goto27_hidden, COUNT(DISTINCT d.id)::int AS documents_count,
                 COALESCE((array_agg(member_list.accounts))[1], '[]'::json) AS accounts
          FROM partners p LEFT JOIN goto27_documents d ON d.partner_id = p.id
          LEFT JOIN LATERAL (
@@ -122,6 +123,24 @@ router.get("/partners", async (req, res) => {
   }
 });
 
+router.patch("/partners/:id/visibility", async (req, res) => {
+  if (req.user.role !== "admin") return res.status(403).json({ error: "Action réservée à l'administrateur." });
+  const hidden = req.body?.hidden === true;
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      "UPDATE partners SET goto27_hidden = $1 WHERE id = $2 RETURNING id, name, goto27_hidden",
+      [hidden, req.params.id]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: "Partenaire introuvable." });
+    logAudit(req, "UPDATE", "partners", result.rows[0].id, result.rows[0].name, { goto27_hidden: hidden });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("[GOTO27 PARTNER VISIBILITY]", error);
+    res.status(500).json({ error: "Impossible de modifier la visibilité GOTO27." });
+  }
+});
+
 router.get("/documents", async (req, res) => {
   try {
     await ensureSchema();
@@ -129,7 +148,7 @@ router.get("/documents", async (req, res) => {
     let partnerClause = "";
     if (req.user.role === "partner") {
       values.push(Number(req.user.partner_id));
-      partnerClause = `WHERE d.partner_id = $${values.length}`;
+      partnerClause = `WHERE d.partner_id = $${values.length} AND p.goto27_hidden = FALSE`;
     } else if (req.query.partner_id) {
       const partnerId = Number(req.query.partner_id);
       if (!Number.isInteger(partnerId) || partnerId < 1) return res.status(400).json({ error: "Partenaire invalide." });
@@ -161,8 +180,11 @@ router.post("/documents", recevoirFichier, async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "Sélectionnez un fichier à déposer." });
     const partnerId = req.user.role === "admin" ? Number(req.body.partner_id) : Number(req.user.partner_id);
     if (!Number.isInteger(partnerId) || partnerId < 1) return res.status(400).json({ error: "Sélectionnez un partenaire." });
-    const partnerExists = await pool.query("SELECT 1 FROM partners WHERE id = $1", [partnerId]);
+    const partnerExists = await pool.query("SELECT goto27_hidden FROM partners WHERE id = $1", [partnerId]);
     if (!partnerExists.rowCount) return res.status(400).json({ error: "Partenaire introuvable." });
+    if (req.user.role === "partner" && partnerExists.rows[0].goto27_hidden) {
+      return res.status(403).json({ error: "Cet espace partenaire est masqué dans GOTO27." });
+    }
     const title = String(req.body.title || req.file.originalname).trim().slice(0, 180);
     const description = String(req.body.description || "").trim().slice(0, 2000) || null;
     if (!title) return res.status(400).json({ error: "Le titre du document est requis." });
@@ -187,7 +209,7 @@ router.get("/documents/:id/download", async (req, res) => {
   try {
     await ensureSchema();
     const values = [req.params.id];
-    const accessClause = req.user.role === "partner" ? "AND partner_id = $2" : "";
+    const accessClause = req.user.role === "partner" ? "AND partner_id = $2 AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)" : "";
     if (req.user.role === "partner") values.push(Number(req.user.partner_id));
     const result = await pool.query(
       `SELECT filename, mime_type, file_data FROM goto27_documents WHERE id = $1 ${accessClause}`,
@@ -223,7 +245,7 @@ router.put("/documents/:id", recevoirFichier, async (req, res) => {
     let partnerClause = "";
     if (req.user.role === "partner") {
       values.push(Number(req.user.partner_id));
-      partnerClause = ` AND partner_id = $${values.length}`;
+      partnerClause = ` AND partner_id = $${values.length} AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)`;
     }
     const result = await pool.query(
       `UPDATE goto27_documents SET title = $1, description = $2${fileAssignments}, updated_at = NOW()
@@ -244,7 +266,7 @@ router.delete("/documents/:id", async (req, res) => {
   try {
     await ensureSchema();
     const values = [req.params.id];
-    const partnerClause = req.user.role === "partner" ? "AND partner_id = $2" : "";
+    const partnerClause = req.user.role === "partner" ? "AND partner_id = $2 AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)" : "";
     if (req.user.role === "partner") values.push(Number(req.user.partner_id));
     const result = await pool.query(
       `DELETE FROM goto27_documents WHERE id = $1 ${partnerClause} RETURNING id, title, partner_id`,

@@ -3,6 +3,8 @@ import {
   Building2,
   CalendarClock,
   Download,
+  Eye,
+  EyeOff,
   FileText,
   FolderLock,
   HardDrive,
@@ -24,52 +26,65 @@ import { useConfirm, useToast } from "../components/ui";
 const EMPTY_FORM = { title: "", description: "", partner_id: "", file: null };
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
-function AddPartnerContactForm({ partner, onClose, onCreated }) {
+function NewPartnerAccessForm({ onClose, onCreated }) {
+  const [partnerName, setPartnerName] = useState("");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState(null);
   const [error, setError] = useState("");
 
-  const createAccount = async (event) => {
+  const createPartnerAndInvite = async (event) => {
     event.preventDefault();
     setSaving(true);
     setError("");
+    let partner;
     try {
-      const response = await api.post("/users", {
+      const partnerResponse = await api.post("/partners", { name: partnerName.trim() });
+      partner = partnerResponse.data;
+      const accountResponse = await api.post("/users", {
         full_name: fullName.trim(),
         email: email.trim(),
         role: "partner",
         partner_id: partner.id,
         status: "active",
       });
-      setCreated(response.data);
-      onCreated(response.data);
+      setCreated({ partner, account: accountResponse.data });
+      onCreated();
     } catch (requestError) {
-      setError(requestError.response?.data?.error || "Impossible de créer ce compte.");
+      let cleanupNote = "";
+      if (partner?.id) {
+        try {
+          await api.delete(`/partners/${partner.id}`);
+        } catch {
+          cleanupNote = " Le partenaire a été créé, mais le nettoyage automatique a échoué : vérifiez-le dans la liste des partenaires.";
+        }
+      }
+      setError((requestError.response?.data?.error || "Impossible de créer le partenaire et son accès.") + cleanupNote);
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <section className="rounded-2xl border border-orange-200 bg-orange-50/70 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div><h3 className="text-sm font-bold text-slate-900">Ajouter un accès partenaire</h3><p className="text-xs text-slate-600">{partner.name} · la personne recevra un lien pour définir son mot de passe.</p></div>
+    <section className="rounded-2xl border-2 border-orange-300 bg-orange-50 p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div><h2 className="text-base font-extrabold text-slate-950">Ajouter un partenaire et son accès</h2><p className="mt-1 text-xs text-slate-700">Crée le partenaire, le compte de sa personne référente et lui envoie une invitation par e-mail.</p></div>
         <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-500 hover:bg-white" aria-label="Fermer"><X className="h-4 w-4" /></button>
       </div>
       {created ? (
-        <div className="rounded-xl border border-emerald-200 bg-white p-3 text-sm">
-          <p className="font-semibold text-emerald-800">Compte créé pour {created.email}.</p>
-          {created.email_sent ? <p className="mt-1 text-xs text-slate-600">L’e-mail d’accès a été envoyé. La personne pourra définir son mot de passe avec le lien reçu.</p> : <><p className="mt-1 text-xs text-rose-700">Le compte est créé, mais l’e-mail n’a pas pu être envoyé. Transmettez ce lien à la personne pour qu’elle définisse son mot de passe :</p><div className="mt-2 flex gap-2"><input readOnly className="input min-w-0 flex-1 text-xs" value={created.invite_link || "Lien indisponible"} /><button type="button" className="btn-ghost border" disabled={!created.invite_link} onClick={() => navigator.clipboard.writeText(created.invite_link)}>Copier</button></div></>}
+        <div className="rounded-xl border border-emerald-200 bg-white p-4 text-sm">
+          <p className="font-bold text-emerald-800">{created.partner.name} et son accès ont été créés.</p>
+          {created.account.email_sent ? <p className="mt-1 text-xs text-slate-600">L’invitation a été envoyée à {created.account.email}.</p> : <><p className="mt-1 text-xs text-rose-700">Le compte existe, mais l’e-mail n’a pas pu être envoyé. Transmettez ce lien pour définir le mot de passe :</p><div className="mt-2 flex gap-2"><input readOnly className="input min-w-0 flex-1 text-xs" value={created.account.invite_link || "Lien indisponible"} /><button type="button" className="btn-ghost border" disabled={!created.account.invite_link} onClick={() => navigator.clipboard.writeText(created.account.invite_link)}>Copier</button></div></>}
           <button type="button" onClick={onClose} className="btn-primary mt-3">Terminé</button>
         </div>
       ) : (
-        <form onSubmit={createAccount} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-          <label><span className="mb-1 block text-xs font-bold text-slate-600">Nom complet</span><input required className="input" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Nom de la personne" /></label>
-          <label><span className="mb-1 block text-xs font-bold text-slate-600">Adresse e-mail</span><input required type="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nom@exemple.com" /></label>
-          <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50"><Mail className="h-4 w-4" />{saving ? "Création…" : "Créer et inviter"}</button>
-          {error && <p role="alert" className="text-xs font-semibold text-rose-700 sm:col-span-3">{error}</p>}
+        <form onSubmit={createPartnerAndInvite} className="grid gap-3 sm:grid-cols-2">
+          <label><span className="mb-1 block text-xs font-bold text-slate-700">Nom du partenaire</span><input required className="input" value={partnerName} onChange={(event) => setPartnerName(event.target.value)} placeholder="Organisation ou structure" /></label>
+          <label><span className="mb-1 block text-xs font-bold text-slate-700">Nom complet de la personne</span><input required className="input" value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Nom de la personne référente" /></label>
+          <label className="sm:col-span-2"><span className="mb-1 block text-xs font-bold text-slate-700">Adresse e-mail de la personne</span><input required type="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nom@exemple.com" /></label>
+          {error && <p role="alert" className="text-xs font-semibold text-rose-700 sm:col-span-2">{error}</p>}
+          <div className="flex justify-end gap-2 border-t border-orange-200 pt-3 sm:col-span-2"><button type="button" onClick={onClose} className="btn-ghost border border-slate-200 bg-white">Annuler</button><button type="submit" disabled={saving} className="btn-primary disabled:opacity-50"><Mail className="h-4 w-4" />{saving ? "Création et invitation…" : "Créer et envoyer l’invitation"}</button></div>
         </form>
       )}
     </section>
@@ -116,11 +131,13 @@ export default function GOTO27() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [partnerFilter, setPartnerFilter] = useState("all");
+  const [showHiddenPartners, setShowHiddenPartners] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
-  const [contactPartner, setContactPartner] = useState(null);
+  const [newPartnerOpen, setNewPartnerOpen] = useState(false);
+  const [preview, setPreview] = useState(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -143,18 +160,23 @@ export default function GOTO27() {
   const filteredDocuments = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
     return documents.filter((document) => {
-      if (isAdmin && partnerFilter !== "all" && String(document.partner_id) !== partnerFilter) return false;
+      if (isAdmin) {
+        const partner = partners.find((item) => String(item.id) === String(document.partner_id));
+        if (partner && Boolean(partner.goto27_hidden) !== showHiddenPartners) return false;
+        if (partnerFilter !== "all" && String(document.partner_id) !== partnerFilter) return false;
+      }
       if (!query) return true;
       return [document.title, document.filename, document.description, document.partner_name, document.uploader_name]
         .some((value) => String(value || "").toLocaleLowerCase("fr").includes(query));
     });
-  }, [documents, isAdmin, partnerFilter, search]);
+  }, [documents, isAdmin, partnerFilter, partners, search, showHiddenPartners]);
 
   const groupedDocuments = useMemo(() => {
     if (!isAdmin) return [];
     const query = search.trim().toLocaleLowerCase("fr");
     const groups = new Map(
       partners
+        .filter((partner) => Boolean(partner.goto27_hidden) === showHiddenPartners)
         .filter((partner) => partnerFilter === "all" || String(partner.id) === partnerFilter)
         .filter((partner) => !query || String(partner.name || "").toLocaleLowerCase("fr").includes(query))
         .map((partner) => [String(partner.id), { id: partner.id, name: partner.name, accounts: partner.accounts || [], documents: [] }])
@@ -165,7 +187,7 @@ export default function GOTO27() {
       groups.get(key).documents.push(document);
     });
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "fr"));
-  }, [filteredDocuments, isAdmin, partners, partnerFilter, search]);
+  }, [filteredDocuments, isAdmin, partners, partnerFilter, search, showHiddenPartners]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -239,6 +261,21 @@ export default function GOTO27() {
     }
   };
 
+  const previewDocument = async (document) => {
+    try {
+      const response = await api.get(`/goto27/documents/${document.id}/download`, { responseType: "blob" });
+      const url = URL.createObjectURL(response.data);
+      setPreview({ document, url, mimeType: response.headers["content-type"] || document.mime_type || "" });
+    } catch (error) {
+      toast.error(error.response?.data?.error || "L’aperçu n’a pas pu être chargé.");
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
   const deleteDocument = async (document) => {
     const accepted = await confirm({
       title: `Supprimer « ${document.title} » ?`,
@@ -255,25 +292,43 @@ export default function GOTO27() {
     }
   };
 
+  const setPartnerVisibility = async (partner, hidden) => {
+    const accepted = await confirm({
+      title: hidden ? `Masquer « ${partner.name} » dans GOTO27 ?` : `Réafficher « ${partner.name} » dans GOTO27 ?`,
+      body: hidden ? "Le partenaire et ses documents resteront dans Inside ODC, mais ne seront plus affichés dans GOTO27." : "Le partenaire et ses documents redeviendront visibles dans GOTO27.",
+      destructive: hidden,
+    });
+    if (!accepted) return;
+    try {
+      await api.patch(`/goto27/partners/${partner.id}/visibility`, { hidden });
+      toast.success(hidden ? `« ${partner.name} » masqué dans GOTO27.` : `« ${partner.name} » réaffiché dans GOTO27.`);
+      if (partnerFilter === String(partner.id)) setPartnerFilter("all");
+      await loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.error || "Impossible de modifier la visibilité de ce partenaire.");
+    }
+  };
+
   const documentCard = (document) => (
-    <article key={document.id} className="group flex flex-col justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-orange-200 hover:shadow-md sm:flex-row sm:items-center">
+    <article key={document.id} className="flex w-full flex-col gap-3 rounded-2xl border border-orange-200 bg-white p-4 shadow-sm transition hover:border-orange-400 hover:shadow-md">
       <div className="flex min-w-0 items-start gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-700 ring-1 ring-orange-100"><FileText className="h-5 w-5" /></span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-800 ring-1 ring-orange-200"><FileText className="h-5 w-5" /></span>
         <div className="min-w-0">
           <h3 className="truncate text-sm font-bold text-slate-900">{document.title}</h3>
           <p className="mt-0.5 truncate text-xs text-slate-500" title={document.filename}>{document.filename} · {formatSize(document.file_size)}</p>
           {document.description && <p className="mt-1 line-clamp-2 text-xs text-slate-600">{document.description}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-slate-500">
-            <span className="inline-flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5 text-orange-500" />Déposé le {formatDate(document.created_at)}</span>
+            <span className="inline-flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5 text-orange-600" />Déposé le {formatDate(document.created_at)}</span>
             <span>{isAdmin ? `Déposé par ${document.uploader_name}` : "Mon document"}</span>
             {document.updated_at && new Date(document.updated_at).getTime() > new Date(document.created_at).getTime() + 1000 && <span>Modifié le {formatDate(document.updated_at)}</span>}
           </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
-        <button type="button" onClick={() => downloadDocument(document)} title="Télécharger" className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"><Download className="h-4 w-4" /></button>
-        <button type="button" onClick={() => openEdit(document)} title="Modifier le document" className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"><Pencil className="h-4 w-4" /></button>
-        <button type="button" onClick={() => deleteDocument(document)} title="Supprimer le document" className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"><Trash2 className="h-4 w-4" /></button>
+      <div className="flex w-full flex-wrap justify-end gap-2 border-t border-orange-100 pt-3">
+        <button type="button" onClick={() => previewDocument(document)} title="Aperçu grand écran" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-xs font-bold text-orange-800 transition hover:bg-orange-50"><Eye className="h-4 w-4" />Aperçu</button>
+        <button type="button" onClick={() => downloadDocument(document)} title="Télécharger" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"><Download className="h-4 w-4" />Télécharger</button>
+        <button type="button" onClick={() => openEdit(document)} title="Modifier le document" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-orange-200 px-3 text-xs font-bold text-orange-800 transition hover:bg-orange-50"><Pencil className="h-4 w-4" />Modifier</button>
+        <button type="button" onClick={() => deleteDocument(document)} title="Supprimer le document" className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-rose-200 px-3 text-xs font-bold text-rose-700 transition hover:bg-rose-50"><Trash2 className="h-4 w-4" />Supprimer</button>
       </div>
     </article>
   );
@@ -289,9 +344,12 @@ export default function GOTO27() {
             <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-orange-200"><FolderLock className="h-5 w-5" /></span>
             <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Espace documentaire privé</p><h1 className="mt-0.5 text-2xl font-bold tracking-tight">GOTO27</h1><p className="mt-0.5 text-xs text-slate-300">Les documents utiles, accessibles aux bonnes personnes.</p></div>
           </div>
-          <button type="button" onClick={formOpen ? closeForm : openCreate} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400">
-            {formOpen ? <X className="h-4 w-4" /> : <Upload className="h-4 w-4" />}{formOpen ? "Fermer" : "Déposer un document"}
-          </button>
+          <div className="flex shrink-0 flex-col gap-2 sm:items-stretch">
+            <button type="button" onClick={formOpen ? closeForm : openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400">
+              {formOpen ? <X className="h-4 w-4" /> : <Upload className="h-4 w-4" />}{formOpen ? "Fermer le dépôt" : "Déposer un document"}
+            </button>
+            {isAdmin && <button type="button" onClick={() => setNewPartnerOpen(!newPartnerOpen)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-300 bg-white/10 px-4 py-2.5 text-sm font-bold text-orange-100 transition hover:bg-white/20"><Plus className="h-4 w-4" />Ajouter un partenaire avec son accès</button>}
+          </div>
         </div>
       </header>
 
@@ -317,34 +375,32 @@ export default function GOTO27() {
         </form>
       )}
 
-      {contactPartner && isAdmin && <AdminPinGate><AddPartnerContactForm partner={contactPartner} onClose={() => setContactPartner(null)} onCreated={(account) => {
-        if (account.email_sent) toast.success(`Compte créé et invitation envoyée à ${account.email}.`);
-        else toast.error(`Compte créé, mais l’e-mail à ${account.email} n’a pas pu être envoyé. Le lien d’invitation est affiché ci-dessous.`);
-        loadData();
-      }} /></AdminPinGate>}
+      {newPartnerOpen && isAdmin && <AdminPinGate><NewPartnerAccessForm onClose={() => setNewPartnerOpen(false)} onCreated={loadData} /></AdminPinGate>}
 
       <section className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:p-4">
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un document, un fichier…" className="input !pl-10" /></div>
-        {isAdmin && <select aria-label="Filtrer par partenaire" className="select sm:max-w-xs" value={partnerFilter} onChange={(event) => setPartnerFilter(event.target.value)}><option value="all">Tous les partenaires</option>{partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}</select>}
+        {isAdmin && <select aria-label="Filtrer par partenaire" className="select sm:max-w-xs" value={partnerFilter} onChange={(event) => setPartnerFilter(event.target.value)}><option value="all">Tous les partenaires</option>{partners.filter((partner) => Boolean(partner.goto27_hidden) === showHiddenPartners).map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}</select>}
+        {isAdmin && <button type="button" onClick={() => { setShowHiddenPartners(!showHiddenPartners); setPartnerFilter("all"); }} className="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-900 hover:bg-orange-100">{showHiddenPartners ? "Voir partenaires visibles" : `Voir masqués (${partners.filter((partner) => partner.goto27_hidden).length})`}</button>}
         <span className="shrink-0 rounded-full bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-900">{filteredDocuments.length} fichier{filteredDocuments.length === 1 ? "" : "s"}</span>
       </section>
 
       {loading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">Chargement des documents…</div>
       ) : isAdmin && groupedDocuments.length > 0 ? (
-        <div className="space-y-4">
+        <div className={`grid items-stretch gap-4 ${partnerFilter !== "all" ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"}`}>
           {groupedDocuments.map((group) => (
-            <section key={group.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70 shadow-sm">
-              <header className="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
-                <div className="flex min-w-0 items-center gap-2.5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700"><Building2 className="h-4 w-4" /></span><div className="min-w-0"><h2 className="truncate text-sm font-extrabold text-slate-900">{group.name}</h2><p className="text-[11px] text-slate-500">Espace documentaire privé</p></div></div>
-                <div className="flex shrink-0 items-center gap-2"><span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-extrabold text-sky-800">{group.documents.length}</span><button type="button" onClick={() => openCreateForPartner(group.id)} title={`Déposer un document pour ${group.name}`} aria-label={`Déposer un document pour ${group.name}`} className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 text-white transition hover:bg-orange-600"><Plus className="h-4 w-4" /></button><button type="button" onClick={() => setContactPartner(group)} title={`Ajouter un accès pour ${group.name}`} aria-label={`Ajouter un accès pour ${group.name}`} className="flex h-8 w-8 items-center justify-center rounded-lg border border-orange-200 bg-orange-50 text-orange-700 transition hover:bg-orange-100"><Users className="h-4 w-4" /></button></div>
+            <section key={group.id} className="flex min-w-0 flex-col rounded-2xl border-2 border-orange-200 bg-orange-50/50 shadow-sm">
+              <header className="flex flex-col gap-3 border-b-2 border-orange-200 bg-gradient-to-r from-orange-200 via-orange-100 to-amber-50 px-4 py-4 sm:px-5">
+                <div className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-600 text-white shadow-sm"><Building2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-orange-900">Partenaire</p><h2 className="w-max whitespace-nowrap text-lg font-black leading-tight text-slate-950 sm:text-xl">{group.name}</h2><p className="mt-0.5 text-xs font-semibold text-orange-950/70">Espace documentaire privé</p></div></div>
+                <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2"><span className="mr-1 rounded-full bg-orange-600 px-2.5 py-1 text-xs font-extrabold text-white">{group.documents.length} doc.</span><button type="button" onClick={() => openCreateForPartner(group.id)} title={`Déposer un document pour ${group.name}`} aria-label={`Déposer un document pour ${group.name}`} className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white transition hover:bg-orange-700"><Plus className="h-4 w-4" /></button>{showHiddenPartners ? <button type="button" onClick={() => setPartnerVisibility(group, false)} title={`Réafficher ${group.name} dans GOTO27`} aria-label={`Réafficher ${group.name} dans GOTO27`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"><Eye className="h-4 w-4" /><span>Réintégrer à GOTO27</span></button> : <button type="button" onClick={() => setPartnerVisibility(group, true)} title={`Exclure ${group.name} de GOTO27`} aria-label={`Exclure ${group.name} de GOTO27`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50"><EyeOff className="h-4 w-4" /><span>Exclure de GOTO27</span></button>}</div>
               </header>
-              <div className="space-y-3 p-3">
-                <div className="rounded-xl border border-sky-100 bg-white px-3 py-2.5">
-                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-sky-800"><Users className="h-3.5 w-3.5" />Accès partenaires <span className="rounded-full bg-sky-100 px-1.5 py-0.5">{group.accounts.length}</span></div>
-                  {group.accounts.length ? <div className="flex flex-wrap gap-2">{group.accounts.map((account) => <span key={account.id} className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1.5 text-xs text-slate-700"><span className="font-semibold">{account.full_name || account.email}</span>{account.full_name && <span className="text-slate-500">· {account.email}</span>}</span>)}</div> : <p className="text-xs text-slate-500">Aucun compte partenaire ajouté.</p>}
+              <div className="flex-1 space-y-3 rounded-b-2xl bg-orange-50/70 p-3 sm:p-4">
+                {showHiddenPartners && <p className="rounded-xl border border-orange-300 bg-orange-100 px-3 py-2 text-xs font-bold text-orange-950">Ce partenaire est exclu de GOTO27. Il peut toujours faire partie d’Inside ODC.</p>}
+                <div className="rounded-xl border border-orange-200 bg-white px-3 py-2.5">
+                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-orange-800"><Users className="h-3.5 w-3.5" />Accès partenaires <span className="rounded-full bg-orange-100 px-1.5 py-0.5">{group.accounts.length}</span></div>
+                  {group.accounts.length ? <div className="flex flex-wrap gap-2">{group.accounts.map((account) => <span key={account.id} className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg bg-orange-50 px-2.5 py-1.5 text-xs text-slate-700"><span className="break-words font-semibold">{account.full_name || account.email}</span>{account.full_name && <span className="min-w-0 max-w-full whitespace-normal break-all text-slate-500">· {account.email}</span>}</span>)}</div> : <p className="text-xs text-slate-500">Aucun compte partenaire ajouté.</p>}
                 </div>
-                {group.documents.length ? group.documents.map(documentCard) : <p className="rounded-xl border border-dashed border-slate-300 bg-white/80 px-3 py-5 text-center text-xs font-medium text-slate-500">Aucun document déposé pour ce partenaire.</p>}
+                {group.documents.length ? group.documents.map(documentCard) : <p className="rounded-xl border border-dashed border-orange-300 bg-white/80 px-3 py-5 text-center text-xs font-medium text-slate-500">Aucun document déposé pour ce partenaire.</p>}
               </div>
             </section>
           ))}
@@ -353,6 +409,18 @@ export default function GOTO27() {
         <div className="rounded-2xl border-2 border-dashed border-orange-200 bg-orange-50/30 p-10 text-center"><FolderLock className="mx-auto h-9 w-9 text-orange-300" /><h2 className="mt-3 font-bold text-slate-900">{documents.length ? "Aucun document trouvé" : "Aucun document pour le moment"}</h2><p className="mt-1 text-sm text-slate-600">{documents.length ? "Essayez une autre recherche ou un autre partenaire." : "Déposez vos documents ici. Seules les personnes autorisées pourront les consulter."}</p>{!documents.length && <button type="button" onClick={openCreate} className="btn-primary mt-4"><Plus className="h-4 w-4" />Déposer un document</button>}</div>
       ) : (
         <div className="space-y-2">{filteredDocuments.map(documentCard)}</div>
+      )}
+
+      {preview && (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-slate-950/95 p-2 text-white sm:p-5" role="dialog" aria-modal="true" aria-label={`Aperçu de ${preview.document.title}`}>
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-3 rounded-xl bg-white/10 px-4 py-3">
+            <div className="min-w-0"><h2 className="truncate text-base font-bold">{preview.document.title}</h2><p className="truncate text-xs text-slate-300">{preview.document.filename}</p></div>
+            <div className="flex shrink-0 items-center gap-2"><button type="button" onClick={() => downloadDocument(preview.document)} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-bold hover:bg-orange-400"><Download className="h-4 w-4" /><span className="hidden sm:inline">Télécharger</span></button><button type="button" onClick={closePreview} className="rounded-lg p-2 hover:bg-white/10" aria-label="Fermer l’aperçu"><X className="h-5 w-5" /></button></div>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto rounded-xl bg-white">
+            {preview.mimeType.startsWith("image/") ? <img src={preview.url} alt={preview.document.title} className="max-h-full max-w-full object-contain" /> : preview.mimeType === "application/pdf" ? <iframe title={`Aperçu de ${preview.document.title}`} src={preview.url} className="h-full w-full border-0" /> : <div className="max-w-md p-6 text-center text-slate-800"><FileText className="mx-auto h-12 w-12 text-orange-600" /><h3 className="mt-3 text-lg font-bold">Aperçu indisponible pour ce format</h3><p className="mt-1 text-sm text-slate-600">Téléchargez le fichier pour l’ouvrir dans l’application adaptée.</p><button type="button" onClick={() => downloadDocument(preview.document)} className="btn-primary mt-4"><Download className="h-4 w-4" />Télécharger le document</button></div>}
+          </div>
+        </div>
       )}
     </div>
   );

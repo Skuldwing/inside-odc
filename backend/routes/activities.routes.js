@@ -123,6 +123,18 @@ function isOwner(req, activity) {
 /* ===== GET ACTIVITIES ===== */
 router.get("/", authMiddleware, async (req, res) => {
   try {
+    /* Le role du JWT peut rester ancien jusqu'a son expiration. La liste des
+       activites s'appuie donc sur le compte courant en base : un compte
+       partenaire est toujours borne a son propre partenaire, meme si son
+       jeton a ete emis avant une modification de role. */
+    const accountResult = await pool.query(
+      "SELECT role, partner_id FROM users WHERE id = $1",
+      [req.user.id]
+    );
+    const account = accountResult.rows[0];
+    const accessRole = account?.role || req.user.role;
+    const linkedPartnerId = account?.partner_id ?? req.user.partner_id;
+
     let query = `
       SELECT ${ACTIVITY_COLUMNS},
              p.name AS partner_name,
@@ -190,10 +202,11 @@ router.get("/", authMiddleware, async (req, res) => {
 
     const params = [];
 
-    if (req.user.role === "partner") {
+    if (accessRole === "partner") {
+      if (!linkedPartnerId) return res.json([]);
       query += " WHERE a.partner_id = $1";
-      params.push(req.user.partner_id);
-    } else if (req.user.role === "coach") {
+      params.push(linkedPartnerId);
+    } else if (accessRole === "coach") {
       query += " WHERE a.coach_id = $1";
       params.push(req.user.id);
     }
