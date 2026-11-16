@@ -139,6 +139,116 @@ const POLICES = {
   },
 };
 
+/* ===== RENDRE LA MANUSCRITE EMBARQUABLE =====
+ *
+ * Constaté sur une attestation réelle : « Abdoul Mouhamed FALL », demandé en
+ * manuscrite, s'imprimait « Ab  M   d A ». Deux défauts se cumulaient, tous
+ * deux dans la façon dont pdf-lib embarque une police de fichier.
+ *
+ * Le premier tient à Caveat elle-même. C'est une écriture manuscrite, et elle
+ * fait ce que font les belles manuscrites : elle change le dessin d'une lettre
+ * selon sa place dans le mot. Sa table « GSUB » donne ainsi trois « d » et deux
+ * « u ». Or pdf-lib n'inscrit dans le PDF les largeurs que des glyphes par
+ * défaut — ceux qu'on atteint par la table des caractères. Les variantes n'y
+ * sont pas : elles héritent de la largeur par défaut, bien plus large, et le
+ * texte se troue après chaque lettre variante.
+ *
+ * Le second est le sous-ensemble. Pour n'embarquer que les lettres utilisées,
+ * pdf-lib renumérote les glyphes — et sur cette police il en perd la plupart
+ * en chemin, variantes ou non. Mesuré : des quatre combinaisons possibles,
+ * seule « sans GSUB + police entière » rend les vingt lettres correctement
+ * espacées, à comparer au même texte dessiné par un navigateur.
+ *
+ * D'où ces deux gestes. On retire GSUB — en mémoire, le fichier livré reste
+ * intact — ce qui ramène « layout() » aux seuls glyphes par défaut, donc à
+ * ceux dont la largeur est écrite. Et on embarque la police entière. Le dessin
+ * des lettres ne change pas ; seules disparaissent les variantes selon la
+ * place, que personne ne remarquera sur un nom.
+ *
+ * Le prix est la taille : cent trente kilooctets au lieu de cinq, sur une
+ * attestation qui en pèse déjà onze cents. Douze pour cent de plus pour un nom
+ * lisible, et seulement quand la manuscrite est demandée.
+ */
+const TABLES_SANS_INTERET = new Set(["GSUB"]);
+
+/* Somme de contrôle sfnt : addition 32 bits des mots de quatre octets, le
+   dernier complété de zéros. */
+function sommeSfnt(bloc) {
+  const reste = (4 - (bloc.length % 4)) % 4;
+  const plein = reste ? Buffer.concat([bloc, Buffer.alloc(reste)]) : bloc;
+  let total = 0;
+  for (let i = 0; i < plein.length; i += 4) total = (total + plein.readUInt32BE(i)) >>> 0;
+  return total;
+}
+
+function sansSubstitutions(octets) {
+  const nombre = octets.readUInt16BE(4);
+  const tables = [];
+  for (let i = 0; i < nombre; i += 1) {
+    const o = 12 + i * 16;
+    tables.push({
+      tag: octets.toString("latin1", o, o + 4),
+      offset: octets.readUInt32BE(o + 8),
+      longueur: octets.readUInt32BE(o + 12),
+    });
+  }
+
+  const gardees = tables.filter((t) => !TABLES_SANS_INTERET.has(t.tag));
+  if (gardees.length === tables.length) return octets;
+  /* L'annuaire sfnt se lit par recherche dichotomique : il doit rester trié. */
+  gardees.sort((a, b) => (a.tag < b.tag ? -1 : 1));
+
+  const n = gardees.length;
+  let puissance = 1;
+  let exposant = 0;
+  while (puissance * 2 <= n) { puissance *= 2; exposant += 1; }
+
+  const entete = Buffer.alloc(12);
+  octets.copy(entete, 0, 0, 4);
+  entete.writeUInt16BE(n, 4);
+  entete.writeUInt16BE(puissance * 16, 6);
+  entete.writeUInt16BE(exposant, 8);
+  entete.writeUInt16BE(n * 16 - puissance * 16, 10);
+
+  const annuaire = Buffer.alloc(n * 16);
+  const corps = [];
+  let curseur = 12 + n * 16;
+  let positionHead = -1;
+
+  gardees.forEach((t, i) => {
+    const contenu = octets.subarray(t.offset, t.offset + t.longueur);
+    const bourrage = (4 - (t.longueur % 4)) % 4;
+    annuaire.write(t.tag, i * 16, 4, "latin1");
+    annuaire.writeUInt32BE(sommeSfnt(contenu), i * 16 + 4);
+    annuaire.writeUInt32BE(curseur, i * 16 + 8);
+    annuaire.writeUInt32BE(t.longueur, i * 16 + 12);
+    if (t.tag === "head") positionHead = curseur;
+    corps.push(contenu);
+    if (bourrage) corps.push(Buffer.alloc(bourrage));
+    curseur += t.longueur + bourrage;
+  });
+
+  const police = Buffer.concat([entete, annuaire, ...corps]);
+  if (positionHead < 0) return octets;
+
+  /* « head.checkSumAdjustment » vaut 0xB1B0AFBA moins la somme du fichier
+     entier, ce champ mis à zéro. Le laisser faux ferait rejeter la police par
+     les lecteurs stricts. */
+  police.writeUInt32BE(0, positionHead + 8);
+  police.writeUInt32BE((0xB1B0AFBA - sommeSfnt(police)) >>> 0, positionHead + 8);
+  return police;
+}
+
+/* Le travail est fait une fois : il ne dépend pas de l'attestation, et une
+   campagne en produit des centaines. */
+const policesPretes = new Map();
+function policeEmbarquable(chemin) {
+  if (!policesPretes.has(chemin)) {
+    policesPretes.set(chemin, sansSubstitutions(fs.readFileSync(chemin)));
+  }
+  return policesPretes.get(chemin);
+}
+
 const POLICE_DEFAUT = "helvetica-gras";
 const ALIGNEMENTS = ["gauche", "centre", "droite"];
 const COULEUR_TEXTE_DEFAUT = "#0F172A";
@@ -346,8 +456,10 @@ async function composerAttestation({ fond, zones = [], valeurs = {}, couleurFond
   const police = async (cle) => {
     if (embarquees.has(cle)) return embarquees.get(cle);
     const def = POLICES[cle] || POLICES[POLICE_DEFAUT];
+    /* Police entière, et non sous-ensemble : voir « RENDRE LA MANUSCRITE
+       EMBARQUABLE ». Le sous-ensemble perd des lettres sur cette police. */
     const f = def.fichier
-      ? await doc.embedFont(fs.readFileSync(def.fichier), { subset: true })
+      ? await doc.embedFont(policeEmbarquable(def.fichier), { subset: false })
       : await doc.embedFont(StandardFonts[def.standard]);
     embarquees.set(cle, f);
     return f;
