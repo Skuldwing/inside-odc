@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Plus, User, Mail, Shield, Building2, Link2, Pencil, Trash2,
   Search, UsersRound, Copy, Check, X, AlertCircle, Loader2, Target, Wifi,
-  KanbanSquare, Layers,
+  KanbanSquare, Layers, UserCheck, UserX,
 } from "lucide-react";
 
 /* Un utilisateur est "en ligne" si last_seen_at < ONLINE_THRESHOLD ms */
@@ -15,18 +15,50 @@ function isOnline(lastSeenAt) {
   return Date.now() - new Date(lastSeenAt).getTime() < ONLINE_THRESHOLD_MS;
 }
 
-function OnlineDot({ online }) {
+/* La présence, sur une seule ligne.
+ *
+ * Elle en prenait trois : « Hors », « ligne » et « il y a 42 min » se
+ * répartissaient sur la hauteur de la cellule, faute de place, et chaque ligne
+ * du tableau prenait une hauteur différente. Le point porte déjà l'état ; le
+ * texte dit depuis quand, ce qui est la seule chose qu'on vient y chercher.
+ *
+ * « Jamais connecté » n'est pas « hors ligne ». C'est une invitation qui n'a
+ * pas abouti, et elle appelle un geste précis — renvoyer le lien — alors qu'un
+ * collègue parti en congé n'appelle rien. Les confondre, c'était perdre la
+ * seule ligne de cette page sur laquelle il y a quelque chose à faire. */
+function Presence({ lastSeenAt }) {
+  const enLigne = isOnline(lastSeenAt);
+  const jamais = !lastSeenAt;
   return (
-    <span
-      title={online ? "En ligne" : "Hors ligne"}
-      className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${online ? "bg-emerald-500 ring-2 ring-emerald-200" : "bg-slate-300"}`}
-    />
+    <span className="inline-flex items-center gap-2 whitespace-nowrap text-xs">
+      <span
+        aria-hidden="true"
+        className={`h-2 w-2 flex-shrink-0 rounded-full ${
+          enLigne
+            ? "bg-emerald-500 ring-2 ring-emerald-200"
+            : jamais
+              ? "bg-amber-400"
+              : "bg-slate-300"
+        }`}
+      />
+      <span
+        className={
+          enLigne
+            ? "font-medium text-emerald-700"
+            : jamais
+              ? "text-amber-700"
+              : "text-slate-500"
+        }
+      >
+        {enLigne ? "En ligne" : jamais ? "Jamais connecté" : formatLastSeen(lastSeenAt)}
+      </span>
+    </span>
   );
 }
 import api from "../api";
 import AdminPinGate from "../components/AdminPinGate";
 import AdminModal from "../components/admin/AdminModal";
-import { useToast, useConfirm, EmptyState } from "../components/ui";
+import { useToast, useConfirm, EmptyState, StatTile } from "../components/ui";
 
 const ROLES = [
   { value: "admin",   label: "Administrateur",  cls: "bg-orange-100 text-orange-700 border-orange-200" },
@@ -218,12 +250,26 @@ export default function Utilisateurs() {
     } catch { toast.error("La suppression a échoué."); }
   };
 
+  /* Les quatre tuiles décrivent l'équipe, pas le résultat des filtres.
+     Elles mélangeaient les deux : « total », « actifs » et « inactifs »
+     comptaient les lignes filtrées pendant que « en ligne » comptait tout le
+     monde. Quatre nombres côte à côte qu'on lit comme un tout, et dont trois
+     changeaient en tapant dans la recherche. Ce que les filtres donnent se lit
+     maintenant au-dessus du tableau, là où on le cherche. */
   const stats = useMemo(() => ({
-    total:    filteredUsers.length,
-    active:   filteredUsers.filter(u => u.status === "active").length,
-    inactive: filteredUsers.filter(u => u.status !== "active").length,
+    total:    users.length,
+    active:   users.filter(u => u.status === "active").length,
+    inactive: users.filter(u => u.status !== "active").length,
     online:   users.filter(u => isOnline(u.last_seen_at)).length,
-  }), [filteredUsers, users]);
+  }), [users]);
+
+  const filtresActifs = Boolean(search.trim() || roleFilter || statusFilter || onlineFilter);
+  const reinitialiserFiltres = () => {
+    setSearch("");
+    setRoleFilter("");
+    setStatusFilter("");
+    setOnlineFilter(false);
+  };
 
   return (
     <AdminPinGate>
@@ -246,10 +292,16 @@ export default function Utilisateurs() {
 
         {/* Stats */}
         <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <MiniStat label="Total filtrés" value={stats.total} tone="orange" />
-          <MiniStat label="Actifs" value={stats.active} tone="green" />
-          <MiniStat label="Inactifs" value={stats.inactive} tone="slate" />
-          <MiniStat label="En ligne" value={stats.online} tone="blue" online />
+          {/* La tuile de la maison, plutôt qu'une cinquième écrite à la main.
+              Les anciennes étaient peintes en dur — « from-orange-50 to-white »
+              — et restaient blanches en thème sombre : quatre rectangles
+              éclatants sur une page noire. Le vert ne sert plus qu'à la
+              présence, pour qu'il veuille dire une seule chose sur cette
+              page. */}
+          <StatTile label="Comptes" value={stats.total} icon={UsersRound} tone="brand" />
+          <StatTile label="Actifs" value={stats.active} icon={UserCheck} />
+          <StatTile label="Inactifs" value={stats.inactive} icon={UserX} />
+          <StatTile label="En ligne" value={stats.online} icon={Wifi} tone="success" />
         </section>
 
         {/* Filtres */}
@@ -290,6 +342,32 @@ export default function Utilisateurs() {
           <AdminModal
             title={inviteData ? "Invitation créée" : editing ? "Modifier l'utilisateur" : "Nouvel utilisateur"}
             onClose={closeModal}
+            /* Les boutons sortent du défilement et restent sous les yeux.
+               Le formulaire d'un coach fait deux écrans et demi : « Créer »
+               se trouvait tout en bas, hors de vue, et il fallait deviner
+               qu'il fallait faire défiler la modale pour valider. Le bouton
+               d'envoi reste rattaché au formulaire par son attribut « form »,
+               bien qu'il n'y soit plus imbriqué. */
+            footer={
+              inviteData ? (
+                <button onClick={closeModal} className="btn-primary">Fermer</button>
+              ) : (
+                <>
+                  <button type="button" onClick={closeModal} className="btn-ghost border">
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    form="formulaire-utilisateur"
+                    disabled={saving}
+                    className="btn-primary flex items-center gap-2 disabled:opacity-60"
+                  >
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {editing ? "Enregistrer" : "Créer et obtenir le lien"}
+                  </button>
+                </>
+              )
+            }
           >
             {inviteData ? (
               /* ── Étape 2 : lien d'invitation ── */
@@ -330,13 +408,13 @@ export default function Utilisateurs() {
                   </div>
                 )}
 
-                <div className="flex justify-end pt-2">
-                  <button onClick={closeModal} className="btn-primary">Fermer</button>
-                </div>
               </div>
             ) : (
-              /* ── Étape 1 : formulaire ── */
-              <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50/60 to-white p-4">
+              /* ── Étape 1 : formulaire ──
+                 Plus de carte dans la carte : le formulaire était enfermé
+                 dans un cadre orange à l'intérieur du panneau blanc de la
+                 modale, deux bordures pour une seule chose. */
+              <form id="formulaire-utilisateur" onSubmit={handleSubmit} className="space-y-4">
                 {formError && (
                   <div className="rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" /> {formError}
@@ -542,13 +620,6 @@ export default function Utilisateurs() {
                   </div>
                 )}
 
-                <div className="flex justify-end gap-3 pt-2">
-                  <button type="button" onClick={closeModal} className="btn-ghost border">Annuler</button>
-                  <button type="submit" disabled={saving} className="btn-primary disabled:opacity-60 flex items-center gap-2">
-                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editing ? "Enregistrer" : "Créer et obtenir le lien"}
-                  </button>
-                </div>
               </form>
             )}
           </AdminModal>
@@ -633,148 +704,179 @@ export default function Utilisateurs() {
           document.body
         )}
 
-        {/* Table */}
-        <section className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <table className="table min-w-[900px]">
-            <thead className="bg-slate-950 text-xs uppercase tracking-wide text-slate-200">
+        {/* Ce que les filtres donnent, dit là où on le cherche : juste
+            au-dessus de la liste qu'ils ont réduite. */}
+        {filteredUsers.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+            <p className="text-xs text-slate-500">
+              {filtresActifs
+                ? `${filteredUsers.length} compte${filteredUsers.length > 1 ? "s" : ""} affiché${filteredUsers.length > 1 ? "s" : ""} sur ${users.length}`
+                : `${users.length} compte${users.length > 1 ? "s" : ""}`}
+            </p>
+            {filtresActifs && (
+              <button
+                onClick={reinitialiserFiltres}
+                className="text-xs font-medium text-orange-600 underline underline-offset-2 transition hover:text-orange-700"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
+          </div>
+        )}
+
+        {filteredUsers.length === 0 ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+            <EmptyState
+              bare
+              icon={UsersRound}
+              title={users.length === 0 ? "Aucun utilisateur" : "Aucun utilisateur ne correspond aux filtres"}
+              description={
+                users.length === 0
+                  ? "Invitez un collègue : il recevra un lien pour définir son mot de passe."
+                  : "Modifiez la recherche, le rôle ou le statut pour élargir les résultats."
+              }
+              actionLabel={users.length === 0 ? "Nouvel utilisateur" : "Tout réinitialiser"}
+              actionIcon={users.length === 0 ? Plus : undefined}
+              onAction={users.length === 0 ? openCreate : reinitialiserFiltres}
+            />
+          </section>
+        ) : (
+        <>
+
+        {/* Téléphone : une fiche par personne.
+            Les sept colonnes réclamaient 900 px de large. Sur un écran de
+            390 px, il fallait donc pousser le tableau horizontalement — dans
+            une zone qui n'annonce nulle part qu'elle défile — et les trois
+            actions, qui sont la raison d'être de cette page, étaient hors
+            d'atteinte. Elles portent ici leur nom en toutes lettres : il y a
+            la place, et un libellé vaut mieux qu'une icône de seize pixels au
+            bout d'un doigt. */}
+        <section className="space-y-3 md:hidden">
+          {filteredUsers.map((u) => (
+            <CarteUtilisateur
+              key={u.id}
+              u={u}
+              onEdit={() => openEdit(u)}
+              onLink={() => openLinkModal(u)}
+              onDelete={() => handleDelete(u.id)}
+            />
+          ))}
+        </section>
+
+        {/* Écran large */}
+        <section className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm md:block">
+          <table className="table min-w-[820px]">
+            {/* L'en-tête de la maison, clair, plutôt qu'un second bandeau
+                noir sous celui du titre : deux blocs sombres à quelques
+                pixels l'un de l'autre se disputaient le regard, et aucun
+                autre tableau de la plateforme n'en portait. Il suit en prime
+                le thème sombre, ce que « bg-slate-950 » ne faisait pas. */}
+            <thead className="table-head">
               <tr>
-                <th className="text-left px-4 py-3.5 font-bold">Utilisateur</th>
-                <th className="text-left px-4 py-3.5 font-bold">Accès</th>
-                <th className="text-left px-4 py-3.5 font-bold">Fonction</th>
-                <th className="text-left px-4 py-3.5 font-bold">Partenaire</th>
-                <th className="text-left px-4 py-3.5 font-bold">Statut</th>
-                <th className="text-left px-4 py-3.5 font-bold">Présence</th>
-                <th className="text-right px-4 py-3.5 font-bold">Actions</th>
+                <th className="px-4 py-3 font-semibold">Utilisateur</th>
+                <th className="px-4 py-3 font-semibold">Accès</th>
+                <th className="px-4 py-3 font-semibold">Fonction</th>
+                <th className="px-4 py-3 font-semibold">Partenaire</th>
+                <th className="px-4 py-3 font-semibold">Statut</th>
+                <th className="px-4 py-3 font-semibold">Présence</th>
+                <th className="px-4 py-3 text-right font-semibold">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      bare
-                      icon={UsersRound}
-                      title={users.length === 0 ? "Aucun utilisateur" : "Aucun utilisateur ne correspond aux filtres"}
-                      description={
-                        users.length === 0
-                          ? "Invitez un collègue : il recevra un lien pour définir son mot de passe."
-                          : "Modifiez la recherche, le rôle ou le statut pour élargir les résultats."
-                      }
-                      actionLabel={users.length === 0 ? "Nouvel utilisateur" : "Tout réinitialiser"}
-                      actionIcon={users.length === 0 ? Plus : undefined}
-                      onAction={
-                        users.length === 0
-                          ? openCreate
-                          : () => { setSearch(""); setRoleFilter(""); setStatusFilter(""); setOnlineFilter(false); }
-                      }
-                    />
-                  </td>
-                </tr>
-              ) : filteredUsers.map(u => {
-                const roleMeta = ROLES.find(r => r.value === u.role);
+              {filteredUsers.map(u => {
                 return (
-                  <tr key={u.id} className="border-t border-slate-100 transition-colors odd:bg-white even:bg-slate-50/60 hover:bg-orange-50/60">
-                    <td className="px-4 py-3">
-                      <div className="font-medium flex items-center gap-2">
+                  <tr key={u.id} className="table-row border-slate-100 align-middle">
+                    <td className="max-w-[220px] px-4 py-3">
+                      <div className="flex items-center gap-2 font-medium">
                         <User className="w-4 h-4 text-orange-500 flex-shrink-0" />
-                        {u.full_name || <span className="text-slate-500 italic">Sans nom</span>}
-                      </div>
-                      <div className="flex items-center gap-1 text-slate-500 text-xs mt-1">
-                        <Mail className="w-3 h-3" /> {u.email}
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold ${roleMeta?.cls || "bg-slate-100 text-slate-600"}`}>
-                        <Shield className="w-3 h-3" />
-                        {roleMeta?.label || u.role}
-                      </span>
-                      {(u.role === "admin" || u.is_team_odc) && (
-                        <span
-                          title="Accès Mbootay"
-                          className="ml-1.5 inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700"
-                        >
-                          <KanbanSquare className="w-3 h-3" />
-                          Mbootay
+                        <span className="truncate">
+                          {u.full_name || <span className="italic text-slate-500">Sans nom</span>}
                         </span>
-                      )}
+                      </div>
+                      {/* L'adresse sur une ligne, coupée au besoin.
+                          « abdoulmouhamed.fall@orange-sonatel.com » passait à
+                          la ligne au milieu du domaine et faisait grandir la
+                          rangée d'un cran. L'adresse entière reste lisible au
+                          survol, et l'on vient de toute façon chercher ici un
+                          nom, pas une adresse. */}
+                      <div
+                        className="mt-1 flex items-center gap-1 text-xs text-slate-500"
+                        title={u.email}
+                      >
+                        <Mail className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{u.email}</span>
+                      </div>
                     </td>
 
                     <td className="px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <BadgeRole role={u.role} />
+                        {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
+                      </div>
+                    </td>
+
+                    {/* La fonction n'est pas un état : c'est du texte.
+                        En pastille orange, elle pesait autant que le rôle —
+                        qui, lui, décide de ce que la personne peut faire — et
+                        un intitulé un peu long passait à la ligne à
+                        l'intérieur de la pastille, ce qui ne ressemble à
+                        rien. */}
+                    <td className="max-w-[150px] px-4 py-3">
                       {u.job_title ? (
-                        <span className="inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-800">{u.job_title}</span>
-                      ) : <span className="text-xs text-slate-400">À préciser</span>}
-                    </td>
-
-                    <td className="px-4 py-3 text-sm">
-                      {/* Le partenaire, et pour un coach ce qui lui est confie.
-                          Sans cette ligne il fallait ouvrir chaque fiche pour
-                          savoir quels dispositifs un coach peut renseigner. */}
-                      {u.partner || (u.role === "coach" && (u.device_names || []).length) ? (
-                        <div>
-                          {u.partner ? (
-                            <span className="flex items-center gap-1">
-                              <Building2 className="w-4 h-4 text-slate-500" />{u.partner}
-                            </span>
-                          ) : null}
-                          {u.role === "coach" && u.objective_beneficiaries != null && (
-                            <span className="flex items-center gap-1 mt-0.5 text-xs text-orange-600">
-                              <Target className="w-3 h-3" />
-                              Objectif : {u.objective_beneficiaries} bénéf.
-                            </span>
-                          )}
-                          {u.role === "coach" && (u.device_names || []).length > 0 && (
-                            <span
-                              className="flex items-start gap-1 mt-0.5 text-xs text-slate-500"
-                              title={u.device_names.join(", ")}
-                            >
-                              <Layers className="w-3 h-3 mt-0.5 flex-shrink-0" />
-                              <span className="line-clamp-2">{u.device_names.join(", ")}</span>
-                            </span>
-                          )}
-                        </div>
+                        <span className="block truncate text-sm text-slate-700" title={u.job_title}>
+                          {u.job_title}
+                        </span>
                       ) : (
-                        <span className="text-slate-500">—</span>
+                        <span className="text-sm text-slate-400">—</span>
                       )}
                     </td>
 
-                    <td className="px-4 py-3">
-                      <span className={`badge ${u.status === "active" ? "bg-green-100 border-green-200 text-green-700" : "bg-slate-100 border-slate-200 text-slate-600"}`}>
-                        {u.status === "active" ? "Actif" : "Inactif"}
-                      </span>
+                    <td className="max-w-[220px] px-4 py-3 text-sm">
+                      <InfosPartenaire u={u} />
                     </td>
 
                     <td className="px-4 py-3">
-                      {(() => {
-                        const online = isOnline(u.last_seen_at);
-                        return (
-                          <div className="flex items-center gap-2">
-                            <OnlineDot online={online} />
-                            <div>
-                              <span className={`text-xs font-medium ${online ? "text-emerald-700" : "text-slate-500"}`}>
-                                {online ? "En ligne" : "Hors ligne"}
-                              </span>
-                              {u.last_seen_at && !online && (
-                                <p className="text-xs text-slate-500 leading-none mt-0.5">
-                                  {formatLastSeen(u.last_seen_at)}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
+                      <BadgeStatut status={u.status} />
                     </td>
 
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => openEdit(u)} className="text-slate-500 hover:text-orange-500 mr-3 transition-colors" title="Modifier">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => openLinkModal(u)} className="text-slate-500 hover:text-indigo-500 mr-3 transition-colors" title="Générer un lien d'invitation">
-                        <Link2 className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(u.id)} className="text-slate-500 hover:text-red-500 transition-colors" title="Supprimer">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td className="px-4 py-3">
+                      <Presence lastSeenAt={u.last_seen_at} />
+                    </td>
+
+                    {/* Les trois actions, à la taille de la maison.
+                        Elles faisaient seize pixels, sans cadre et en gris
+                        clair : on les cherchait, et sur un écran un peu
+                        étroit la colonne les repliait sur deux rangées. Le
+                        bouton-icône commun fait trente-six pixels et porte
+                        son nom pour les lecteurs d'écran, que « title » seul
+                        n'atteint pas de façon fiable. */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openEdit(u)}
+                          className="icon-btn"
+                          title="Modifier"
+                          aria-label={`Modifier ${u.full_name || u.email}`}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openLinkModal(u)}
+                          className="icon-btn"
+                          title="Lien d'invitation"
+                          aria-label={`Lien d'invitation pour ${u.full_name || u.email}`}
+                        >
+                          <Link2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(u.id)}
+                          className="icon-btn icon-btn-danger"
+                          title="Supprimer"
+                          aria-label={`Supprimer ${u.full_name || u.email}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -782,6 +884,9 @@ export default function Utilisateurs() {
             </tbody>
           </table>
         </section>
+
+        </>
+        )}
       </div>
     </AdminPinGate>
   );
@@ -798,21 +903,146 @@ function formatLastSeen(lastSeenAt) {
   return `il y a ${days} j`;
 }
 
-function MiniStat({ label, value, tone = "orange", online }) {
-  const styles = {
-    orange: "border-orange-200 bg-gradient-to-br from-orange-50 to-white text-orange-700",
-    green: "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white text-emerald-700",
-    slate: "border-slate-200 bg-gradient-to-br from-slate-50 to-white text-slate-700",
-    blue: "border-sky-200 bg-gradient-to-br from-sky-50 to-white text-sky-700",
-  };
+/* ===== LES MORCEAUX COMMUNS AU TABLEAU ET AUX FICHES =====
+   Écrits une fois : sans cela, la fiche du téléphone et la ligne de l'écran
+   large auraient divergé dès la première retouche. */
+
+function BadgeRole({ role }) {
+  const meta = ROLES.find((r) => r.value === role);
   return (
-    <div className={`rounded-xl border p-3 shadow-sm sm:p-3.5 ${styles[tone] || styles.orange}`}>
-      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-600">{label}</p>
-      <div className="mt-1 flex items-center gap-2">
-        {online && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />}
-        {!online && <UsersRound className="h-4 w-4 text-current opacity-80" />}
-        <p className="text-2xl font-extrabold leading-tight">{value}</p>
-      </div>
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${
+        meta?.cls || "bg-slate-100 text-slate-600 border-slate-200"
+      }`}
+    >
+      <Shield className="w-3 h-3 flex-shrink-0" />
+      {meta?.label || role}
+    </span>
+  );
+}
+
+/* Mbootay est une précision sur l'accès, pas un accès : discret, à côté du
+   rôle, et sans la graisse qui le ferait lire comme son égal. */
+function ChipMbootay() {
+  return (
+    <span
+      title="Accès à l'espace de projets internes"
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600"
+    >
+      <KanbanSquare className="w-3 h-3 flex-shrink-0 text-orange-500" />
+      Mbootay
+    </span>
+  );
+}
+
+function BadgeStatut({ status }) {
+  const actif = status === "active";
+  return (
+    <span
+      className={`badge whitespace-nowrap ${
+        actif
+          ? "border-green-200 bg-green-100 text-green-700"
+          : "border-slate-200 bg-slate-100 text-slate-600"
+      }`}
+    >
+      {actif ? "Actif" : "Inactif"}
+    </span>
+  );
+}
+
+/* Le partenaire, et pour un coach ce qui lui est confié. Sans cette ligne il
+   fallait ouvrir chaque fiche pour savoir quels dispositifs un coach peut
+   renseigner. */
+function InfosPartenaire({ u }) {
+  const dispositifs = u.role === "coach" ? u.device_names || [] : [];
+  if (!u.partner && dispositifs.length === 0) {
+    return <span className="text-sm text-slate-400">—</span>;
+  }
+  return (
+    <div className="min-w-0">
+      {u.partner && (
+        <span className="flex items-center gap-1" title={u.partner}>
+          <Building2 className="w-4 h-4 flex-shrink-0 text-slate-500" />
+          <span className="truncate">{u.partner}</span>
+        </span>
+      )}
+      {u.role === "coach" && u.objective_beneficiaries != null && (
+        <span className="mt-0.5 flex items-center gap-1 text-xs text-orange-600">
+          <Target className="w-3 h-3 flex-shrink-0" />
+          Objectif : {u.objective_beneficiaries} bénéf.
+        </span>
+      )}
+      {dispositifs.length > 0 && (
+        <span
+          className="mt-0.5 flex items-start gap-1 text-xs text-slate-500"
+          title={dispositifs.join(", ")}
+        >
+          <Layers className="w-3 h-3 mt-0.5 flex-shrink-0" />
+          <span className="line-clamp-2">{dispositifs.join(", ")}</span>
+        </span>
+      )}
     </div>
+  );
+}
+
+/* La fiche du téléphone. Même matière que la ligne du tableau, rangée
+   autrement : l'identité en haut, ce qui la qualifie au milieu, et les trois
+   actions en bas, libellées. */
+function CarteUtilisateur({ u, onEdit, onLink, onDelete }) {
+  const nom = u.full_name || u.email;
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold">
+            {u.full_name || <span className="italic text-slate-500">Sans nom</span>}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-slate-500" title={u.email}>
+            {u.email}
+          </p>
+        </div>
+        <BadgeStatut status={u.status} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <BadgeRole role={u.role} />
+        {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
+      </div>
+
+      {u.job_title && (
+        <p className="mt-2.5 truncate text-sm text-slate-700" title={u.job_title}>
+          {u.job_title}
+        </p>
+      )}
+
+      {/* Dans un tableau, une colonne vide se signale par un tiret — la
+          colonne existe quand même. Dans une fiche, il n'y a pas de colonne :
+          un tiret seul n'y désigne rien et se lit comme une faute. */}
+      {(u.partner || (u.role === "coach" && (u.device_names || []).length > 0)) && (
+        <div className="mt-2 text-sm">
+          <InfosPartenaire u={u} />
+        </div>
+      )}
+
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <Presence lastSeenAt={u.last_seen_at} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <button onClick={onEdit} className="btn-ghost justify-center border text-xs">
+          <Pencil className="w-4 h-4" /> Modifier
+        </button>
+        <button onClick={onLink} className="btn-ghost justify-center border text-xs">
+          <Link2 className="w-4 h-4" /> Lien
+        </button>
+        <button
+          onClick={onDelete}
+          aria-label={`Supprimer ${nom}`}
+          className="btn-ghost justify-center border text-xs text-red-600 hover:bg-red-50"
+        >
+          <Trash2 className="w-4 h-4" /> Supprimer
+        </button>
+      </div>
+    </article>
   );
 }
