@@ -201,7 +201,12 @@ export default function Activities({
     try {
       const res = await api.get("/activities");
       const today = new Date().toISOString().slice(0, 10);
-      const mapped = (res.data || []).map((a) => {
+      const partnerScoped = role === "partner" ||
+        (user?.partner_id != null && role !== "coach");
+      const rows = partnerScoped
+        ? (res.data || []).filter((activity) => String(activity.partner_id) === String(user?.partner_id || ""))
+        : (res.data || []);
+      const mapped = rows.map((a) => {
         const date = a.activity_date
           ? String(a.activity_date).slice(0, 10)
           : "";

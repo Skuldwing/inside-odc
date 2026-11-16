@@ -220,9 +220,9 @@ router.post("/", async (req, res) => {
         );
 
     const createdUser = result.rows[0];
-    createdUser.device_ids = await enregistrerDispositifsCoach(
-      createdUser.id, createdUser.role, device_ids
-    );
+    createdUser.device_ids = createdUser.role === "coach"
+      ? await enregistrerDispositifsCoach(createdUser.id, createdUser.role, device_ids)
+      : [];
 
     let inviteLink = null;
     let emailSent = false;
@@ -235,14 +235,14 @@ router.post("/", async (req, res) => {
       const tpl = await getTemplate("welcome");
       const vars = { nom: full_name || email, email, lien: link };
       vars.bouton = boutonAction(link, "Définir mon mot de passe");
-      await sendEmail({
+      const fournisseur = await sendEmail({
         toEmail: email,
         toName: full_name || email,
         subject: renderTemplate(tpl.subject, vars),
         html: composerEmail(tpl, vars),
         text: `Bonjour ${full_name || email}\nDéfinir le mot de passe: ${link}\nCe lien est valable ${DUREE_LIEN_HEURES}h.`,
       });
-      emailSent = true;
+      emailSent = fournisseur !== "aucun";
     } catch (err) {
       console.error("Erreur envoi email création utilisateur", err);
     }
@@ -254,6 +254,9 @@ router.post("/", async (req, res) => {
     res.status(201).json({ ...createdUser, invite_link: inviteLink, email_sent: emailSent });
   } catch (err) {
     console.error(err);
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "Cette adresse e-mail est déjà associée à un compte." });
+    }
     res.status(500).json({ error: "Erreur serveur" });
   }
 });

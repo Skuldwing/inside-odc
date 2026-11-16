@@ -3,6 +3,7 @@ const multer = require("multer");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
+const { sendEmail } = require("../services/mail");
 
 const router = express.Router();
 const upload = multer({
@@ -55,6 +56,36 @@ async function ensureSchema() {
     });
   }
   await schemaPromise;
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[character]));
+}
+
+async function notifierAdminsNouveauDocument(document, partnerId, uploaderId) {
+  const [partnerResult, adminResult] = await Promise.all([
+    pool.query(
+      `SELECT p.name AS partner_name, COALESCE(u.full_name, u.email) AS uploader_name
+       FROM partners p LEFT JOIN users u ON u.id = $2 WHERE p.id = $1`,
+      [partnerId, uploaderId]
+    ),
+    pool.query("SELECT email, full_name FROM users WHERE role = 'admin' AND COALESCE(email, '') <> ''"),
+  ]);
+  if (!partnerResult.rowCount || !adminResult.rowCount) return;
+  const { partner_name: partnerName, uploader_name: uploaderName } = partnerResult.rows[0];
+  const baseUrl = String(process.env.APP_BASE_URL || "https://inside-odc.com").replace(/\/+$/, "");
+  const subject = `Nouveau document GOTO27 · ${partnerName}`;
+  const html = `<p>Bonjour,</p><p><strong>${escapeHtml(uploaderName)}</strong> (${escapeHtml(partnerName)}) vient de déposer un document dans GOTO27.</p><ul><li>Document : ${escapeHtml(document.title)}</li><li>Fichier : ${escapeHtml(document.filename)}</li></ul><p><a href="${escapeHtml(baseUrl)}/goto27">Ouvrir GOTO27</a></p>`;
+  const text = `Nouveau document GOTO27\nPartenaire : ${partnerName}\nDéposé par : ${uploaderName}\nDocument : ${document.title}\nFichier : ${document.filename}\n${baseUrl}/goto27`;
+  await Promise.all(adminResult.rows.map((admin) => sendEmail({
+    toEmail: admin.email,
+    toName: admin.full_name || admin.email,
+    subject,
+    html,
+    text,
+  }).catch((error) => console.error(`[GOTO27 NOTIFICATION] Echec pour ${admin.email}:`, error.message))));
 }
 
 function autoriserAdminOuPartenaire(req, res, next) {
@@ -199,6 +230,10 @@ router.post("/documents", recevoirFichier, async (req, res) => {
     const document = result.rows[0];
     logAudit(req, "CREATE", "goto27_documents", document.id, document.title, { partner_id: partnerId, filename: document.filename });
     res.status(201).json(document);
+    if (req.user.role === "partner") {
+      notifierAdminsNouveauDocument(document, partnerId, req.user.id)
+        .catch((error) => console.error("[GOTO27 NOTIFICATION]", error));
+    }
   } catch (error) {
     console.error("[GOTO27 CREATE]", error);
     res.status(500).json({ error: "Impossible d'enregistrer le document." });

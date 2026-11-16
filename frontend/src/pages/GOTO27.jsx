@@ -39,9 +39,11 @@ function NewPartnerAccessForm({ onClose, onCreated }) {
     setSaving(true);
     setError("");
     let partner;
+    let stage = "Création du partenaire";
     try {
       const partnerResponse = await api.post("/partners", { name: partnerName.trim() });
       partner = partnerResponse.data;
+      stage = "Création du compte et de son invitation";
       const accountResponse = await api.post("/users", {
         full_name: fullName.trim(),
         email: email.trim(),
@@ -60,7 +62,7 @@ function NewPartnerAccessForm({ onClose, onCreated }) {
           cleanupNote = " Le partenaire a été créé, mais le nettoyage automatique a échoué : vérifiez-le dans la liste des partenaires.";
         }
       }
-      setError((requestError.response?.data?.error || "Impossible de créer le partenaire et son accès.") + cleanupNote);
+      setError(`${stage} : ${requestError.response?.data?.error || "une erreur est survenue."}${cleanupNote}`);
     } finally {
       setSaving(false);
     }

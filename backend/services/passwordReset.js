@@ -5,7 +5,30 @@ function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+let schemaPromise;
+async function ensureSchema() {
+  if (!schemaPromise) {
+    schemaPromise = pool.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `).then(() => pool.query("CREATE INDEX IF NOT EXISTS password_reset_tokens_user_id_idx ON password_reset_tokens(user_id)"))
+      .then(() => pool.query("CREATE UNIQUE INDEX IF NOT EXISTS password_reset_tokens_hash_unique ON password_reset_tokens(token_hash)"))
+      .catch((error) => {
+        schemaPromise = null;
+        throw error;
+      });
+  }
+  await schemaPromise;
+}
+
 async function checkPasswordToken(token) {
+  await ensureSchema();
   const tokenHash = hashToken(token);
   const res = await pool.query(
     `SELECT 1 FROM password_reset_tokens
@@ -24,6 +47,7 @@ async function checkPasswordToken(token) {
 const DUREE_LIEN_HEURES = 24;
 
 async function createPasswordToken(userId, ttlHours = DUREE_LIEN_HEURES) {
+  await ensureSchema();
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
 
@@ -48,6 +72,7 @@ async function createPasswordToken(userId, ttlHours = DUREE_LIEN_HEURES) {
 }
 
 async function consumePasswordToken(token) {
+  await ensureSchema();
   const tokenHash = hashToken(token);
 
   const res = await pool.query(
@@ -77,4 +102,4 @@ async function consumePasswordToken(token) {
   return row.user_id;
 }
 
-module.exports = { createPasswordToken, consumePasswordToken, checkPasswordToken, DUREE_LIEN_HEURES };
+module.exports = { createPasswordToken, consumePasswordToken, checkPasswordToken, DUREE_LIEN_HEURES, ensureSchema };
