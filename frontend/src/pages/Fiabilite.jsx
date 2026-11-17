@@ -16,6 +16,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import api from "../api";
+import PageHeader from "../components/ui/PageHeader";
 
 const TABS = [
   { key: "a_verifier", label: "À vérifier" },
@@ -388,21 +389,13 @@ export default function Fiabilite() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="page-title flex items-center gap-2">
-            <ShieldAlert className="w-6 h-6 text-orange-500" />
-            Fiabilité des données
-          </h1>
-          <p className="page-subtitle">
-            Activités partenaires à vérifier avant qu'elles comptent dans les KPIs officiels
-          </p>
-        </div>
-        <button onClick={fetchQueue} className="btn btn-ghost gap-2" disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-          Rafraîchir
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Qualité des données"
+        title="Fiabilité des données"
+        subtitle="Activités partenaires à vérifier avant leur prise en compte dans les KPI officiels"
+        icon={ShieldAlert}
+        actions={<button type="button" onClick={fetchQueue} className="btn-ghost border border-slate-200 bg-white" disabled={loading}><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Rafraîchir</button>}
+      />
 
       <div className="card-solid p-4">
         <div className="flex flex-wrap items-center gap-3">

@@ -581,6 +581,7 @@ export default function ModelesAttestation() {
         <AdminPageHeader
           title="Modèles d'attestation"
           subtitle="Le logo et les mentions qui changent d'un dispositif à l'autre"
+          icon={Award}
           buttonLabel="Nouveau modèle"
           buttonIcon={Plus}
           onAdd={() => ouvrir(null)}

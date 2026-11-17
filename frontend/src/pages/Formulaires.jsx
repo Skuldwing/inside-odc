@@ -175,6 +175,7 @@ export default function Formulaires() {
         <AdminPageHeader
           title="Formulaires"
           subtitle="Créez et gérez vos formulaires d'inscription et d'enquête"
+          icon={FileText}
           buttonLabel="Nouveau formulaire"
           buttonIcon={Plus}
           onAdd={() => navigate("/formulaires/new")}
@@ -182,7 +183,7 @@ export default function Formulaires() {
 
         {/* Stats */}
         {forms.length > 0 && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="card p-3 flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-orange-50 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-4 h-4 text-orange-500" />

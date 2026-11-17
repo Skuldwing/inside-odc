@@ -127,6 +127,7 @@ export default function Dispositifs() {
         <AdminPageHeader
           title="Dispositifs"
           subtitle="Gérez les programmes et initiatives"
+          icon={Layers}
           buttonLabel="Nouveau dispositif"
           buttonIcon={Plus}
           onAdd={handleAdd}

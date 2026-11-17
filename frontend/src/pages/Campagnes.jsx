@@ -31,6 +31,7 @@ import {
 import api from "../api";
 import DeliverabilitePanel from "../components/DeliverabilitePanel";
 import { useToast, useConfirm, EmptyState } from "../components/ui";
+import PageHeader from "../components/ui/PageHeader";
 import { useAuth } from "../auth/useAuth";
 
 /* ── TextStyle étendu : taille + famille de police ─────────── */
@@ -2762,17 +2763,17 @@ export default function Campagnes() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="page-title">Campagnes</h1>
-          <p className="page-subtitle">Campagnes de communication et templates d'emails automatiques</p>
-        </div>
-        {tab === "campagnes" && (
-          <button onClick={() => setEditingCampaign({})} className="btn-primary">
-            <Plus className="w-4 h-4" /> Nouvelle campagne
+      <PageHeader
+        eyebrow="Communication"
+        title="Campagnes"
+        subtitle="Campagnes de communication et modèles d’e-mails automatiques"
+        icon={Mail}
+        actions={tab === "campagnes" && (
+          <button type="button" onClick={() => setEditingCampaign({})} className="btn-primary">
+            <Plus className="h-4 w-4" /> Nouvelle campagne
           </button>
         )}
-      </div>
+      />
 
       {/* Etat du domaine expediteur : sans authentification DNS, aucune
           campagne n'arrive, et rien ne le signalait dans la plateforme. */}

@@ -1485,7 +1485,7 @@ export default function Participants() {
       {/* La revue : les groupes que le nom seul soutient, un par un. */}
       <RevueDesGroupes onChange={rechargerListe} />
 
-      <section className="surface-glass p-5 lg:p-6">
+      <section className="relative isolate overflow-hidden rounded-[22px] border border-orange-200/80 bg-gradient-to-r from-white via-orange-50/70 to-amber-50/40 p-5 shadow-sm lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Base unifiée</p>

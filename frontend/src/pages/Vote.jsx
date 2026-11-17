@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Award, Settings, Play, Trash2, Users, Calendar, Loader2, BarChart3, Copy } from "lucide-react";
 import api from "../api";
 import { useToast, useConfirm, EmptyState } from "../components/ui";
+import PageHeader from "../components/ui/PageHeader";
 
 const STATUS_BADGE = {
   draft:  { label: "Brouillon",  cls: "bg-slate-100 text-slate-600" },
@@ -76,19 +77,14 @@ export default function Vote() {
   };
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Sessions de vote</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Hackathons, concours de projets, notation par jury</p>
-        </div>
-        <button
-          onClick={() => setShowNew(v => !v)}
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Nouvelle session
-        </button>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Événements"
+        title="Sessions de vote"
+        subtitle="Hackathons, concours de projets et notation par jury"
+        icon={Award}
+        actions={<button type="button" onClick={() => setShowNew((value) => !value)} className="btn-primary"><Plus className="h-4 w-4" />Nouvelle session</button>}
+      />
 
       {error && (
         <div className="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{error}</div>

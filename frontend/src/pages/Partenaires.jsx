@@ -196,6 +196,7 @@ export default function Partenaires() {
         <AdminPageHeader
           title="Partenaires"
           subtitle="Gestion des partenaires du centre"
+          icon={Building2}
           buttonLabel="Nouveau partenaire"
           buttonIcon={Plus}
           onAdd={handleAdd}

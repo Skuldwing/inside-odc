@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { EmptyState } from "../components/ui";
+import PageHeader from "../components/ui/PageHeader";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -289,22 +290,16 @@ export default function AuditLogs() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      {/* Deux boutons plutôt qu'un : sur un écran de téléphone ils ne tiennent
-          plus à côté du titre, et la page se mettait à défiler de côté. Ils
-          passent donc à la ligne, et le titre garde sa largeur. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="page-title flex items-center gap-2">
-            <ShieldCheck className="w-6 h-6 flex-shrink-0 text-orange-500" />
-            Journaux d'audit
-          </h1>
-          <p className="page-subtitle">Historique de toutes les modifications sur la plateforme</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        eyebrow="Sécurité et suivi"
+        title="Journaux d’audit"
+        subtitle="Historique des modifications réalisées sur la plateforme"
+        icon={ShieldCheck}
+        actions={<>
           <button
+            type="button"
             onClick={fetchLogs}
-            className="btn btn-ghost gap-2"
+            className="btn-ghost border border-slate-200 bg-white"
             disabled={loading}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
@@ -314,8 +309,9 @@ export default function AuditLogs() {
               qui part dans le fichier. Le nombre le rappelle, pour qu'on ne
               croie pas emporter tout le journal quand on a filtré. */}
           <button
+            type="button"
             onClick={telecharger}
-            className="btn btn-primary gap-2"
+            className="btn-primary"
             disabled={export_ || total === 0}
             title="Télécharger les lignes affichées au format CSV"
           >
@@ -324,8 +320,8 @@ export default function AuditLogs() {
               : <Download className="w-4 h-4" />}
             {export_ ? "Préparation…" : `Télécharger (${total.toLocaleString("fr-FR")})`}
           </button>
-        </div>
-      </div>
+        </>}
+      />
 
       {/* Un bouton qui ne fait rien ne se distingue pas d'un bouton cassé. */}
       {erreurExport && (
