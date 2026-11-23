@@ -198,6 +198,9 @@ function proposer(fiches) {
 
   const refusListe = [...refus.values()]
     .map((r) => ({
+      /* La clé normalisée : c'est par elle que l'écran désigne le prénom quand
+         un administrateur lui attribue un genre. */
+      cle: r.cle,
       prenom: r.cle ? graphieDominante(r.graphies) : "",
       raison: r.raison,
       /* Le premier prénom en cause, quand c'est lui qui bloque. */

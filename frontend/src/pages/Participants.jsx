@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState, useRef } from "react";
+import { Fragment, useEffect, useCallback, useState, useRef } from "react";
 import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List, X, RotateCcw, Eye, Sparkles, Venus, Mars } from "lucide-react";
 import { useSearchParams, Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
@@ -763,16 +763,23 @@ function GenresManquants({ onChange }) {
   const confirm = useConfirm();
   const [data, setData] = useState(null);
   const [ouvert, setOuvert] = useState(false);
-  const [coches, setCoches] = useState(() => new Set());
+  /* Ce qu'on a DÉcoché, plutôt que ce qui est coché : la liste se recharge
+     après chaque attribution, et tout recocher effacerait la relecture déjà
+     faite. Un prénom nouveau arrive coché, ce qui est le sens de la règle. */
+  const [decoches, setDecoches] = useState(() => new Set());
   const [enCours, setEnCours] = useState(false);
+
+  /* Ce que la règle ne tranche pas. */
+  const [recherche, setRecherche] = useState("");
+  const [visibles, setVisibles] = useState(50);
+  const [prenomOuvert, setPrenomOuvert] = useState(null);
+  const [fichesPrenom, setFichesPrenom] = useState([]);
+  const [chargementFiches, setChargementFiches] = useState(false);
 
   const charger = useCallback(async () => {
     try {
       const r = await api.get("/participants/genre-deduit");
       setData(r.data);
-      /* Tout coché d'entrée : la règle est déjà prudente, et la relecture
-         consiste à décocher ce qui choque, pas à cocher trois cents lignes. */
-      setCoches(new Set((r.data.propositions || []).map((p) => p.id)));
     } catch {
       setData(null); /* silencieux : c'est un panneau d'appoint, pas la page */
     }
@@ -783,16 +790,20 @@ function GenresManquants({ onChange }) {
   if (!data || (!data.sans_genre && !data.deja_deduits)) return null;
 
   const propositions = data.propositions || [];
-  const fichesCochees = propositions
-    .filter((p) => coches.has(p.id))
-    .reduce((s, p) => s + p.fiches, 0);
+  const retenues = propositions.filter((p) => !decoches.has(p.id));
+  const fichesCochees = retenues.reduce((s, p) => s + p.fiches, 0);
 
   const basculer = (id) =>
-    setCoches((avant) => {
+    setDecoches((avant) => {
       const suivant = new Set(avant);
       if (suivant.has(id)) suivant.delete(id); else suivant.add(id);
       return suivant;
     });
+
+  const apresEcriture = async () => {
+    await charger();
+    await onChange?.();
+  };
 
   const appliquer = async () => {
     const ok = await confirm({
@@ -805,7 +816,9 @@ function GenresManquants({ onChange }) {
     if (!ok) return;
     setEnCours(true);
     try {
-      const r = await api.post("/participants/genre-deduit/appliquer", { groupes: [...coches] });
+      const r = await api.post("/participants/genre-deduit/appliquer", {
+        groupes: retenues.map((p) => p.id),
+      });
       const { appliques, femmes, hommes, ignores } = r.data;
       toast.success(
         `${appliques.toLocaleString("fr-FR")} fiche${appliques > 1 ? "s" : ""} renseignée${appliques > 1 ? "s" : ""} ` +
@@ -814,8 +827,7 @@ function GenresManquants({ onChange }) {
             ? ` ${ignores} prénom${ignores > 1 ? "s ont" : " a"} changé entre-temps et n'${ignores > 1 ? "ont" : "a"} pas été appliqué${ignores > 1 ? "s" : ""}.`
             : "")
       );
-      await charger();
-      await onChange?.();
+      await apresEcriture();
     } catch (err) {
       toast.error(err?.response?.data?.error || "Les genres n'ont pas été enregistrés.");
     } finally {
@@ -823,12 +835,83 @@ function GenresManquants({ onChange }) {
     }
   };
 
+  /* Attribuer un genre à toutes les fiches d'un prénom que la règle n'a pas
+     tranché. La confirmation dit ce que la base sait du prénom : pour un
+     prénom partagé, c'est l'information qui doit faire hésiter. */
+  const attribuerPrenom = async (r, genre) => {
+    const libelle = genre === "F" ? "Femme" : "Homme";
+    const fiches = `${r.fiches} fiche${r.fiches > 1 ? "s" : ""}`;
+    const partage = r.raison === "ambigu";
+    const ok = await confirm({
+      title: `« ${r.prenom} » → ${libelle} ?`,
+      body: partage
+        ? `Attention : dans la base, ${r.premier ? `« ${r.premier} »` : "ce prénom"} est porté par ` +
+          `${r.f} femme${r.f > 1 ? "s" : ""} et ${r.h} homme${r.h > 1 ? "s" : ""}. Les ${fiches} sans genre ` +
+          `recevront toutes « ${libelle} ». S'il y a un doute, regardez plutôt les fiches une à une.`
+        : `Les ${fiches} « ${r.prenom} » sans genre recevront « ${libelle} ». Elles restent marquées ` +
+          `« déduit du prénom » et se retirent avec les autres.`,
+      confirmLabel: `Attribuer « ${libelle} »`,
+    });
+    if (!ok) return;
+    setEnCours(true);
+    try {
+      const rep = await api.post("/participants/genre-deduit/attribuer", { prenom: r.cle, genre });
+      toast.success(`${rep.data.attribues} fiche${rep.data.attribues > 1 ? "s" : ""} « ${r.prenom} » → ${libelle}.`);
+      if (prenomOuvert === r.cle) setPrenomOuvert(null);
+      await apresEcriture();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "L'attribution n'a pas été enregistrée.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  const voirFiches = async (r) => {
+    if (prenomOuvert === r.cle) { setPrenomOuvert(null); return; }
+    setPrenomOuvert(r.cle);
+    setFichesPrenom([]);
+    setChargementFiches(true);
+    try {
+      const rep = await api.get("/participants/genre-deduit/fiches", { params: { prenom: r.cle } });
+      setFichesPrenom(rep.data || []);
+    } catch {
+      toast.error("Les fiches n'ont pas pu être chargées.");
+      setPrenomOuvert(null);
+    } finally {
+      setChargementFiches(false);
+    }
+  };
+
+  /* Trancher une fiche après l'avoir regardée : c'est une saisie, pas une
+     déduction. Elle passe donc par la route de modification de fiche, qui ne
+     pose pas la marque « déduit ». */
+  const attribuerFiche = async (fiche, genre) => {
+    try {
+      await api.patch(`/participants/${fiche.id}`, { genre });
+      const restantes = fichesPrenom.filter((f) => f.id !== fiche.id);
+      setFichesPrenom(restantes);
+      if (!restantes.length) {
+        setPrenomOuvert(null);
+        await apresEcriture();
+      } else {
+        /* Le compteur suit sans recharger tout le panneau à chaque clic. */
+        setData((d) => d && {
+          ...d,
+          sans_genre: d.sans_genre - 1,
+          refus: d.refus.map((x) => (x.cle === prenomOuvert ? { ...x, fiches: x.fiches - 1 } : x)),
+        });
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Le genre n'a pas été enregistré.");
+    }
+  };
+
   const retirer = async () => {
     const ok = await confirm({
       title: `Retirer les ${data.deja_deduits.toLocaleString("fr-FR")} genres déduits ?`,
       body:
-        "Ces fiches redeviennent sans genre. Les genres déclarés, et ceux corrigés à la " +
-        "main depuis, ne sont pas touchés.",
+        "Ces fiches redeviennent sans genre — celles attribuées par prénom comprises. Les " +
+        "genres déclarés, et ceux saisis fiche par fiche, ne sont pas touchés.",
       confirmLabel: "Retirer",
       destructive: true,
     });
@@ -837,14 +920,36 @@ function GenresManquants({ onChange }) {
     try {
       const r = await api.post("/participants/genre-deduit/annuler");
       toast.success(`${r.data.annules.toLocaleString("fr-FR")} genre${r.data.annules > 1 ? "s" : ""} déduit${r.data.annules > 1 ? "s" : ""} retiré${r.data.annules > 1 ? "s" : ""}.`);
-      await charger();
-      await onChange?.();
+      await apresEcriture();
     } catch (err) {
       toast.error(err?.response?.data?.error || "Le retrait n'a pas abouti.");
     } finally {
       setEnCours(false);
     }
   };
+
+  const terme = recherche.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const refus = (data.refus || []).filter((r) => !terme || (r.cle || "").includes(terme));
+  const refusVisibles = refus.slice(0, visibles);
+  const fichesRefusees = (data.refus || []).reduce((s, r) => s + r.fiches, 0);
+
+  const boutonGenre = (genre, onClick, petit = false) => (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={enCours}
+      className={`inline-flex items-center gap-1 rounded-lg border font-medium transition disabled:opacity-50 ${
+        petit ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs"
+      } ${
+        genre === "F"
+          ? "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+          : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+      }`}
+    >
+      {genre === "F" ? <Venus className="h-3 w-3" /> : <Mars className="h-3 w-3" />}
+      {genre === "F" ? "Femme" : "Homme"}
+    </button>
+  );
 
   return (
     <section className="card-solid overflow-hidden border border-teal-300">
@@ -866,7 +971,7 @@ function GenresManquants({ onChange }) {
           <span className="block text-xs text-slate-500">
             Déduit de ce que la base sait déjà : un prénom porté par au moins{" "}
             {data.seuils.personnes} personnes, à {Math.round(data.seuils.accord * 100)} % du
-            même genre. Les prénoms partagés ou trop rares restent à saisir à la main.
+            même genre. Le reste s&apos;attribue à la main, par prénom ou fiche par fiche.
             {data.deja_deduits > 0 && (
               <span className="text-slate-600">
                 {" "}· {data.deja_deduits.toLocaleString("fr-FR")} déjà déduit
@@ -879,24 +984,25 @@ function GenresManquants({ onChange }) {
       </button>
 
       {ouvert && (
-        <div className="space-y-4 border-t border-teal-200 px-4 py-4">
-          {propositions.length > 0 ? (
+        <div className="space-y-5 border-t border-teal-200 px-4 py-4">
+          {/* ---- 1. Ce que la règle propose ---- */}
+          {propositions.length > 0 && (
             <div>
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-slate-600">
-                  Relisez la liste : décochez un prénom dont le genre vous semble faux.
+                <p className="text-xs font-medium text-slate-700">
+                  1. Ce que la base permet de déduire — décochez un prénom dont le genre vous semble faux.
                 </p>
                 <div className="flex gap-3 text-xs">
                   <button
                     type="button"
-                    onClick={() => setCoches(new Set(propositions.map((p) => p.id)))}
+                    onClick={() => setDecoches(new Set())}
                     className="font-medium text-teal-700 hover:underline"
                   >
                     Tout cocher
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCoches(new Set())}
+                    onClick={() => setDecoches(new Set(propositions.map((p) => p.id)))}
                     className="font-medium text-slate-500 hover:underline"
                   >
                     Tout décocher
@@ -916,46 +1022,49 @@ function GenresManquants({ onChange }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {propositions.map((p) => (
-                      <tr
-                        key={p.id}
-                        className={`table-row cursor-pointer ${coches.has(p.id) ? "" : "opacity-50"}`}
-                        onClick={() => basculer(p.id)}
-                      >
-                        <td className="px-3 py-2">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-teal-600"
-                            checked={coches.has(p.id)}
-                            onChange={() => basculer(p.id)}
-                            onClick={(e) => e.stopPropagation()}
-                            aria-label={`Retenir ${p.prenom}`}
-                          />
-                        </td>
-                        <td className="px-3 py-2 font-medium text-slate-800">
-                          {p.prenom}
-                          {p.base === "premier" && (
-                            <span className="ml-1.5 text-[11px] font-normal text-slate-500">
-                              (d&apos;après le premier prénom)
+                    {propositions.map((p) => {
+                      const coche = !decoches.has(p.id);
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`table-row cursor-pointer ${coche ? "" : "opacity-50"}`}
+                          onClick={() => basculer(p.id)}
+                        >
+                          <td className="px-3 py-2">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-teal-600"
+                              checked={coche}
+                              onChange={() => basculer(p.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              aria-label={`Retenir ${p.prenom}`}
+                            />
+                          </td>
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            {p.prenom}
+                            {p.base === "premier" && (
+                              <span className="ml-1.5 text-[11px] font-normal text-slate-500">
+                                (d&apos;après le premier prénom)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                p.genre === "F" ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              {p.genre === "F" ? <Venus className="h-3 w-3" /> : <Mars className="h-3 w-3" />}
+                              {p.genre === "F" ? "Femme" : "Homme"}
                             </span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                              p.genre === "F" ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
-                            }`}
-                          >
-                            {p.genre === "F" ? <Venus className="h-3 w-3" /> : <Mars className="h-3 w-3" />}
-                            {p.genre === "F" ? "Femme" : "Homme"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{p.fiches.toLocaleString("fr-FR")}</td>
-                        <td className="px-3 py-2 text-xs text-slate-500">
-                          {p.f} F · {p.h} H
-                        </td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{p.fiches.toLocaleString("fr-FR")}</td>
+                          <td className="px-3 py-2 text-xs text-slate-500">
+                            {p.f} F · {p.h} H
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -979,33 +1088,133 @@ function GenresManquants({ onChange }) {
                 </button>
               </div>
             </div>
-          ) : (
-            <p className="text-sm text-slate-600">
-              Aucun prénom sans genre ne peut être tranché avec assez de certitude pour
-              l&apos;instant.
-            </p>
           )}
 
-          {/* Ce qui reste : c'est par là que la saisie à la main rapporte le
-              plus, puisqu'un prénom fréquent règle beaucoup de fiches d'un
-              coup. */}
-          {data.refus?.length > 0 && (
+          {/* ---- 2. Ce que la règle ne tranche pas ----
+              Montré sans aucun geste jusqu'ici : on voyait les fiches restantes
+              sans pouvoir rien en faire. Le plus fréquent d'abord, puisqu'un
+              prénom réglé en règle beaucoup d'un coup. */}
+          {(data.refus || []).length > 0 && (
             <div>
-              <p className="mb-2 text-xs font-medium text-slate-700">
-                Prénoms qu&apos;on ne tranche pas — les plus fréquents
-              </p>
-              <ul className="flex flex-wrap gap-1.5">
-                {data.refus.map((r) => (
-                  <li
-                    key={`${r.raison}-${r.prenom}`}
-                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-600"
-                    title={(RAISONS_REFUS[r.raison] || (() => ""))(r)}
-                  >
-                    <span className="font-medium text-slate-800">{r.prenom || "—"}</span>
-                    {" "}· {r.fiches} · {(RAISONS_REFUS[r.raison] || (() => r.raison))(r)}
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <p className="text-xs font-medium text-slate-700">
+                    {propositions.length > 0 ? "2. " : ""}Ce que la base ne permet pas de trancher —{" "}
+                    {fichesRefusees.toLocaleString("fr-FR")} fiche{fichesRefusees > 1 ? "s" : ""},{" "}
+                    {data.refus.length.toLocaleString("fr-FR")} prénom{data.refus.length > 1 ? "s" : ""}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Si vous connaissez le prénom, attribuez-le en un clic. S&apos;il est mixte, ouvrez
+                    les fiches et tranchez une à une.
+                  </p>
+                </div>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={recherche}
+                    onChange={(e) => { setRecherche(e.target.value); setVisibles(50); }}
+                    placeholder="Chercher un prénom"
+                    aria-label="Chercher un prénom"
+                    className="input w-56 py-1.5 pl-8 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-slate-200">
+                <table className="table">
+                  <thead className="table-head sticky top-0 z-10">
+                    <tr>
+                      <th className="px-3 py-2">Prénom</th>
+                      <th className="px-3 py-2 text-right">Fiches</th>
+                      <th className="px-3 py-2">Pourquoi</th>
+                      <th className="px-3 py-2 text-right">Attribuer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {refusVisibles.map((r) => (
+                      <Fragment key={`${r.raison}-${r.cle}`}>
+                        <tr className="table-row">
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            {r.prenom || <span className="italic text-slate-500">sans prénom</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">{r.fiches.toLocaleString("fr-FR")}</td>
+                          <td className={`px-3 py-2 text-xs ${r.raison === "ambigu" ? "text-amber-700" : "text-slate-500"}`}>
+                            {(RAISONS_REFUS[r.raison] || (() => r.raison))(r)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Sans prénom, rien à quoi rattacher une
+                                  décision collective : fiche par fiche. */}
+                              {r.cle && boutonGenre("F", () => attribuerPrenom(r, "F"))}
+                              {r.cle && boutonGenre("H", () => attribuerPrenom(r, "H"))}
+                              <button
+                                type="button"
+                                onClick={() => voirFiches(r)}
+                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-50"
+                                aria-expanded={prenomOuvert === r.cle}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                {prenomOuvert === r.cle ? "Fermer" : "Une à une"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {prenomOuvert === r.cle && (
+                          <tr className="bg-teal-50/40">
+                            <td colSpan={4} className="px-3 py-2">
+                              {chargementFiches ? (
+                                <p className="flex items-center gap-2 text-xs text-slate-500">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement…
+                                </p>
+                              ) : (
+                                <ul className="divide-y divide-teal-100">
+                                  {fichesPrenom.map((f) => (
+                                    <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                                      <span className="min-w-0 text-xs">
+                                        <Link
+                                          to={`/participants/${f.id}`}
+                                          className="font-medium text-slate-800 hover:text-teal-700 hover:underline"
+                                        >
+                                          {f.nom} {f.prenom}
+                                        </Link>
+                                        <span className="text-slate-500">
+                                          {[f.structure, f.age_range, f.derniere_activite]
+                                            .filter(Boolean)
+                                            .map((x) => ` · ${x}`)
+                                            .join("")}
+                                        </span>
+                                      </span>
+                                      <span className="flex gap-1.5">
+                                        {boutonGenre("F", () => attribuerFiche(f, "F"), true)}
+                                        {boutonGenre("H", () => attribuerFiche(f, "H"), true)}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {refus.length > visibles && (
+                <button
+                  type="button"
+                  onClick={() => setVisibles((v) => v + 100)}
+                  className="mt-2 text-xs font-medium text-teal-700 hover:underline"
+                >
+                  Afficher {Math.min(100, refus.length - visibles)} prénoms de plus
+                  ({(refus.length - visibles).toLocaleString("fr-FR")} restants)
+                </button>
+              )}
+              {terme && refus.length === 0 && (
+                <p className="mt-2 text-xs text-slate-500">Aucun prénom restant ne correspond.</p>
+              )}
             </div>
           )}
 
