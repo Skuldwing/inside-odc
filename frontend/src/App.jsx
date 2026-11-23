@@ -57,11 +57,14 @@ function Ailleurs() {
   return <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />;
 }
 
+/* GOTO27 : admins d'office, partenaires selon le choix fait sur leur fiche
+   utilisateur. Le garde évite une page vide ; la vraie protection est au
+   serveur, qui relit le choix à chaque requête. */
 function GOTO27Route({ children }) {
-  const { role, isAuthenticated, authReady } = useAuth();
+  const { isAuthenticated, authReady, hasGoto27 } = useAuth();
   if (!authReady) return <PageLoader label="Vérification des accès…" />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (role !== "admin" && role !== "partner") return <Navigate to="/dashboard" replace />;
+  if (!hasGoto27) return <Navigate to="/dashboard" replace />;
   return children;
 }
 

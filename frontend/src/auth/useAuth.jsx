@@ -101,6 +101,11 @@ export function AuthProvider({ children }) {
            et le serveur verifie la meme chose de son cote. Ici, ce n'est qu'un
            affichage : la protection est au serveur. */
         isSuperAdmin: role === "admin" && !!user?.is_super_admin,
+        /* GOTO27 : calculé par le serveur (admins d'office, partenaires selon
+           leur fiche). Tant qu'un serveur plus ancien ne renvoie pas le champ,
+           on retombe sur la règle d'avant — admins et partenaires — pour
+           qu'aucun partenaire ne perde son menu pendant un déploiement. */
+        hasGoto27: user?.acces_goto27 ?? (role === "admin" || role === "partner"),
         login,
         logout,
         refreshUser,

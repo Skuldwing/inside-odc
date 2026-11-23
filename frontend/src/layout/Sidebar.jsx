@@ -66,7 +66,7 @@ const GROUPES = [
     items: [
       { name: "Mbootay 🐼", icon: KanbanSquare, path: "/mbootay", matchPrefix: true, teamOnly: true },
       { name: "XALLETTE SPACE 🧡", icon: Rocket, path: "/cm-xalette", teamOnly: true },
-      { name: "GOTO27", icon: Sparkles, path: "/goto27", roles: ["admin", "partner"] },
+      { name: "GOTO27", icon: Sparkles, path: "/goto27", roles: ["admin", "partner"], goto27Only: true },
     ],
   },
   {
@@ -142,7 +142,7 @@ function NavLink({ item, collapsed, location, onClick, index = 0 }) {
 
 export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onToggle }) {
   const location = useLocation();
-  const { role, isTeamOdc, isSuperAdmin, user } = useAuth();
+  const { role, isTeamOdc, isSuperAdmin, hasGoto27, user } = useAuth();
   const safeRole = role || "viewer";
 
   const roleLabel =
@@ -227,7 +227,12 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen, collapsed, onTogg
               if (groupe.adminPlus && !isSuperAdmin) return null;
 
               const items = groupe.items.filter(
-                (item) => (!item.roles || item.roles.includes(safeRole)) && (!item.teamOnly || isTeamOdc)
+                (item) =>
+                  (!item.roles || item.roles.includes(safeRole)) &&
+                  (!item.teamOnly || isTeamOdc) &&
+                  /* GOTO27 : un partenaire dont l'accès est fermé ne voit
+                     plus l'entrée, plutôt que de tomber sur un refus. */
+                  (!item.goto27Only || hasGoto27)
               );
               if (!items.length) return null;
 

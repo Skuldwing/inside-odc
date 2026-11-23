@@ -11,6 +11,7 @@ const requireAdminPin = require("../middleware/pin.middleware");
 const crypto = require("crypto");
 const { logAudit } = require("../services/audit");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
+const { ecrireAccesGoto27, LIRE_IS_GOTO27 } = require("../migrations/goto27Acces");
 
 let userJobTitleSchemaPromise;
 async function ensureUserJobTitleColumn() {
@@ -132,6 +133,7 @@ router.get("/", async (req, res) => {
               u.objective_beneficiaries,
               u.last_seen_at,
               COALESCE(u.is_team_odc, false) AS is_team_odc,
+              ${LIRE_IS_GOTO27} AS is_goto27,
               p.name AS partner,
               ${statusExpr} AS status,
               COALESCE(ud.device_ids, ARRAY[]::int[])   AS device_ids,
@@ -223,6 +225,9 @@ router.post("/", async (req, res) => {
     createdUser.device_ids = createdUser.role === "coach"
       ? await enregistrerDispositifsCoach(createdUser.id, createdUser.role, device_ids)
       : [];
+    /* L'accès GOTO27, s'il a été choisi. Un compte créé depuis la page GOTO27
+       n'envoie pas la case : il reste « non décidé », donc ouvert. */
+    await ecrireAccesGoto27(createdUser.id, createdUser.role, req.body.is_goto27);
 
     let inviteLink = null;
     let emailSent = false;
@@ -329,12 +334,17 @@ router.put("/:id", async (req, res) => {
     updatedUser.device_ids = await enregistrerDispositifsCoach(
       updatedUser.id, updatedUser.role, device_ids
     );
+    await ecrireAccesGoto27(updatedUser.id, updatedUser.role, req.body.is_goto27);
 
     logAudit(req, "UPDATE", "users", updatedUser.id, updatedUser.full_name || updatedUser.email, {
       email: updatedUser.email,
       role: updatedUser.role,
       status,
       is_team_odc: updatedUser.is_team_odc,
+      /* Tracé seulement quand la fiche l'envoie : c'est la décision prise. */
+      is_goto27: updatedUser.role === "partner" && req.body.is_goto27 !== undefined
+        ? Boolean(req.body.is_goto27)
+        : undefined,
     });
     res.json(updatedUser);
   } catch (err) {
