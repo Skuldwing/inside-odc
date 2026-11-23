@@ -49,6 +49,7 @@ const { ensureEspaceBeneficiaire } = require("./migrations/espaceBeneficiaire");
 const { ensureAudience, entretenirAudience } = require("./migrations/audience");
 const { ensureActivityDetailAndProfileSchema } = require("./migrations/activityDetailAndProfile");
 const { ensureActivityTasksSchema } = require("./migrations/activityTasks");
+const { ensureGenreSource } = require("./migrations/genreSource");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -978,6 +979,18 @@ pool.query(`
     console.log("Migration OK: checklist des activites (activity_tasks)");
   } catch (e) {
     console.error("Migration checklist des activites ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Origine du genre ──
+   Distingue un genre déclaré d'un genre déduit du prénom. Voir
+   migrations/genreSource.js. */
+(async () => {
+  try {
+    await ensureGenreSource();
+    console.log("Migration OK: participants.genre_source");
+  } catch (e) {
+    console.error("Migration participants.genre_source ECHOUEE :", e.message);
   }
 })();
 
