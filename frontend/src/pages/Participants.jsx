@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useCallback, useState, useRef } from "react";
-import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List, X, RotateCcw, Eye, Sparkles, Venus, Mars } from "lucide-react";
+import { Users, Search, Download, Filter, UserRound, ChevronLeft, ChevronRight, Loader2, AlertTriangle, Check, TrendingUp, List, X, RotateCcw, Eye, Sparkles, Venus, Mars, ArrowLeftRight } from "lucide-react";
 import { useSearchParams, Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -729,6 +729,247 @@ function FichesARestaurer({ onChange }) {
   );
 }
 
+/**
+ * Les fiches dont le nom et le prénom ont été inversés.
+ *
+ * « FALL » dans la case prénom, « Abdoul » dans la case nom : l'attestation
+ * imprime « Fall Abdoul », la recherche de doublons ne rapproche plus la fiche
+ * des autres, et la déduction du genre cherche un prénom « Fall ».
+ *
+ * La base dit elle-même ce qui est un nom et ce qui est un prénom. Une fiche
+ * n'est signalée que si les deux cases se trompent de colonne — un seul côté
+ * ne prouve rien. Tout est coché ; on décoche ce qui choque.
+ *
+ * Après correction, un bandeau permet d'annuler le lot tant qu'on n'a pas
+ * quitté la page : l'échange est son propre inverse.
+ */
+function NomsInverses({ onChange }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [data, setData] = useState(null);
+  const [ouvert, setOuvert] = useState(false);
+  const [decoches, setDecoches] = useState(() => new Set());
+  const [visibles, setVisibles] = useState(100);
+  const [enCours, setEnCours] = useState(false);
+  /* Le dernier lot échangé, pour pouvoir le défaire. */
+  const [dernierLot, setDernierLot] = useState(null);
+
+  const charger = useCallback(async () => {
+    try {
+      const r = await api.get("/participants/noms-inverses");
+      setData(r.data);
+    } catch {
+      setData(null); /* silencieux : c'est un panneau d'appoint, pas la page */
+    }
+  }, []);
+
+  useEffect(() => { charger(); }, [charger]);
+
+  if (!data || (!data.total && !dernierLot)) return null;
+
+  const fiches = data.fiches || [];
+  const retenues = fiches.filter((f) => !decoches.has(f.id));
+
+  const basculer = (id) =>
+    setDecoches((avant) => {
+      const suivant = new Set(avant);
+      if (suivant.has(id)) suivant.delete(id); else suivant.add(id);
+      return suivant;
+    });
+
+  const corriger = async () => {
+    const n = retenues.length;
+    const ok = await confirm({
+      title: `Remettre dans l'ordre ${n.toLocaleString("fr-FR")} fiche${n > 1 ? "s" : ""} ?`,
+      body:
+        "Le nom et le prénom de chaque fiche cochée sont échangés. Rien d'autre n'est " +
+        "modifié, et le lot pourra être annulé juste après.",
+      confirmLabel: "Remettre dans l'ordre",
+    });
+    if (!ok) return;
+    setEnCours(true);
+    try {
+      const r = await api.post("/participants/noms-inverses/inverser", {
+        ids: retenues.map((f) => f.id),
+      });
+      setDernierLot(r.data.ids);
+      toast.success(
+        `${r.data.inverses.toLocaleString("fr-FR")} fiche${r.data.inverses > 1 ? "s" : ""} remise${r.data.inverses > 1 ? "s" : ""} dans l'ordre.`
+      );
+      await charger();
+      await onChange?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La correction n'a pas été enregistrée.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  const annulerLot = async () => {
+    if (!dernierLot?.length) return;
+    setEnCours(true);
+    try {
+      const r = await api.post("/participants/noms-inverses/retablir", { ids: dernierLot });
+      toast.success(`${r.data.retablis} fiche${r.data.retablis > 1 ? "s" : ""} rétablie${r.data.retablis > 1 ? "s" : ""} comme avant.`);
+      setDernierLot(null);
+      await charger();
+      await onChange?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "L'annulation n'a pas abouti.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <section className="card-solid overflow-hidden border border-indigo-300">
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <ArrowLeftRight className="h-5 w-5 flex-shrink-0 text-indigo-600" aria-hidden="true" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-slate-800">
+            {data.total
+              ? `${data.total.toLocaleString("fr-FR")} fiche${data.total > 1 ? "s" : ""} semble${data.total > 1 ? "nt" : ""} avoir le nom et le prénom inversés`
+              : "Aucune fiche ne semble plus avoir le nom et le prénom inversés"}
+          </span>
+          <span className="block text-xs text-slate-500">
+            « FALL » dans la case prénom, « Abdoul » dans la case nom. Repéré d&apos;après la base :
+            une valeur vue au moins {data.seuils.vues} fois, à {Math.round(data.seuils.part * 100)} %
+            dans l&apos;autre colonne — des deux côtés. À corriger avant de déduire les genres.
+          </span>
+        </span>
+        <span className="text-xs text-slate-500">{ouvert ? "Masquer" : "Voir les fiches"}</span>
+      </button>
+
+      {dernierLot?.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-indigo-200 bg-indigo-50/60 px-4 py-2">
+          <p className="text-xs text-indigo-900">
+            {dernierLot.length.toLocaleString("fr-FR")} fiche{dernierLot.length > 1 ? "s" : ""} vien
+            {dernierLot.length > 1 ? "nent" : "t"} d&apos;être remise{dernierLot.length > 1 ? "s" : ""} dans l&apos;ordre.
+          </p>
+          <button
+            type="button"
+            onClick={annulerLot}
+            disabled={enCours}
+            className="flex items-center gap-1.5 text-xs font-medium text-indigo-700 hover:underline disabled:opacity-60"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Annuler ce lot
+          </button>
+        </div>
+      )}
+
+      {ouvert && fiches.length > 0 && (
+        <div className="space-y-3 border-t border-indigo-200 px-4 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-slate-600">
+              Relisez : décochez une fiche qui vous semble juste telle qu&apos;elle est.
+            </p>
+            <div className="flex gap-3 text-xs">
+              <button type="button" onClick={() => setDecoches(new Set())} className="font-medium text-indigo-700 hover:underline">
+                Tout cocher
+              </button>
+              <button
+                type="button"
+                onClick={() => setDecoches(new Set(fiches.map((f) => f.id)))}
+                className="font-medium text-slate-500 hover:underline"
+              >
+                Tout décocher
+              </button>
+            </div>
+          </div>
+
+          <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-slate-200">
+            <table className="table">
+              <thead className="table-head sticky top-0">
+                <tr>
+                  <th className="w-10 px-3 py-2"><span className="sr-only">Retenue</span></th>
+                  <th className="px-3 py-2">Aujourd&apos;hui</th>
+                  <th className="px-3 py-2">Après correction</th>
+                  <th className="px-3 py-2">Pourquoi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fiches.slice(0, visibles).map((f) => {
+                  const coche = !decoches.has(f.id);
+                  return (
+                    <tr
+                      key={f.id}
+                      className={`table-row cursor-pointer ${coche ? "" : "opacity-50"}`}
+                      onClick={() => basculer(f.id)}
+                    >
+                      <td className="px-3 py-2">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-indigo-600"
+                          checked={coche}
+                          onChange={() => basculer(f.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Corriger ${f.prenom} ${f.nom}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <span className="text-slate-500">Prénom</span>{" "}
+                        <span className="font-medium text-red-700">{f.prenom}</span>
+                        <span className="text-slate-400"> · </span>
+                        <span className="text-slate-500">Nom</span>{" "}
+                        <span className="font-medium text-red-700">{f.nom}</span>
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        <span className="text-slate-500">Prénom</span>{" "}
+                        <span className="font-medium text-emerald-700">{f.nom}</span>
+                        <span className="text-slate-400"> · </span>
+                        <span className="text-slate-500">Nom</span>{" "}
+                        <span className="font-medium text-emerald-700">{f.prenom}</span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        « {f.prenom} » est un nom à {f.appui.prenom_comme_nom} %, « {f.nom} » un prénom à{" "}
+                        {f.appui.nom_comme_prenom} %
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {fiches.length > visibles && (
+            <button
+              type="button"
+              onClick={() => setVisibles((v) => v + 200)}
+              className="text-xs font-medium text-indigo-700 hover:underline"
+            >
+              Afficher plus ({(fiches.length - visibles).toLocaleString("fr-FR")} restantes)
+            </button>
+          )}
+          {data.total > fiches.length && (
+            <p className="text-xs text-slate-500">
+              Les {fiches.length.toLocaleString("fr-FR")} premières sont listées ; les suivantes
+              apparaîtront après correction de celles-ci.
+            </p>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={corriger}
+              disabled={enCours || retenues.length === 0}
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+            >
+              {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowLeftRight className="h-3.5 w-3.5" />}
+              {enCours
+                ? "En cours…"
+                : `Remettre dans l'ordre ${retenues.length.toLocaleString("fr-FR")} fiche${retenues.length > 1 ? "s" : ""}`}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* Pourquoi un prénom n'a pas été tranché, dit en clair. */
 const RAISONS_REFUS = {
   ambigu: (r) =>
@@ -1139,8 +1380,13 @@ function GenresManquants({ onChange }) {
                             {r.prenom || <span className="italic text-slate-500">sans prénom</span>}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">{r.fiches.toLocaleString("fr-FR")}</td>
-                          <td className={`px-3 py-2 text-xs ${r.raison === "ambigu" ? "text-amber-700" : "text-slate-500"}`}>
-                            {(RAISONS_REFUS[r.raison] || (() => r.raison))(r)}
+                          <td className={`px-3 py-2 text-xs ${r.raison === "ambigu" || r.ressemble_nom ? "text-amber-700" : "text-slate-500"}`}>
+                            {/* Un « prénom » qui est un nom de famille ne se
+                                règle pas en lui attribuant un genre : la fiche
+                                a son nom et son prénom inversés. */}
+                            {r.ressemble_nom
+                              ? "c'est un nom de famille — nom et prénom inversés ?"
+                              : (RAISONS_REFUS[r.raison] || (() => r.raison))(r)}
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center justify-end gap-1.5">
@@ -1492,6 +1738,9 @@ function RevueDesGroupes({ onChange }) {
 export default function Participants() {
   const { isCompact } = useDensity();
   const { isViewer, isAdmin } = useAuth();
+  /* Monte de un à chaque correction de noms, pour faire relire la base au
+     panneau des genres. */
+  const [versionQualite, setVersionQualite] = useState(0);
   const toast = useToast();
   const [exporting, setExporting] = useState(false);
   const [searchParams] = useSearchParams();
@@ -1996,9 +2245,22 @@ export default function Participants() {
       {/* La revue : les groupes que le nom seul soutient, un par un. */}
       <RevueDesGroupes onChange={rechargerListe} />
 
+      {/* Les noms inversés d'abord : une fois remis dans l'ordre, la case
+          prénom porte enfin un prénom, et la déduction du genre peut s'en
+          servir. Le panneau des genres est remonté après chaque correction
+          (« key ») pour relire la base au lieu d'afficher l'état d'avant. */}
+      {isAdmin && (
+        <NomsInverses
+          onChange={async () => {
+            setVersionQualite((v) => v + 1);
+            await rechargerListe();
+          }}
+        />
+      )}
+
       {/* Les genres manquants : réservé aux administrateurs, comme toute
           écriture de l'état civil. Le serveur refuse de toute façon. */}
-      {isAdmin && <GenresManquants onChange={rechargerListe} />}
+      {isAdmin && <GenresManquants key={versionQualite} onChange={rechargerListe} />}
 
       <section className="relative isolate overflow-hidden rounded-[22px] border border-orange-200/80 bg-gradient-to-r from-white via-orange-50/70 to-amber-50/40 p-5 shadow-sm lg:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
