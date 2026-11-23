@@ -14,6 +14,9 @@ const {
 const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/rechercheTexte");
 const { reunir, defaire } = require("../services/identite");
 const { contactsCollectifs } = require("../services/contactsCollectifs");
+const requireAdmin = require("../middleware/role.middleware");
+const { genreSourcePret } = require("../migrations/genreSource");
+const { proposer, MIN_PERSONNES, ACCORD_MIN } = require("../services/genreParPrenom");
 
 const router = express.Router();
 
@@ -516,6 +519,14 @@ router.patch("/:id", authMiddleware, async (req, res) => {
        la recherche d'adresse et le rapprochement des doublons. */
     if (email !== undefined) poser("email", email ? email.toLowerCase() : null);
     for (const [champ, valeur] of Object.entries(etatCivil)) poser(champ, valeur);
+    /* Un genre saisi à la main n'est plus une déduction : il perd sa marque,
+       et « défaire les genres déduits » ne l'effacera pas. Sans cela, corriger
+       un « Femme » déduit à tort en « Homme », puis tout défaire, viderait la
+       correction avec le reste. */
+    if (etatCivil.genre !== undefined) {
+      await genreSourcePret();
+      poser("genre_source", null);
+    }
     if (notes !== undefined) poser("notes", notes);
     if (interetStage !== undefined) poser("interet_stage", interetStage);
 
@@ -2346,6 +2357,142 @@ router.post("/fiches-absorbees/restaurer", authMiddleware, async (req, res) => {
     res.status(500).json({ error: "Erreur serveur" });
   } finally {
     client.release();
+  }
+});
+
+/* ===== GENRE DÉDUIT DU PRÉNOM =====
+ *
+ * Plusieurs milliers de fiches n'ont pas de genre, et la parité remise aux
+ * partenaires se calcule sur celles qui en ont un. La règle est dans
+ * services/genreParPrenom.js ; ici, seulement ce qui touche la base.
+ *
+ * Trois gestes, tous réservés aux administrateurs :
+ *
+ *  - voir ce qui peut être déduit, regroupé par prénom ;
+ *  - appliquer les groupes cochés ;
+ *  - tout défaire.
+ *
+ * Rien ne s'applique sans qu'un administrateur l'ait vu. Une déduction juste à
+ * 97 % reste fausse une fois sur trente ; présentée par prénom, l'erreur se
+ * repère — « Khadim → Femme » saute aux yeux — alors que fondue dans quatre
+ * mille fiches, elle passerait.
+ *
+ * Ces routes ne filtrent pas par périmètre : seul un administrateur y accède,
+ * et il voit déjà toute la base.
+ */
+
+/* Toutes les fiches, avec ce qu'il faut pour juger. Le tableau tient en
+   mémoire même pour plusieurs dizaines de milliers de lignes : quatre colonnes
+   courtes par fiche. */
+async function fichesPourGenre() {
+  const { rows } = await pool.query(
+    "SELECT id, nom, prenom, genre, genre_source FROM participants"
+  );
+  return rows;
+}
+
+router.get("/genre-deduit", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    await genreSourcePret();
+    const fiches = await fichesPourGenre();
+    const { propositions, refus, total, deductibles } = proposer(fiches);
+    const dejaDeduits = fiches.filter((f) => f.genre_source === "deduit").length;
+
+    res.json({
+      sans_genre: total,
+      deductibles,
+      deja_deduits: dejaDeduits,
+      seuils: { personnes: MIN_PERSONNES, accord: ACCORD_MIN },
+      /* Les identifiants restent au serveur : la liste peut en compter des
+         milliers, et l'application les recalcule de toute façon. */
+      propositions: propositions.map(({ ids, ...p }) => p),
+      /* Les prénoms qu'on n'a pas su trancher, les plus fréquents d'abord.
+         C'est par eux que la saisie à la main rapporte le plus. */
+      refus: refus.slice(0, 40),
+    });
+  } catch (err) {
+    console.error("[GENRE DEDUIT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/genre-deduit/appliquer", authMiddleware, requireAdmin, async (req, res) => {
+  const retenus = Array.isArray(req.body?.groupes)
+    ? [...new Set(req.body.groupes.filter((g) => typeof g === "string"))]
+    : [];
+  if (!retenus.length) return res.status(400).json({ error: "Aucun prénom retenu." });
+  if (retenus.length > 5000) return res.status(400).json({ error: "Trop de prénoms en une fois." });
+
+  const client = await pool.connect();
+  try {
+    await genreSourcePret();
+
+    /* Recalculé ici, jamais repris de la requête : ce qui s'applique est ce
+       que la règle dit maintenant. Entre l'affichage et le clic, quelqu'un a
+       pu renseigner des genres — un prénom devenu ambigu ne s'appliquera
+       plus, même s'il était coché. */
+    const { propositions } = proposer(await fichesPourGenre());
+    const parId = new Map(propositions.map((p) => [p.id, p]));
+    const ids = { F: [], H: [] };
+    let ignores = 0;
+    for (const id of retenus) {
+      const p = parId.get(id);
+      if (!p) { ignores += 1; continue; }
+      ids[p.genre].push(...p.ids);
+    }
+
+    await client.query("BEGIN");
+    const appliques = { F: 0, H: 0 };
+    for (const genre of ["F", "H"]) {
+      if (!ids[genre].length) continue;
+      /* La condition « encore vide » est reposée dans l'UPDATE : un genre
+         saisi entre-temps par quelqu'un n'est jamais écrasé. */
+      const r = await client.query(
+        `UPDATE participants
+            SET genre = $1, genre_source = 'deduit'
+          WHERE id = ANY($2::int[])
+            AND (genre IS NULL OR trim(genre) = '')`,
+        [genre, ids[genre]]
+      );
+      appliques[genre] = r.rowCount;
+    }
+    await client.query("COMMIT");
+
+    const total = appliques.F + appliques.H;
+    logAudit(req, "UPDATE", "participants", null, "Genre déduit du prénom", {
+      fiches: total,
+      femmes: appliques.F,
+      hommes: appliques.H,
+      prenoms: retenus.length - ignores,
+      ignores,
+    });
+
+    res.json({ appliques: total, femmes: appliques.F, hommes: appliques.H, ignores });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[GENRE DEDUIT APPLIQUER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+/* Tout défaire. Un genre corrigé à la main depuis a perdu sa marque « déduit »
+   (voir la route PATCH) : il n'est donc pas touché. */
+router.post("/genre-deduit/annuler", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    await genreSourcePret();
+    const r = await pool.query(
+      `UPDATE participants SET genre = NULL, genre_source = NULL
+        WHERE genre_source = 'deduit'`
+    );
+    logAudit(req, "UPDATE", "participants", null, "Genres déduits retirés", {
+      fiches: r.rowCount,
+    });
+    res.json({ annules: r.rowCount });
+  } catch (err) {
+    console.error("[GENRE DEDUIT ANNULER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
