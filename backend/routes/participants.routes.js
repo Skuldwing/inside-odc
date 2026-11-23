@@ -2419,7 +2419,12 @@ router.get("/genre-deduit", authMiddleware, requireAdmin, async (req, res) => {
          reprendre plutôt que de lui attribuer un genre à l'aveugle. */
       refus: (() => {
         const roles = compterRoles(fiches);
-        return refus.map((r) => ({ ...r, ressemble_nom: r.cle ? ressembleNom(r.cle, roles) : false }));
+        return refus.map((r) => {
+          const nom = r.cle ? ressembleNom(r.cle, roles) : false;
+          /* Un nom de famille ne reçoit pas de suggestion de genre : c'est la
+             fiche qu'il faut remettre dans l'ordre. */
+          return { ...r, ressemble_nom: nom, suggestion: nom ? null : r.suggestion };
+        });
       })(),
     });
   } catch (err) {
@@ -2548,6 +2553,64 @@ router.post("/genre-deduit/attribuer", authMiddleware, requireAdmin, async (req,
   } catch (err) {
     console.error("[GENRE ATTRIBUER]", err);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Plusieurs prénoms d'un coup. Le geste par prénom, répété des centaines de
+   fois, ne se faisait pas : il reste des centaines de prénoms vus une ou deux
+   fois chacun. L'écran prépare la liste — suggestions cochées, choix ajustés —
+   et l'envoie en une fois. Mêmes règles que pour un prénom seul : seules les
+   fiches encore sans genre sont écrites, et elles portent la marque
+   « deduit ». */
+router.post("/genre-deduit/attribuer-lot", authMiddleware, requireAdmin, async (req, res) => {
+  const choix = Array.isArray(req.body?.choix) ? req.body.choix : [];
+  if (!choix.length) return res.status(400).json({ error: "Aucun prénom retenu." });
+  if (choix.length > 5000) return res.status(400).json({ error: "Trop de prénoms en une fois." });
+
+  const parCle = new Map();
+  for (const c of choix) {
+    const cle = normaliserPrenom(typeof c?.prenom === "string" ? c.prenom : "");
+    if (!cle || (c.genre !== "F" && c.genre !== "H")) {
+      return res.status(400).json({ error: "Chaque prénom doit porter « F » ou « H »." });
+    }
+    parCle.set(cle, c.genre);
+  }
+
+  const client = await pool.connect();
+  try {
+    await genreSourcePret();
+    const ids = { F: [], H: [] };
+    for (const f of await fichesSansGenre()) {
+      const genre = parCle.get(normaliserPrenom(f.prenom));
+      if (genre) ids[genre].push(f.id);
+    }
+
+    await client.query("BEGIN");
+    const ecrits = { F: 0, H: 0 };
+    for (const genre of ["F", "H"]) {
+      if (!ids[genre].length) continue;
+      const r = await client.query(
+        `UPDATE participants SET genre = $1, genre_source = 'deduit'
+          WHERE id = ANY($2::int[])
+            AND (genre IS NULL OR trim(genre) = '')`,
+        [genre, ids[genre]]
+      );
+      ecrits[genre] = r.rowCount;
+    }
+    await client.query("COMMIT");
+
+    logAudit(req, "UPDATE", "participants", null, "Genre attribué par prénom, en lot", {
+      prenoms: parCle.size,
+      femmes: ecrits.F,
+      hommes: ecrits.H,
+    });
+    res.json({ attribues: ecrits.F + ecrits.H, femmes: ecrits.F, hommes: ecrits.H, prenoms: parCle.size });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[GENRE ATTRIBUER LOT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
   }
 });
 

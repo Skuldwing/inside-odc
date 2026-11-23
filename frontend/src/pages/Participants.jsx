@@ -1016,11 +1016,33 @@ function GenresManquants({ onChange }) {
   const [prenomOuvert, setPrenomOuvert] = useState(null);
   const [fichesPrenom, setFichesPrenom] = useState([]);
   const [chargementFiches, setChargementFiches] = useState(false);
+  /* Le genre choisi pour chaque prénom restant, et ceux qu'on applique. Les
+     suggestions arrivent choisies et cochées : l'essentiel du travail se
+     réduit à relire, décocher ce qui choque, et valider une fois. */
+  const [choixRefus, setChoixRefus] = useState(() => new Map());
+  const [cochesRefus, setCochesRefus] = useState(() => new Set());
+  const [filtreRefus, setFiltreRefus] = useState("tous");
+  /* Les prénoms déjà vus : une suggestion ne doit pas revenir se cocher après
+     qu'on l'a décochée, quand le panneau se recharge. */
+  const dejaVus = useRef(new Set());
 
   const charger = useCallback(async () => {
     try {
       const r = await api.get("/participants/genre-deduit");
       setData(r.data);
+      const nouveaux = (r.data.refus || []).filter((x) => x.cle && !dejaVus.current.has(x.cle));
+      nouveaux.forEach((x) => dejaVus.current.add(x.cle));
+      const suggeres = nouveaux.filter((x) => x.suggestion);
+      setChoixRefus((avant) => {
+        const m = new Map(avant);
+        suggeres.forEach((x) => m.set(x.cle, x.suggestion.genre));
+        return m;
+      });
+      setCochesRefus((avant) => {
+        const c = new Set(avant);
+        suggeres.forEach((x) => c.add(x.cle));
+        return c;
+      });
     } catch {
       setData(null); /* silencieux : c'est un panneau d'appoint, pas la page */
     }
@@ -1076,32 +1098,62 @@ function GenresManquants({ onChange }) {
     }
   };
 
-  /* Attribuer un genre à toutes les fiches d'un prénom que la règle n'a pas
-     tranché. La confirmation dit ce que la base sait du prénom : pour un
-     prénom partagé, c'est l'information qui doit faire hésiter. */
-  const attribuerPrenom = async (r, genre) => {
-    const libelle = genre === "F" ? "Femme" : "Homme";
-    const fiches = `${r.fiches} fiche${r.fiches > 1 ? "s" : ""}`;
-    const partage = r.raison === "ambigu";
+  /* Choisir un genre pour un prénom le coche ; décocher le garde en mémoire,
+     au cas où l'on y reviendrait. */
+  const choisir = (cle, genre) => {
+    setChoixRefus((avant) => new Map(avant).set(cle, genre));
+    setCochesRefus((avant) => new Set(avant).add(cle));
+  };
+  const basculerRefus = (cle) =>
+    setCochesRefus((avant) => {
+      const c = new Set(avant);
+      if (c.has(cle)) c.delete(cle); else c.add(cle);
+      return c;
+    });
+
+  /* Tous les prénoms cochés, en une fois. C'est ce qui manquait : il reste des
+     centaines de prénoms vus une ou deux fois, et un clic par prénom ne se
+     faisait pas. */
+  const appliquerLot = async (lot) => {
+    const fiches = lot.reduce((s, r) => s + r.fiches, 0);
+    const femmes = lot.filter((r) => choixRefus.get(r.cle) === "F").length;
+    /* Un prénom porté par les deux genres, mis d'un bloc, fera forcément
+       quelques erreurs : on le dit, chiffres à l'appui, avant d'écrire. */
+    const partages = lot.filter((r) => r.raison === "ambigu" && r.f > 0 && r.h > 0);
+    const avertissement = partages.length
+      ? ` Attention : ${partages.length === 1 ? "un prénom est porté" : `${partages.length} prénoms sont portés`} ` +
+        "par des femmes et des hommes (" +
+        partages.slice(0, 3).map((r) => `${r.prenom} : ${r.f} F, ${r.h} H`).join(" ; ") +
+        (partages.length > 3 ? " ; …" : "") +
+        ") — certaines de ces fiches seront fausses."
+      : "";
     const ok = await confirm({
-      title: `« ${r.prenom} » → ${libelle} ?`,
-      body: partage
-        ? `Attention : dans la base, ${r.premier ? `« ${r.premier} »` : "ce prénom"} est porté par ` +
-          `${r.f} femme${r.f > 1 ? "s" : ""} et ${r.h} homme${r.h > 1 ? "s" : ""}. Les ${fiches} sans genre ` +
-          `recevront toutes « ${libelle} ». S'il y a un doute, regardez plutôt les fiches une à une.`
-        : `Les ${fiches} « ${r.prenom} » sans genre recevront « ${libelle} ». Elles restent marquées ` +
-          `« déduit du prénom » et se retirent avec les autres.`,
-      confirmLabel: `Attribuer « ${libelle} »`,
+      title: `Renseigner ${fiches.toLocaleString("fr-FR")} fiche${fiches > 1 ? "s" : ""} (${lot.length} prénom${lot.length > 1 ? "s" : ""}) ?`,
+      body:
+        `${femmes} prénom${femmes > 1 ? "s" : ""} en Femme, ${lot.length - femmes} en Homme. Seules les ` +
+        "fiches encore sans genre sont écrites. Elles restent marquées « déduit du prénom » et se " +
+        "retirent avec les autres." + avertissement,
+      confirmLabel: "Renseigner",
     });
     if (!ok) return;
     setEnCours(true);
     try {
-      const rep = await api.post("/participants/genre-deduit/attribuer", { prenom: r.cle, genre });
-      toast.success(`${rep.data.attribues} fiche${rep.data.attribues > 1 ? "s" : ""} « ${r.prenom} » → ${libelle}.`);
-      if (prenomOuvert === r.cle) setPrenomOuvert(null);
+      const rep = await api.post("/participants/genre-deduit/attribuer-lot", {
+        choix: lot.map((r) => ({ prenom: r.cle, genre: choixRefus.get(r.cle) })),
+      });
+      toast.success(
+        `${rep.data.attribues.toLocaleString("fr-FR")} fiche${rep.data.attribues > 1 ? "s" : ""} renseignée${rep.data.attribues > 1 ? "s" : ""} ` +
+          `(${rep.data.femmes} F, ${rep.data.hommes} H).`
+      );
+      setCochesRefus((avant) => {
+        const c = new Set(avant);
+        lot.forEach((r) => c.delete(r.cle));
+        return c;
+      });
+      setPrenomOuvert(null);
       await apresEcriture();
     } catch (err) {
-      toast.error(err?.response?.data?.error || "L'attribution n'a pas été enregistrée.");
+      toast.error(err?.response?.data?.error || "Les genres n'ont pas été enregistrés.");
     } finally {
       setEnCours(false);
     }
@@ -1170,9 +1222,23 @@ function GenresManquants({ onChange }) {
   };
 
   const terme = recherche.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const refus = (data.refus || []).filter((r) => !terme || (r.cle || "").includes(terme));
+  const tousRefus = data.refus || [];
+  const refus = tousRefus
+    .filter((r) => !terme || (r.cle || "").includes(terme))
+    .filter((r) =>
+      filtreRefus === "suggeres" ? Boolean(r.suggestion)
+        : filtreRefus === "sans" ? !r.suggestion
+        : true
+    );
   const refusVisibles = refus.slice(0, visibles);
-  const fichesRefusees = (data.refus || []).reduce((s, r) => s + r.fiches, 0);
+  const fichesRefusees = tousRefus.reduce((s, r) => s + r.fiches, 0);
+  const nbSuggeres = tousRefus.filter((r) => r.suggestion).length;
+  /* Ce qui partira au clic : coché, avec un genre choisi, et qui n'est pas un
+     nom de famille. */
+  const lotRefus = tousRefus.filter(
+    (r) => r.cle && !r.ressemble_nom && cochesRefus.has(r.cle) && choixRefus.get(r.cle)
+  );
+  const fichesLot = lotRefus.reduce((s, r) => s + r.fiches, 0);
 
   const boutonGenre = (genre, onClick, petit = false) => (
     <button
@@ -1332,21 +1398,27 @@ function GenresManquants({ onChange }) {
           )}
 
           {/* ---- 2. Ce que la règle ne tranche pas ----
-              Montré sans aucun geste jusqu'ici : on voyait les fiches restantes
-              sans pouvoir rien en faire. Le plus fréquent d'abord, puisqu'un
-              prénom réglé en règle beaucoup d'un coup. */}
-          {(data.refus || []).length > 0 && (
+              Des centaines de prénoms vus une ou deux fois. Un geste par
+              prénom ne se faisait pas : la liste arrive préparée — une
+              suggestion cochée là où la base en dit assez —, on relit, on
+              corrige ce qui choque, et l'on valide une seule fois. */}
+          {tousRefus.length > 0 && (
             <div>
               <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
                 <div>
                   <p className="text-xs font-medium text-slate-700">
                     {propositions.length > 0 ? "2. " : ""}Ce que la base ne permet pas de trancher —{" "}
                     {fichesRefusees.toLocaleString("fr-FR")} fiche{fichesRefusees > 1 ? "s" : ""},{" "}
-                    {data.refus.length.toLocaleString("fr-FR")} prénom{data.refus.length > 1 ? "s" : ""}
+                    {tousRefus.length.toLocaleString("fr-FR")} prénom{tousRefus.length > 1 ? "s" : ""}
                   </p>
                   <p className="text-xs text-slate-500">
-                    Si vous connaissez le prénom, attribuez-le en un clic. S&apos;il est mixte, ouvrez
-                    les fiches et tranchez une à une.
+                    {nbSuggeres > 0 && (
+                      <>
+                        {nbSuggeres.toLocaleString("fr-FR")} ont une suggestion, déjà choisie et cochée.{" "}
+                      </>
+                    )}
+                    Relisez, choisissez Femme ou Homme pour les autres, puis validez tout d&apos;un coup.
+                    Pour un prénom mixte, ouvrez les fiches une à une.
                   </p>
                 </div>
                 <div className="relative">
@@ -1362,38 +1434,128 @@ function GenresManquants({ onChange }) {
                 </div>
               </div>
 
-              <div className="max-h-[28rem] overflow-y-auto rounded-xl border border-slate-200">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs">
+                  {[
+                    ["tous", "Tous"],
+                    ["suggeres", `Avec suggestion (${nbSuggeres})`],
+                    ["sans", `Sans suggestion (${tousRefus.length - nbSuggeres})`],
+                  ].map(([cle, libelle]) => (
+                    <button
+                      key={cle}
+                      type="button"
+                      onClick={() => { setFiltreRefus(cle); setVisibles(50); }}
+                      className={`rounded-md px-2.5 py-1 font-medium transition ${
+                        filtreRefus === cle ? "bg-teal-600 text-white" : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {libelle}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-3 text-xs">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCochesRefus((avant) => {
+                        const c = new Set(avant);
+                        tousRefus.forEach((r) => { if (r.suggestion && choixRefus.get(r.cle)) c.add(r.cle); });
+                        return c;
+                      })
+                    }
+                    className="font-medium text-teal-700 hover:underline"
+                  >
+                    Cocher toutes les suggestions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCochesRefus(new Set())}
+                    className="font-medium text-slate-500 hover:underline"
+                  >
+                    Tout décocher
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[32rem] overflow-y-auto rounded-xl border border-slate-200">
                 <table className="table">
                   <thead className="table-head sticky top-0 z-10">
                     <tr>
+                      <th className="w-10 px-3 py-2"><span className="sr-only">Retenu</span></th>
                       <th className="px-3 py-2">Prénom</th>
                       <th className="px-3 py-2 text-right">Fiches</th>
-                      <th className="px-3 py-2">Pourquoi</th>
-                      <th className="px-3 py-2 text-right">Attribuer</th>
+                      <th className="px-3 py-2">Suggestion</th>
+                      <th className="px-3 py-2">Genre</th>
+                      <th className="px-3 py-2 text-right"><span className="sr-only">Fiches une à une</span></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {refusVisibles.map((r) => (
-                      <Fragment key={`${r.raison}-${r.cle}`}>
-                        <tr className="table-row">
-                          <td className="px-3 py-2 font-medium text-slate-800">
-                            {r.prenom || <span className="italic text-slate-500">sans prénom</span>}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">{r.fiches.toLocaleString("fr-FR")}</td>
-                          <td className={`px-3 py-2 text-xs ${r.raison === "ambigu" || r.ressemble_nom ? "text-amber-700" : "text-slate-500"}`}>
-                            {/* Un « prénom » qui est un nom de famille ne se
-                                règle pas en lui attribuant un genre : la fiche
-                                a son nom et son prénom inversés. */}
-                            {r.ressemble_nom
-                              ? "c'est un nom de famille — nom et prénom inversés ?"
-                              : (RAISONS_REFUS[r.raison] || (() => r.raison))(r)}
-                          </td>
-                          <td className="px-3 py-2">
-                            <div className="flex items-center justify-end gap-1.5">
-                              {/* Sans prénom, rien à quoi rattacher une
-                                  décision collective : fiche par fiche. */}
-                              {r.cle && boutonGenre("F", () => attribuerPrenom(r, "F"))}
-                              {r.cle && boutonGenre("H", () => attribuerPrenom(r, "H"))}
+                    {refusVisibles.map((r) => {
+                      const choix = choixRefus.get(r.cle);
+                      /* Un nom de famille ne se règle pas par un genre :
+                         c'est la fiche qu'il faut remettre dans l'ordre. Sans
+                         prénom, rien à quoi rattacher une décision. */
+                      const bloque = !r.cle || r.ressemble_nom;
+                      const coche = !bloque && Boolean(choix) && cochesRefus.has(r.cle);
+                      return (
+                        <Fragment key={`${r.raison}-${r.cle}`}>
+                          <tr className={`table-row ${bloque || coche ? "" : "opacity-70"}`}>
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 accent-teal-600"
+                                checked={coche}
+                                disabled={bloque || !choix}
+                                onChange={() => basculerRefus(r.cle)}
+                                aria-label={`Retenir ${r.prenom || "sans prénom"}`}
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="font-medium text-slate-800">
+                                {r.prenom || <span className="italic text-slate-500">sans prénom</span>}
+                              </span>
+                              <span className={`block text-[11px] ${r.raison === "ambigu" || r.ressemble_nom ? "text-amber-700" : "text-slate-500"}`}>
+                                {r.ressemble_nom
+                                  ? "c'est un nom de famille — nom et prénom inversés ?"
+                                  : (RAISONS_REFUS[r.raison] || (() => r.raison))(r)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.fiches.toLocaleString("fr-FR")}</td>
+                            <td className="px-3 py-2 text-xs">
+                              {r.suggestion ? (
+                                <span className="text-slate-600">
+                                  <span className={`font-medium ${r.suggestion.genre === "F" ? "text-orange-700" : "text-slate-800"}`}>
+                                    {r.suggestion.genre === "F" ? "Femme" : "Homme"}
+                                  </span>
+                                  <span className="text-slate-500"> · {r.suggestion.detail}</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {!bloque && (
+                                <div className="inline-flex rounded-lg border border-slate-200 p-0.5" role="group" aria-label={`Genre pour ${r.prenom}`}>
+                                  {["F", "H"].map((g) => (
+                                    <button
+                                      key={g}
+                                      type="button"
+                                      onClick={() => choisir(r.cle, g)}
+                                      aria-pressed={choix === g}
+                                      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium transition ${
+                                        choix === g
+                                          ? g === "F" ? "bg-orange-500 text-white" : "bg-slate-700 text-white"
+                                          : "text-slate-600 hover:bg-slate-50"
+                                      }`}
+                                    >
+                                      {g === "F" ? <Venus className="h-3 w-3" /> : <Mars className="h-3 w-3" />}
+                                      {g === "F" ? "Femme" : "Homme"}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right">
                               <button
                                 type="button"
                                 onClick={() => voirFiches(r)}
@@ -1403,47 +1565,47 @@ function GenresManquants({ onChange }) {
                                 <Eye className="h-3.5 w-3.5" />
                                 {prenomOuvert === r.cle ? "Fermer" : "Une à une"}
                               </button>
-                            </div>
-                          </td>
-                        </tr>
-                        {prenomOuvert === r.cle && (
-                          <tr className="bg-teal-50/40">
-                            <td colSpan={4} className="px-3 py-2">
-                              {chargementFiches ? (
-                                <p className="flex items-center gap-2 text-xs text-slate-500">
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement…
-                                </p>
-                              ) : (
-                                <ul className="divide-y divide-teal-100">
-                                  {fichesPrenom.map((f) => (
-                                    <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
-                                      <span className="min-w-0 text-xs">
-                                        <Link
-                                          to={`/participants/${f.id}`}
-                                          className="font-medium text-slate-800 hover:text-teal-700 hover:underline"
-                                        >
-                                          {f.nom} {f.prenom}
-                                        </Link>
-                                        <span className="text-slate-500">
-                                          {[f.structure, f.age_range, f.derniere_activite]
-                                            .filter(Boolean)
-                                            .map((x) => ` · ${x}`)
-                                            .join("")}
-                                        </span>
-                                      </span>
-                                      <span className="flex gap-1.5">
-                                        {boutonGenre("F", () => attribuerFiche(f, "F"), true)}
-                                        {boutonGenre("H", () => attribuerFiche(f, "H"), true)}
-                                      </span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
                             </td>
                           </tr>
-                        )}
-                      </Fragment>
-                    ))}
+                          {prenomOuvert === r.cle && (
+                            <tr className="bg-teal-50/40">
+                              <td colSpan={6} className="px-3 py-2">
+                                {chargementFiches ? (
+                                  <p className="flex items-center gap-2 text-xs text-slate-500">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Chargement…
+                                  </p>
+                                ) : (
+                                  <ul className="divide-y divide-teal-100">
+                                    {fichesPrenom.map((f) => (
+                                      <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                                        <span className="min-w-0 text-xs">
+                                          <Link
+                                            to={`/participants/${f.id}`}
+                                            className="font-medium text-slate-800 hover:text-teal-700 hover:underline"
+                                          >
+                                            {f.nom} {f.prenom}
+                                          </Link>
+                                          <span className="text-slate-500">
+                                            {[f.structure, f.age_range, f.derniere_activite]
+                                              .filter(Boolean)
+                                              .map((x) => ` · ${x}`)
+                                              .join("")}
+                                          </span>
+                                        </span>
+                                        <span className="flex gap-1.5">
+                                          {boutonGenre("F", () => attribuerFiche(f, "F"), true)}
+                                          {boutonGenre("H", () => attribuerFiche(f, "H"), true)}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1451,16 +1613,36 @@ function GenresManquants({ onChange }) {
               {refus.length > visibles && (
                 <button
                   type="button"
-                  onClick={() => setVisibles((v) => v + 100)}
+                  onClick={() => setVisibles((v) => v + 200)}
                   className="mt-2 text-xs font-medium text-teal-700 hover:underline"
                 >
-                  Afficher {Math.min(100, refus.length - visibles)} prénoms de plus
+                  Afficher {Math.min(200, refus.length - visibles)} prénoms de plus
                   ({(refus.length - visibles).toLocaleString("fr-FR")} restants)
                 </button>
               )}
               {terme && refus.length === 0 && (
                 <p className="mt-2 text-xs text-slate-500">Aucun prénom restant ne correspond.</p>
               )}
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="max-w-xl text-xs text-slate-500">
+                  Les suggestions viennent de votre base : le même prénom vu peu de fois mais
+                  toujours du même genre, un mot sûr dans un prénom composé, ou une orthographe à une
+                  lettre près d&apos;un prénom connu. Ce ne sont que des propositions — rien ne
+                  s&apos;écrit sans votre validation.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => appliquerLot(lotRefus)}
+                  disabled={enCours || lotRefus.length === 0}
+                  className="flex items-center gap-1.5 rounded-xl bg-teal-600 px-3 py-2 text-xs font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+                >
+                  {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                  {enCours
+                    ? "En cours…"
+                    : `Renseigner ${fichesLot.toLocaleString("fr-FR")} fiche${fichesLot > 1 ? "s" : ""} (${lotRefus.length} prénom${lotRefus.length > 1 ? "s" : ""})`}
+                </button>
+              </div>
             </div>
           )}
 
