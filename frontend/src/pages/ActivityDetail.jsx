@@ -98,12 +98,45 @@ const TASK_STATUS_STYLE = {
 const taskStatusLabel = (value) =>
   TASK_STATUSES.find((s) => s.value === value)?.label || "À faire";
 
+/* Les valeurs proposées pour une fiche participant, écrites une fois.
+   Le formulaire d'inscription et la correction en ligne doivent offrir les
+   mêmes : deux listes qui divergent, et l'on se retrouve avec « 18-25 ans »
+   d'un côté et « 18 - 25 ans » de l'autre, que plus aucun comptage ne
+   rapproche. */
+const GENRES = [
+  { value: "F", label: "Femme" },
+  { value: "H", label: "Homme" },
+  { value: "Autre", label: "Autre" },
+];
+
+const TRANCHES_AGE = [
+  "Moins de 18 ans",
+  "18-25 ans",
+  "26-35 ans",
+  "36-45 ans",
+  "Plus de 45 ans",
+];
+
+/* Ce qu'une ligne de la liste de présence laisse corriger. L'ordre est celui
+   des colonnes à l'écran. */
+const CHAMPS_FICHE = [
+  "nom", "prenom", "email", "telephone", "genre", "age_range", "structure", "statut",
+];
+
 export default function ActivityDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const confirm = useConfirm();
-  const { role, isViewer } = useAuth();
+  const { role, isViewer, isAdmin } = useAuth();
+
+  /* Correction d'une ligne de la liste de présence, réservée aux
+     administrateurs : ce sont ces colonnes qui alimentent les comptages remis
+     aux partenaires. « ligneEditee » porte l'identifiant de la fiche ouverte,
+     « brouillon » ce qui est en train d'être tapé. */
+  const [ligneEditee, setLigneEditee] = useState(null);
+  const [brouillon, setBrouillon] = useState({});
+  const [enregistrementLigne, setEnregistrementLigne] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -411,6 +444,68 @@ export default function ActivityDetail() {
       fetchDetail();
     } catch (err) {
       toast.error(err?.response?.data?.error || "Erreur lors du retrait.");
+    }
+  };
+
+  /* ===== CORRIGER UNE LIGNE DE LA LISTE =====
+     Une liste de présence se remplit debout, souvent à la hâte : le téléphone
+     manque, le genre n'a pas été coché, la structure est vide. Jusqu'ici on
+     voyait le trou sans pouvoir le combler — il fallait ouvrir la fiche du
+     participant, et même là, le serveur ne savait pas écrire ces colonnes. */
+  const ouvrirEditionLigne = (p) => {
+    setLigneEditee(p.id);
+    setBrouillon(Object.fromEntries(CHAMPS_FICHE.map((c) => [c, p[c] ?? ""])));
+  };
+
+  const annulerEditionLigne = () => {
+    setLigneEditee(null);
+    setBrouillon({});
+  };
+
+  const enregistrerLigne = async (p) => {
+    if (!brouillon.nom?.trim() || !brouillon.prenom?.trim()) {
+      toast.error("Le nom et le prénom sont obligatoires.");
+      return;
+    }
+
+    /* On n'envoie que ce qui a bougé. Renvoyer les huit champs ferait
+       apparaître la fiche entière dans le journal d'audit à chaque virgule
+       corrigée, et écraserait au passage ce qu'un collègue vient de changer
+       dans une colonne qu'on n'a pas touchée. */
+    const modifies = {};
+    for (const champ of CHAMPS_FICHE) {
+      const avant = p[champ] ?? "";
+      const apres = (brouillon[champ] ?? "").trim();
+      if (avant !== apres) modifies[champ] = apres;
+    }
+
+    if (!Object.keys(modifies).length) {
+      annulerEditionLigne();
+      return;
+    }
+
+    setEnregistrementLigne(true);
+    try {
+      const res = await api.patch(`/participants/${p.id}`, modifies);
+      /* Mise à jour sur place plutôt qu'un rechargement complet : la page
+         porte aussi les photos, le formulaire et les statistiques, et rien de
+         tout cela n'a changé. */
+      setData((d) =>
+        d
+          ? {
+              ...d,
+              participants: d.participants.map((x) =>
+                x.id === p.id ? { ...x, ...res.data } : x
+              ),
+            }
+          : d
+      );
+      toast.success("Fiche mise à jour.");
+      annulerEditionLigne();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La modification n'a pas été enregistrée.");
+    } finally {
+      setEnregistrementLigne(false);
     }
   };
 
@@ -1139,7 +1234,153 @@ export default function ActivityDetail() {
                       </td>
                     </tr>
                   ) : (
-                    filteredParticipants.map((p) => (
+                    filteredParticipants.map((p) => {
+                      const enEdition = ligneEditee === p.id;
+
+                      const poser = (nom) => (e) =>
+                        setBrouillon((b) => ({ ...b, [nom]: e.target.value }));
+
+                      /* Entrée enregistre, Échap renonce : on corrige dix
+                         lignes d'affilée, et quitter la souris à chaque fois
+                         rendrait l'exercice pénible. */
+                      const touches = (e) => {
+                        if (e.key === "Enter") { e.preventDefault(); enregistrerLigne(p); }
+                        else if (e.key === "Escape") { e.preventDefault(); annulerEditionLigne(); }
+                      };
+
+                      /* L'attestation ne se corrige pas : c'est un fait, pas
+                         une saisie. La cellule est donc la même dans les deux
+                         états. */
+                      const celluleAttestation = (
+                        <td className="p-3 text-xs">
+                          {p.attestation_envoyee_le ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
+                              <CheckCircle2 className="w-3 h-3" /> Reçue
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">Non envoyée</span>
+                          )}
+                        </td>
+                      );
+
+                      if (enEdition) {
+                        return (
+                          <tr key={p.id} className="border-t border-orange-200 bg-orange-50/50">
+                            <td className="p-2 align-top">
+                              <div className="grid gap-1">
+                                <input
+                                  className="input text-xs py-1.5"
+                                  value={brouillon.nom ?? ""}
+                                  onChange={poser("nom")}
+                                  onKeyDown={touches}
+                                  placeholder="Nom"
+                                  aria-label="Nom"
+                                  autoFocus
+                                />
+                                <input
+                                  className="input text-xs py-1.5"
+                                  value={brouillon.prenom ?? ""}
+                                  onChange={poser("prenom")}
+                                  onKeyDown={touches}
+                                  placeholder="Prénom"
+                                  aria-label="Prénom"
+                                />
+                              </div>
+                            </td>
+                            <td className="p-2 align-top">
+                              <div className="grid gap-1">
+                                <input
+                                  type="email"
+                                  className="input text-xs py-1.5"
+                                  value={brouillon.email ?? ""}
+                                  onChange={poser("email")}
+                                  onKeyDown={touches}
+                                  placeholder="E-mail"
+                                  aria-label="E-mail"
+                                />
+                                <input
+                                  type="tel"
+                                  className="input text-xs py-1.5"
+                                  value={brouillon.telephone ?? ""}
+                                  onChange={poser("telephone")}
+                                  onKeyDown={touches}
+                                  placeholder="Téléphone"
+                                  aria-label="Téléphone"
+                                />
+                              </div>
+                            </td>
+                            <td className="p-2 align-top">
+                              <div className="grid gap-1">
+                                <select
+                                  className="select text-xs py-1.5"
+                                  value={brouillon.genre ?? ""}
+                                  onChange={poser("genre")}
+                                  onKeyDown={touches}
+                                  aria-label="Genre"
+                                >
+                                  <option value="">Genre —</option>
+                                  {GENRES.map((g) => (
+                                    <option key={g.value} value={g.value}>{g.label}</option>
+                                  ))}
+                                </select>
+                                <select
+                                  className="select text-xs py-1.5"
+                                  value={brouillon.age_range ?? ""}
+                                  onChange={poser("age_range")}
+                                  onKeyDown={touches}
+                                  aria-label="Tranche d'âge"
+                                >
+                                  <option value="">Tranche d&apos;âge —</option>
+                                  {TRANCHES_AGE.map((t) => (
+                                    <option key={t} value={t}>{t}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </td>
+                            <td className="p-2 align-top">
+                              <input
+                                className="input text-xs py-1.5"
+                                value={brouillon.structure ?? ""}
+                                onChange={poser("structure")}
+                                onKeyDown={touches}
+                                placeholder="Structure / école"
+                                aria-label="Structure ou école"
+                              />
+                            </td>
+                            <td className="p-2 align-top">
+                              <input
+                                className="input text-xs py-1.5"
+                                value={brouillon.statut ?? ""}
+                                onChange={poser("statut")}
+                                onKeyDown={touches}
+                                placeholder="Statut"
+                                aria-label="Statut"
+                              />
+                            </td>
+                            {celluleAttestation}
+                            <td className="p-2 align-top text-right">
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  onClick={() => enregistrerLigne(p)}
+                                  disabled={enregistrementLigne}
+                                  className="btn-primary text-xs py-1.5 px-2.5 disabled:opacity-60"
+                                >
+                                  {enregistrementLigne ? "Enregistrement…" : "Enregistrer"}
+                                </button>
+                                <button
+                                  onClick={annulerEditionLigne}
+                                  disabled={enregistrementLigne}
+                                  className="btn-ghost border text-xs py-1.5 px-2.5"
+                                >
+                                  Annuler
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return (
                       <tr key={p.id} className="table-row group hover:bg-orange-50/30 transition-colors">
                         <td className="p-3">
                           <Link
@@ -1188,17 +1429,24 @@ export default function ActivityDetail() {
                         <td className="p-3 text-xs text-slate-600">
                           {p.statut || "Participant"}
                         </td>
-                        <td className="p-3 text-xs">
-                          {p.attestation_envoyee_le ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
-                              <CheckCircle2 className="w-3 h-3" /> Reçue
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">Non envoyée</span>
-                          )}
-                        </td>
+                        {celluleAttestation}
                         <td className="p-3 text-right">
                           <div className="inline-flex items-center gap-1">
+                            {/* Réservé aux administrateurs : ces colonnes
+                                alimentent les comptages remis aux partenaires,
+                                et le serveur refuse de toute façon les autres
+                                rôles. Le bouton ne s'affiche pas plutôt que de
+                                mener à un refus. */}
+                            {isAdmin && (
+                              <button
+                                onClick={() => ouvrirEditionLigne(p)}
+                                className="p-1.5 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                title="Corriger cette ligne"
+                                aria-label={`Corriger la fiche de ${p.prenom} ${p.nom}`}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                            )}
                             <Link
                               to={`/participants/${p.id}`}
                               className="p-1.5 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
@@ -1218,7 +1466,8 @@ export default function ActivityDetail() {
                           </div>
                         </td>
                       </tr>
-                    ))
+                      );
+                    })
                   )}
                 </tbody>
               </table>

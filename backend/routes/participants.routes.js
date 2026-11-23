@@ -404,25 +404,60 @@ router.get("/doublons-nom", authMiddleware, async (req, res) => {
 });
 
 /**
- * Corriger l'identite d'une fiche, avant d'envoyer son attestation.
+ * Modifier une fiche participant.
  *
- * Une liste de presence est remplie a la main, souvent debout, parfois par
- * quelqu'un d'autre que l'interesse. « NDIAYE Ndiaye Fatou », « fatou »,
- * « Mouhamadou » pour « Mouhamed » : l'attestation portera exactement ce qui
- * est ecrit. C'est un document nominatif remis a une personne — l'erreur se
- * voit, et elle ne se rattrape pas apres l'envoi.
+ * ---- POURQUOI CETTE ROUTE A ETE REFAITE ----
  *
- * L'ecran de correction existait deja, et il appelait cette route. Elle
- * n'existait pas : chaque correction repondait 404 et affichait « la
- * correction n'a pas ete enregistree ». Personne ne pouvait donc rien
- * corriger, ni par activite, ni ailleurs.
+ * Deux « router.patch("/:id") » coexistaient dans ce fichier. Express sert le
+ * premier enregistre : le second, qui savait ecrire le telephone, le genre, la
+ * tranche d'age, la structure et le statut, n'a jamais ete atteint une seule
+ * fois. Il a ete ecrit, relu, deploye — et il ne repondait pas.
  *
- * « fiches » permet de corriger d'un coup toutes celles d'une meme personne.
- * L'ecran par participant regroupe plusieurs fiches sous une seule identite,
- * et l'attestation est composee a partir de la base au moment de l'envoi :
- * n'en corriger qu'une laisserait le document tirer son nom de l'une ou de
- * l'autre, sans qu'on puisse dire laquelle.
+ * Deux defauts en decoulaient, tous deux visibles en service :
+ *
+ *  - Ces cinq colonnes n'etaient modifiables nulle part une fois la fiche
+ *    creee. On voyait le trou dans la liste de presence sans pouvoir le
+ *    combler.
+ *
+ *  - L'ecran de profil envoie « notes » et « interet_stage » a cette meme
+ *    adresse. Il tombait donc sur la premiere route, qui exigeait un nom, un
+ *    prenom ou un email, et recevait « Rien a corriger ». Enregistrer une note
+ *    ou marquer un candidat au stage echouait, sans que la cause soit lisible.
+ *
+ * ---- CE QUE CHACUN PEUT ECRIRE ----
+ *
+ * L'identite — nom, prenom, email — et les notes restent ouvertes a qui peut
+ * ecrire. C'etait deja le cas, et une liste de presence se corrige souvent par
+ * celui qui l'a remplie ; restreindre apres coup fermerait l'ecran de
+ * correction d'identite des campagnes a ceux qui s'en servent.
+ *
+ * L'etat civil — telephone, genre, tranche d'age, structure, statut — est
+ * reserve aux administrateurs. Ce sont les colonnes qui alimentent les
+ * comptages remis aux partenaires : une tranche d'age changee deplace un
+ * chiffre dans un rapport.
+ *
+ * Le perimetre s'applique dans les deux cas : on ne modifie pas une fiche
+ * qu'on n'a pas le droit de voir.
+ *
+ * ---- POURQUOI LE NOM ET LE PRENOM NE S'EFFACENT PAS ----
+ *
+ * Une fiche sans nom ne designe plus personne, et l'attestation partirait a
+ * blanc. C'est un document nominatif remis a quelqu'un : l'erreur se voit, et
+ * elle ne se rattrape pas apres l'envoi. Les autres champs, eux, se vident.
+ *
+ * ---- « fiches » ----
+ *
+ * Corriger d'un coup toutes les fiches d'une meme personne. L'ecran par
+ * participant en regroupe plusieurs sous une seule identite, et l'attestation
+ * est composee a partir de la base au moment de l'envoi : n'en corriger qu'une
+ * laisserait le document tirer son nom de l'une ou de l'autre, sans qu'on
+ * puisse dire laquelle.
  */
+
+/* Liste fermee, et c'est ce qui rend sure la construction du SET : aucun nom
+   de colonne ne vient de la requete. */
+const CHAMPS_ETAT_CIVIL = ["telephone", "genre", "age_range", "structure", "statut"];
+
 router.patch("/:id", authMiddleware, async (req, res) => {
   try {
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
@@ -435,18 +470,56 @@ router.patch("/:id", authMiddleware, async (req, res) => {
     const ids = [...new Set([principal, ...autres])];
     if (ids.length > 200) return res.status(400).json({ error: "Trop de fiches en une fois." });
 
-    /* Le nom et le prenom ne s'effacent pas : une fiche sans nom ne designe
-       plus personne, et l'attestation partirait a blanc. L'adresse, si. */
+    /* « undefined » veut dire « ne touche pas a ce champ » ; une chaine vide
+       ou « null » veut dire « vide-le ». Les deux doivent rester distincts,
+       sans quoi un formulaire qui n'envoie que deux champs effacerait les
+       autres. */
     const texte = (v) => (typeof v === "string" ? v.trim() : undefined);
+    const videOuTexte = (v) => (v === null ? null : texte(v));
+
     const nom = texte(req.body?.nom);
     const prenom = texte(req.body?.prenom);
-    const email = req.body?.email === null ? null : texte(req.body?.email);
+    const email = videOuTexte(req.body?.email);
 
     if (nom !== undefined && !nom) return res.status(400).json({ error: "Le nom ne peut pas être vide." });
     if (prenom !== undefined && !prenom) return res.status(400).json({ error: "Le prénom ne peut pas être vide." });
-    if (nom === undefined && prenom === undefined && email === undefined) {
-      return res.status(400).json({ error: "Rien à corriger." });
+
+    const etatCivil = {};
+    for (const champ of CHAMPS_ETAT_CIVIL) {
+      if (req.body?.[champ] === undefined) continue;
+      const valeur = videOuTexte(req.body[champ]);
+      etatCivil[champ] = valeur === undefined || valeur === "" ? null : valeur;
     }
+    if (Object.keys(etatCivil).length && req.user.role !== "admin") {
+      return res.status(403).json({
+        error: "Seul un administrateur peut modifier ces informations.",
+      });
+    }
+
+    const notes = req.body?.notes === undefined
+      ? undefined
+      : (req.body.notes === null ? null : String(req.body.notes));
+    const interetStage = req.body?.interet_stage === undefined
+      ? undefined
+      : Boolean(req.body.interet_stage);
+
+    const colonnes = [];
+    const valeurs = [];
+    const poser = (colonne, valeur) => {
+      colonnes.push(`${colonne} = $${colonnes.length + 1}`);
+      valeurs.push(valeur);
+    };
+
+    if (nom !== undefined) poser("nom", nom);
+    if (prenom !== undefined) poser("prenom", prenom);
+    /* En minuscules, comme a la creation : c'est sur cette forme que reposent
+       la recherche d'adresse et le rapprochement des doublons. */
+    if (email !== undefined) poser("email", email ? email.toLowerCase() : null);
+    for (const [champ, valeur] of Object.entries(etatCivil)) poser(champ, valeur);
+    if (notes !== undefined) poser("notes", notes);
+    if (interetStage !== undefined) poser("interet_stage", interetStage);
+
+    if (!colonnes.length) return res.status(400).json({ error: "Rien à modifier." });
 
     /* Le perimetre s'applique : on ne corrige pas une fiche qu'on n'a pas le
        droit de voir. */
@@ -456,36 +529,41 @@ router.patch("/:id", authMiddleware, async (req, res) => {
     if (!permis.has(principal)) return res.status(404).json({ error: "Fiche introuvable." });
     const retenues = ids.filter((i) => permis.has(i));
 
+    const COLONNES_RENDUES =
+      "id, nom, prenom, email, telephone, genre, age_range, structure, statut, notes, interet_stage";
+
     const { rows: avant } = await pool.query(
-      "SELECT id, nom, prenom, email FROM participants WHERE id = ANY($1::int[])",
+      `SELECT ${COLONNES_RENDUES} FROM participants WHERE id = ANY($1::int[])`,
       [retenues]
     );
     if (!avant.length) return res.status(404).json({ error: "Fiche introuvable." });
 
-    const colonnes = [];
-    const valeurs = [];
-    if (nom !== undefined) { colonnes.push(`nom = $${colonnes.length + 1}`); valeurs.push(nom); }
-    if (prenom !== undefined) { colonnes.push(`prenom = $${colonnes.length + 1}`); valeurs.push(prenom); }
-    if (email !== undefined) { colonnes.push(`email = $${colonnes.length + 1}`); valeurs.push(email || null); }
-
     const { rows: apres } = await pool.query(
       `UPDATE participants SET ${colonnes.join(", ")}
         WHERE id = ANY($${valeurs.length + 1}::int[])
-        RETURNING id, nom, prenom, email, telephone, genre, structure, age_range, statut`,
+        RETURNING ${COLONNES_RENDUES}`,
       [...valeurs, avant.map((f) => f.id)]
     );
 
     /* Une trace par fiche, avec l'avant : c'est ce qui permet de revenir en
-       arriere, et de repondre a « qui a change ce nom ? ». */
+       arriere, et de repondre a « qui a change cette date de naissance ? ».
+       On ne journalise que ce qui a reellement bouge — une ligne listant dix
+       champs dont un seul a change ne se lit pas. */
+    const suivis = ["nom", "prenom", "email", ...CHAMPS_ETAT_CIVIL, "interet_stage"];
     const parId = new Map(avant.map((f) => [f.id, f]));
     for (const f of apres) {
       const ancien = parId.get(f.id) || {};
+      const changements = {};
+      for (const champ of suivis) {
+        if (ancien[champ] !== f[champ]) {
+          changements[champ] = { avant: ancien[champ] ?? null, apres: f[champ] ?? null };
+        }
+      }
+      if (notes !== undefined && ancien.notes !== f.notes) changements.notes = { modifiees: true };
+      if (!Object.keys(changements).length) continue;
+
       logAudit(req, "UPDATE", "participants", f.id, `${f.prenom || ""} ${f.nom || ""}`.trim(), {
-        motif: "identité corrigée avant envoi",
-        avant: `${ancien.prenom || ""} ${ancien.nom || ""}`.trim() || null,
-        apres: `${f.prenom || ""} ${f.nom || ""}`.trim() || null,
-        email_avant: ancien.email || null,
-        email_apres: f.email || null,
+        champs: changements,
         /* Corrigee avec d'autres fiches de la meme personne : sans cette
            mention, chaque ligne du journal semblerait une correction isolee. */
         avec: retenues.length > 1 ? retenues.filter((i) => i !== f.id) : undefined,
@@ -495,7 +573,7 @@ router.patch("/:id", authMiddleware, async (req, res) => {
     const principale = apres.find((f) => f.id === principal) || apres[0];
     res.json({ ...principale, fiches_corrigees: apres.length });
   } catch (err) {
-    console.error("[PARTICIPANT CORRIGER]", err);
+    console.error("[PARTICIPANT MODIFIER]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
@@ -2399,54 +2477,10 @@ router.get("/:id", authMiddleware, async (req, res) => {
 });
 
 /* ===== MISE À JOUR DU PARTICIPANT (Coordonnées, notes, intérêt stage) ===== */
-router.patch("/:id", authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { nom, prenom, email, telephone, genre, age_range, structure, statut, notes, interet_stage } = req.body;
-
-    const existing = await pool.query("SELECT * FROM participants WHERE id = $1", [id]);
-    if (!existing.rows.length) return res.status(404).json({ error: "Participant introuvable" });
-
-    const p = existing.rows[0];
-    const updated = await pool.query(
-      `UPDATE participants
-          SET nom = COALESCE($1, nom),
-              prenom = COALESCE($2, prenom),
-              email = $3,
-              telephone = $4,
-              genre = COALESCE($5, genre),
-              age_range = COALESCE($6, age_range),
-              structure = $7,
-              statut = $8,
-              notes = $9,
-              interet_stage = COALESCE($10, interet_stage)
-        WHERE id = $11
-        RETURNING id, nom, prenom, email, telephone, genre, age_range, structure, statut, notes, interet_stage`,
-      [
-        nom !== undefined ? nom.trim() : p.nom,
-        prenom !== undefined ? prenom.trim() : p.prenom,
-        email !== undefined ? (email ? email.trim().toLowerCase() : null) : p.email,
-        telephone !== undefined ? (telephone ? telephone.trim() : null) : p.telephone,
-        genre !== undefined ? genre : p.genre,
-        age_range !== undefined ? age_range : p.age_range,
-        structure !== undefined ? (structure ? structure.trim() : null) : p.structure,
-        statut !== undefined ? statut : p.statut,
-        notes !== undefined ? notes : p.notes,
-        interet_stage !== undefined ? Boolean(interet_stage) : p.interet_stage,
-        id,
-      ]
-    );
-
-    logAudit(req, "UPDATE", "participants", id, `${updated.rows[0].prenom} ${updated.rows[0].nom}`, {
-      notes_modifiees: notes !== undefined,
-      interet_stage: updated.rows[0].interet_stage,
-    });
-
-    res.json(updated.rows[0]);
-  } catch (err) {
-    console.error("[UPDATE PARTICIPANT]", err);
-    res.status(500).json({ error: "Erreur serveur" });
-  }
-});
+/* La seconde route « PATCH /:id » se trouvait ici. Express ne sert que la
+   premiere enregistree : celle-ci n'a jamais repondu. Ce qu'elle savait faire
+   — telephone, genre, tranche d'age, structure, statut — a ete repris plus
+   haut, avec le controle de perimetre et la reserve aux administrateurs qui
+   lui manquaient. */
 
 module.exports = router;
