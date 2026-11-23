@@ -17,6 +17,10 @@ const { contactsCollectifs } = require("../services/contactsCollectifs");
 const requireAdmin = require("../middleware/role.middleware");
 const { genreSourcePret } = require("../migrations/genreSource");
 const { proposer, normaliserPrenom, MIN_PERSONNES, ACCORD_MIN } = require("../services/genreParPrenom");
+const {
+  detecter: detecterInverses, compterRoles, ressembleNom,
+  MIN_VUES: MIN_VUES_NOMS, PART_MIN: PART_MIN_NOMS,
+} = require("../services/nomsInverses");
 
 const router = express.Router();
 
@@ -2409,8 +2413,14 @@ router.get("/genre-deduit", authMiddleware, requireAdmin, async (req, res) => {
       /* Les prénoms qu'on n'a pas su trancher, les plus fréquents d'abord.
          Tous, et non les quarante premiers : l'écran permet désormais de leur
          attribuer un genre, et un prénom absent de la liste serait un prénom
-         qu'on ne peut plus traiter. */
-      refus,
+         qu'on ne peut plus traiter.
+         « ressemble_nom » signale un prénom qui est en fait un nom de famille :
+         la fiche a son nom et son prénom inversés, et c'est là qu'il faut la
+         reprendre plutôt que de lui attribuer un genre à l'aveugle. */
+      refus: (() => {
+        const roles = compterRoles(fiches);
+        return refus.map((r) => ({ ...r, ressemble_nom: r.cle ? ressembleNom(r.cle, roles) : false }));
+      })(),
     });
   } catch (err) {
     console.error("[GENRE DEDUIT]", err);
@@ -2587,6 +2597,99 @@ router.post("/genre-deduit/annuler", authMiddleware, requireAdmin, async (req, r
     res.json({ annules: r.rowCount });
   } catch (err) {
     console.error("[GENRE DEDUIT ANNULER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== NOM ET PRÉNOM INVERSÉS =====
+ *
+ * La règle est dans services/nomsInverses.js. Réservé aux administrateurs,
+ * comme toute correction en masse de l'identité.
+ *
+ * Remettre dans l'ordre ne fait qu'échanger les deux cases : rien n'est
+ * réécrit, ni la casse ni l'orthographe. L'échange est son propre inverse,
+ * d'où « rétablir », qui défait un lot juste après coup si la liste
+ * contenait une erreur.
+ */
+const INVERSES_AFFICHES_MAX = 2000;
+
+async function fichesNomPrenom() {
+  const { rows } = await pool.query("SELECT id, nom, prenom FROM participants");
+  return rows;
+}
+
+const idsDe = (corps) =>
+  Array.isArray(corps?.ids)
+    ? [...new Set(corps.ids.map(Number).filter(Number.isInteger))]
+    : [];
+
+router.get("/noms-inverses", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const suspects = detecterInverses(await fichesNomPrenom()).sort(
+      (a, b) =>
+        String(a.prenom).localeCompare(String(b.prenom), "fr") ||
+        String(a.nom).localeCompare(String(b.nom), "fr")
+    );
+    res.json({
+      total: suspects.length,
+      seuils: { vues: MIN_VUES_NOMS, part: PART_MIN_NOMS },
+      fiches: suspects.slice(0, INVERSES_AFFICHES_MAX),
+    });
+  } catch (err) {
+    console.error("[NOMS INVERSES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.post("/noms-inverses/inverser", authMiddleware, requireAdmin, async (req, res) => {
+  const demandes = idsDe(req.body);
+  if (!demandes.length) return res.status(400).json({ error: "Aucune fiche retenue." });
+  if (demandes.length > 5000) return res.status(400).json({ error: "Trop de fiches en une fois." });
+
+  try {
+    /* Recalculé ici : on n'échange que ce que la règle signale encore. Une
+       fiche corrigée à la main entre l'affichage et le clic ne serait sinon
+       remise à l'envers. */
+    const encore = new Set(detecterInverses(await fichesNomPrenom()).map((f) => f.id));
+    const retenus = demandes.filter((id) => encore.has(id));
+    if (!retenus.length) return res.json({ inverses: 0, ids: [], ignores: demandes.length });
+
+    /* Dans un UPDATE, chaque expression lit la ligne d'avant : « nom = prenom,
+       prenom = nom » échange bien les deux valeurs. */
+    const r = await pool.query(
+      "UPDATE participants SET nom = prenom, prenom = nom WHERE id = ANY($1::int[]) RETURNING id",
+      [retenus]
+    );
+    const ids = r.rows.map((x) => x.id);
+    logAudit(req, "UPDATE", "participants", null, "Nom et prénom remis dans l'ordre", {
+      fiches: ids.length,
+      ids,
+    });
+    res.json({ inverses: ids.length, ids, ignores: demandes.length - ids.length });
+  } catch (err) {
+    console.error("[NOMS INVERSES INVERSER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Défaire un lot qui vient d'être échangé. L'écran ne l'appelle qu'avec les
+   identifiants que « inverser » vient de rendre. */
+router.post("/noms-inverses/retablir", authMiddleware, requireAdmin, async (req, res) => {
+  const ids = idsDe(req.body);
+  if (!ids.length) return res.status(400).json({ error: "Aucune fiche à rétablir." });
+  if (ids.length > 5000) return res.status(400).json({ error: "Trop de fiches en une fois." });
+  try {
+    const r = await pool.query(
+      "UPDATE participants SET nom = prenom, prenom = nom WHERE id = ANY($1::int[])",
+      [ids]
+    );
+    logAudit(req, "UPDATE", "participants", null, "Inversion nom / prénom annulée", {
+      fiches: r.rowCount,
+      ids,
+    });
+    res.json({ retablis: r.rowCount });
+  } catch (err) {
+    console.error("[NOMS INVERSES RETABLIR]", err);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
