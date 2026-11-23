@@ -76,6 +76,9 @@ function ajouter(table, cle, genre, personne) {
 function construireTemoins(fiches) {
   const complet = new Map();
   const premier = new Map();
+  /* Chaque mot d'un prénom, où qu'il soit : « Diarra » dans « Mame Diarra »
+     compte comme dans « Diarra » seul. Sert aux suggestions, pas à la règle. */
+  const mots = new Map();
   for (const f of fiches) {
     if (f.genre_source === "deduit") continue;
     const genre = genreDeclare(f.genre);
@@ -85,8 +88,92 @@ function construireTemoins(fiches) {
     const personne = `${normaliserPrenom(f.nom)}|${prenom}`;
     ajouter(complet, prenom, genre, personne);
     ajouter(premier, prenom.split(" ")[0], genre, personne);
+    for (const mot of new Set(prenom.split(" "))) ajouter(mots, mot, genre, personne);
   }
-  return { complet, premier };
+  return { complet, premier, mots };
+}
+
+/* ===== LES SUGGESTIONS =====
+ *
+ * La règle principale ne s'applique qu'à ce dont la base est sûre. Restent
+ * des centaines de prénoms vus une ou deux fois — trop pour être tranchés un à
+ * un, et pourtant la base en dit souvent assez pour proposer quelque chose.
+ *
+ * Ce ne sont que des SUGGESTIONS : rien ne s'écrit sans qu'un administrateur
+ * les ait vues et validées. Chacune dit d'où elle vient, pour qu'on sache
+ * combien lui faire confiance. Trois sources, de la plus sûre à la moins sûre :
+ *
+ *  - « peu »      : le prénom exact, porté par 2 à 4 personnes, toutes du même
+ *                   genre. Trop peu pour la règle, assez pour proposer.
+ *  - « mot »      : un prénom composé dont un mot est sûr — « Mame Diarra »
+ *                   se lit par « Diarra », « Pape Moussa » par « Moussa ». Les
+ *                   mots partagés, comme « Mame », sont ignorés ; si deux mots
+ *                   sûrs se contredisent, on ne propose rien.
+ *  - « variante » : une orthographe à une lettre près d'un prénom sûr —
+ *                   « Aminatta » pour « Aminata », « Khadidja » pour
+ *                   « Khadija ». Seulement pour un prénom de 5 lettres au
+ *                   moins, et si tous les prénoms proches s'accordent.
+ *
+ * Un prénom ambigu en entier — porté par des hommes et des femmes — ne reçoit
+ * jamais de suggestion : c'est précisément là qu'il faut regarder les fiches.
+ */
+const SUGGESTION_MIN = 2;
+
+/* Distance d'édition au plus 1 : une lettre ajoutée, ôtée ou changée. */
+function aUneLettrePres(a, b) {
+  if (a === b) return false;
+  const la = a.length;
+  const lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let ecarts = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) { i += 1; j += 1; continue; }
+    ecarts += 1;
+    if (ecarts > 1) return false;
+    if (la > lb) i += 1;
+    else if (lb > la) j += 1;
+    else { i += 1; j += 1; }
+  }
+  return ecarts + (la - i) + (lb - j) <= 1;
+}
+
+const capitale = (s) => s.split(" ").map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join(" ");
+
+function suggerer(prenom, temoins, fiables) {
+  const entier = verdict(temoins.complet.get(prenom));
+  if (entier.statut === "ambigu") return null;
+
+  /* « peu » : le prénom exact, peu vu, mais unanime. */
+  if (entier.f + entier.h >= SUGGESTION_MIN && (entier.f === 0 || entier.h === 0)) {
+    const genre = entier.f ? "F" : "H";
+    const n = entier.f + entier.h;
+    return { genre, source: "peu", detail: `${n} personne${n > 1 ? "s" : ""}, toutes ${genre === "F" ? "femmes" : "hommes"}` };
+  }
+
+  /* « mot » : un mot sûr dans un prénom composé. */
+  const mots = prenom.split(" ");
+  if (mots.length > 1) {
+    const surs = mots
+      .map((m) => ({ m, v: verdict(temoins.mots.get(m)) }))
+      .filter((x) => x.v.statut === "fiable");
+    const genres = new Set(surs.map((x) => x.v.genre));
+    if (surs.length && genres.size === 1) {
+      return { genre: [...genres][0], source: "mot", detail: `d'après « ${capitale(surs[0].m)} »` };
+    }
+    return null;
+  }
+
+  /* « variante » : une lettre près d'un prénom sûr. */
+  if (prenom.length >= 5) {
+    const proches = fiables.filter((f) => aUneLettrePres(prenom, f.cle));
+    const genres = new Set(proches.map((f) => f.genre));
+    if (proches.length && genres.size === 1) {
+      return { genre: proches[0].genre, source: "variante", detail: `proche de « ${capitale(proches[0].cle)} »` };
+    }
+  }
+  return null;
 }
 
 function verdict(entree) {
@@ -196,8 +283,16 @@ function proposer(fiches) {
     }))
     .sort((a, b) => b.fiches - a.fiches || a.prenom.localeCompare(b.prenom, "fr"));
 
+  /* Les prénoms sûrs, une fois : les variantes se cherchent parmi eux. */
+  const fiables = [];
+  for (const [cle, entree] of temoins.complet) {
+    const v = verdict(entree);
+    if (v.statut === "fiable") fiables.push({ cle, genre: v.genre });
+  }
+
   const refusListe = [...refus.values()]
     .map((r) => ({
+      suggestion: r.cle ? suggerer(r.cle, temoins, fiables) : null,
       /* La clé normalisée : c'est par elle que l'écran désigne le prénom quand
          un administrateur lui attribue un genre. */
       cle: r.cle,
@@ -222,4 +317,5 @@ module.exports = {
   genreDeclare,
   construireTemoins,
   proposer,
+  aUneLettrePres,
 };
