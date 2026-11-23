@@ -16,7 +16,7 @@ const { reunir, defaire } = require("../services/identite");
 const { contactsCollectifs } = require("../services/contactsCollectifs");
 const requireAdmin = require("../middleware/role.middleware");
 const { genreSourcePret } = require("../migrations/genreSource");
-const { proposer, MIN_PERSONNES, ACCORD_MIN } = require("../services/genreParPrenom");
+const { proposer, normaliserPrenom, MIN_PERSONNES, ACCORD_MIN } = require("../services/genreParPrenom");
 
 const router = express.Router();
 
@@ -2407,8 +2407,10 @@ router.get("/genre-deduit", authMiddleware, requireAdmin, async (req, res) => {
          milliers, et l'application les recalcule de toute façon. */
       propositions: propositions.map(({ ids, ...p }) => p),
       /* Les prénoms qu'on n'a pas su trancher, les plus fréquents d'abord.
-         C'est par eux que la saisie à la main rapporte le plus. */
-      refus: refus.slice(0, 40),
+         Tous, et non les quarante premiers : l'écran permet désormais de leur
+         attribuer un genre, et un prénom absent de la liste serait un prénom
+         qu'on ne peut plus traiter. */
+      refus,
     });
   } catch (err) {
     console.error("[GENRE DEDUIT]", err);
@@ -2474,6 +2476,99 @@ router.post("/genre-deduit/appliquer", authMiddleware, requireAdmin, async (req,
     res.status(500).json({ error: "Erreur serveur" });
   } finally {
     client.release();
+  }
+});
+
+/* ===== CE QUE LA RÈGLE NE TRANCHE PAS =====
+ *
+ * La règle refuse les prénoms rares, inconnus ou partagés. Elle a raison de
+ * refuser — mais sans geste derrière, les fiches restaient vides, et l'écran
+ * les montrait sans permettre d'en rien faire.
+ *
+ * Deux gestes, selon ce que sait l'administrateur :
+ *
+ *  - Il connaît le prénom : « Seynabou », « Babacar » ne sont rares que dans
+ *    la base. Un clic attribue le genre à toutes les fiches de ce prénom qui
+ *    n'en ont pas.
+ *
+ *  - Le prénom est vraiment mixte, ou absent : on regarde les fiches une à
+ *    une, avec ce qui aide à décider, et l'on tranche personne par personne.
+ *
+ * Attribuer par prénom reste une déduction — le prénom décide, pas la
+ * personne : ces fiches portent la marque « deduit », ne servent jamais de
+ * témoin, et se retirent avec les autres. Trancher une fiche après l'avoir
+ * regardée est une saisie : elle passe par la route PATCH et perd la marque.
+ */
+const PRENOMS_FICHES_MAX = 500;
+
+async function fichesSansGenre() {
+  const { rows } = await pool.query(
+    "SELECT id, prenom FROM participants WHERE genre IS NULL OR trim(genre) = ''"
+  );
+  return rows;
+}
+
+router.post("/genre-deduit/attribuer", authMiddleware, requireAdmin, async (req, res) => {
+  const cle = normaliserPrenom(typeof req.body?.prenom === "string" ? req.body.prenom : "");
+  const genre = req.body?.genre;
+  /* Sans prénom, il n'y a rien à quoi rattacher la décision : ces fiches se
+     traitent une à une. */
+  if (!cle) return res.status(400).json({ error: "Prénom manquant." });
+  if (genre !== "F" && genre !== "H") return res.status(400).json({ error: "Genre inconnu." });
+
+  try {
+    await genreSourcePret();
+    const ids = (await fichesSansGenre())
+      .filter((f) => normaliserPrenom(f.prenom) === cle)
+      .map((f) => f.id);
+    if (!ids.length) return res.json({ attribues: 0 });
+
+    const r = await pool.query(
+      `UPDATE participants SET genre = $1, genre_source = 'deduit'
+        WHERE id = ANY($2::int[])
+          AND (genre IS NULL OR trim(genre) = '')`,
+      [genre, ids]
+    );
+    logAudit(req, "UPDATE", "participants", null, "Genre attribué par prénom", {
+      prenom: cle,
+      genre,
+      fiches: r.rowCount,
+    });
+    res.json({ attribues: r.rowCount });
+  } catch (err) {
+    console.error("[GENRE ATTRIBUER]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Les fiches d'un prénom, pour trancher une à une. Avec ce qui aide à
+   décider : la structure, la tranche d'âge, la dernière formation suivie. */
+router.get("/genre-deduit/fiches", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const cle = normaliserPrenom(String(req.query.prenom || ""));
+    const ids = (await fichesSansGenre())
+      .filter((f) => normaliserPrenom(f.prenom) === cle)
+      .map((f) => f.id)
+      .slice(0, PRENOMS_FICHES_MAX);
+    if (!ids.length) return res.json([]);
+
+    const { rows } = await pool.query(
+      `SELECT p.id, p.nom, p.prenom, p.structure, p.age_range,
+              (SELECT a.title
+                 FROM activity_participants ap
+                 JOIN activities a ON a.id = ap.activity_id
+                WHERE ap.participant_id = p.id
+                ORDER BY a.activity_date DESC NULLS LAST
+                LIMIT 1) AS derniere_activite
+         FROM participants p
+        WHERE p.id = ANY($1::int[])
+        ORDER BY p.nom, p.prenom`,
+      [ids]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("[GENRE FICHES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
