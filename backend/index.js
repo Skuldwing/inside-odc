@@ -50,6 +50,7 @@ const { ensureAudience, entretenirAudience } = require("./migrations/audience");
 const { ensureActivityDetailAndProfileSchema } = require("./migrations/activityDetailAndProfile");
 const { ensureActivityTasksSchema } = require("./migrations/activityTasks");
 const { ensureGenreSource } = require("./migrations/genreSource");
+const { ensureGoto27Acces } = require("./migrations/goto27Acces");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -991,6 +992,17 @@ pool.query(`
     console.log("Migration OK: participants.genre_source");
   } catch (e) {
     console.error("Migration participants.genre_source ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Accès GOTO27 par compte ──
+   Voir migrations/goto27Acces.js. */
+(async () => {
+  try {
+    await ensureGoto27Acces();
+    console.log("Migration OK: users.is_goto27");
+  } catch (e) {
+    console.error("Migration users.is_goto27 ECHOUEE :", e.message);
   }
 })();
 

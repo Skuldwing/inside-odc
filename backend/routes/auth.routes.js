@@ -6,6 +6,7 @@ const { consumePasswordToken, checkPasswordToken } = require("../services/passwo
 const authMiddleware = require("../middleware/auth.middleware");
 const requireAdmin = require("../middleware/role.middleware");
 const requireAdminPin = require("../middleware/pin.middleware");
+const { accesGoto27, LIRE_IS_GOTO27 } = require("../migrations/goto27Acces");
 
 const router = express.Router();
 
@@ -52,6 +53,9 @@ function profilDuCompte(ligne) {
     is_super_admin: ligne.is_super_admin ?? false,
     job_title: ligne.job_title ?? null,
     avatar_updated_at: ligne.avatar_updated_at ?? null,
+    /* L'accès à GOTO27, déjà calculé : le menu et la page n'ont pas à
+       connaître la règle des trois états. Voir migrations/goto27Acces.js. */
+    acces_goto27: accesGoto27(ligne),
   };
 }
 
@@ -162,8 +166,9 @@ router.get("/me", authMiddleware, async (req, res) => {
       SELECT id, email, full_name, role, partner_id,
              COALESCE(is_team_odc, false) AS is_team_odc,
              ${adminPlus} AS is_super_admin,
-             job_title, avatar_updated_at
-      FROM users
+             job_title, avatar_updated_at,
+             ${LIRE_IS_GOTO27} AS is_goto27
+      FROM users u
       WHERE id = $1
       LIMIT 1
       `,

@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Plus, User, Mail, Shield, Building2, Link2, Pencil, Trash2,
   Search, UsersRound, Copy, Check, X, AlertCircle, Loader2, Target, Wifi,
-  KanbanSquare, Layers, UserCheck, UserX,
+  KanbanSquare, Layers, UserCheck, UserX, Sparkles,
 } from "lucide-react";
 
 /* Un utilisateur est "en ligne" si last_seen_at < ONLINE_THRESHOLD ms */
@@ -80,7 +80,9 @@ const JOB_TITLES = [
   "Autre fonction",
 ];
 
-const EMPTY_FORM = { full_name: "", email: "", role: "viewer", job_title: "", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false, device_ids: [] };
+/* « is_goto27 » coché par défaut : un compte partenaire voyait GOTO27 avant que
+   la case existe, et c'est le cas le plus courant. On décoche pour fermer. */
+const EMPTY_FORM = { full_name: "", email: "", role: "viewer", job_title: "", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false, is_goto27: true, device_ids: [] };
 
 export default function Utilisateurs() {
   const toast = useToast();
@@ -150,7 +152,7 @@ export default function Utilisateurs() {
   };
 
   const openEdit = (u) => {
-    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, job_title: u.job_title || "", partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc, device_ids: u.device_ids || [] });
+    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, job_title: u.job_title || "", partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc, is_goto27: u.is_goto27 !== false, device_ids: u.device_ids || [] });
     setEditing(u.id);
     setFormError("");
     setInviteData(null);
@@ -614,6 +616,36 @@ export default function Utilisateurs() {
                   </div>
                 )}
 
+                {/* GOTO27 : l'espace de documents partagés avec les
+                    partenaires. Les admins l'ont d'office ; pour un partenaire,
+                    c'est ici qu'on l'ouvre ou qu'on le ferme. Les coachs et
+                    lecteurs n'y ont pas accès : la case ne leur est pas
+                    proposée. */}
+                {(form.role === "partner" || form.role === "admin") && (
+                  <div className="rounded-xl border border-slate-200 px-4 py-3">
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-orange-500 mt-0.5"
+                        checked={form.role === "admin" ? true : form.is_goto27 !== false}
+                        disabled={form.role === "admin"}
+                        onChange={e => setForm(f => ({ ...f, is_goto27: e.target.checked }))}
+                      />
+                      <span>
+                        <span className="text-sm font-medium flex items-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-orange-500" />
+                          Accès GOTO27
+                        </span>
+                        <span className="block text-xs text-slate-500 mt-0.5">
+                          {form.role === "admin"
+                            ? "Les administrateurs accèdent à GOTO27 d'office."
+                            : "Ce partenaire voit son espace GOTO27 et peut y déposer ses documents. Décocher le lui ferme aussitôt."}
+                        </span>
+                      </span>
+                    </label>
+                  </div>
+                )}
+
                 {!editing && (
                   <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
                     Après création, un lien d'invitation sera généré pour que l'utilisateur définisse son mot de passe.
@@ -812,6 +844,7 @@ export default function Utilisateurs() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <BadgeRole role={u.role} />
                         {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
+                        {u.role === "partner" && u.is_goto27 !== false && <ChipGoto27 />}
                       </div>
                     </td>
 
@@ -935,6 +968,21 @@ function ChipMbootay() {
   );
 }
 
+/* GOTO27, même facture que Mbootay. Affiché pour les partenaires seulement :
+   chez un admin il irait de soi, et le répéter sur chaque ligne d'admin
+   noierait le seul cas qui compte — un partenaire ouvert ou fermé. */
+function ChipGoto27() {
+  return (
+    <span
+      title="Accès à l'espace de documents GOTO27"
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600"
+    >
+      <Sparkles className="w-3 h-3 flex-shrink-0 text-orange-500" />
+      GOTO27
+    </span>
+  );
+}
+
 function BadgeStatut({ status }) {
   const actif = status === "active";
   return (
@@ -1007,6 +1055,7 @@ function CarteUtilisateur({ u, onEdit, onLink, onDelete }) {
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <BadgeRole role={u.role} />
         {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
+                        {u.role === "partner" && u.is_goto27 !== false && <ChipGoto27 />}
       </div>
 
       {u.job_title && (

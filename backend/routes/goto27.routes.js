@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
+const { accesGoto27, LIRE_IS_GOTO27 } = require("../migrations/goto27Acces");
 const { logAudit } = require("../services/audit");
 const { sendEmail } = require("../services/mail");
 
@@ -88,12 +89,29 @@ async function notifierAdminsNouveauDocument(document, partnerId, uploaderId) {
   }).catch((error) => console.error(`[GOTO27 NOTIFICATION] Echec pour ${admin.email}:`, error.message))));
 }
 
-function autoriserAdminOuPartenaire(req, res, next) {
+async function autoriserAdminOuPartenaire(req, res, next) {
   if (req.user?.role !== "admin" && req.user?.role !== "partner") {
     return res.status(403).json({ error: "Accès réservé aux administrateurs et aux partenaires." });
   }
   if (req.user.role === "partner" && (!Number.isInteger(Number(req.user.partner_id)) || Number(req.user.partner_id) < 1)) {
     return res.status(403).json({ error: "Aucun partenaire n'est associé à ce compte." });
+  }
+  /* Le choix fait sur la fiche utilisateur. Lu en base à chaque requête et
+     non dans le jeton : un accès retiré doit l'être tout de suite, pas à
+     l'expiration de la session huit heures plus tard. */
+  if (req.user.role === "partner") {
+    try {
+      const { rows } = await pool.query(
+        `SELECT role, ${LIRE_IS_GOTO27} AS is_goto27 FROM users u WHERE u.id = $1`,
+        [req.user.id]
+      );
+      if (!accesGoto27(rows[0])) {
+        return res.status(403).json({ error: "Votre accès à GOTO27 n'est pas ouvert. Adressez-vous à un administrateur." });
+      }
+    } catch (err) {
+      console.error("[GOTO27 ACCES]", err);
+      return res.status(500).json({ error: "Erreur serveur" });
+    }
   }
   next();
 }
