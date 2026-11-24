@@ -3,8 +3,6 @@ import {
   Building2,
   CalendarClock,
   Download,
-  Eye,
-  EyeOff,
   FileText,
   FolderLock,
   HardDrive,
@@ -15,7 +13,6 @@ import {
   ShieldCheck,
   Trash2,
   Upload,
-  Users,
   X,
 } from "lucide-react";
 import api from "../api";
@@ -133,7 +130,6 @@ export default function GOTO27() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [partnerFilter, setPartnerFilter] = useState("all");
-  const [showHiddenPartners, setShowHiddenPartners] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -164,21 +160,21 @@ export default function GOTO27() {
     return documents.filter((document) => {
       if (isAdmin) {
         const partner = partners.find((item) => String(item.id) === String(document.partner_id));
-        if (partner && Boolean(partner.goto27_hidden) !== showHiddenPartners) return false;
+        if (partner?.goto27_hidden) return false;
         if (partnerFilter !== "all" && String(document.partner_id) !== partnerFilter) return false;
       }
       if (!query) return true;
       return [document.title, document.filename, document.description, document.partner_name, document.uploader_name]
         .some((value) => String(value || "").toLocaleLowerCase("fr").includes(query));
     });
-  }, [documents, isAdmin, partnerFilter, partners, search, showHiddenPartners]);
+  }, [documents, isAdmin, partnerFilter, partners, search]);
 
   const groupedDocuments = useMemo(() => {
     if (!isAdmin) return [];
     const query = search.trim().toLocaleLowerCase("fr");
     const groups = new Map(
       partners
-        .filter((partner) => Boolean(partner.goto27_hidden) === showHiddenPartners)
+        .filter((partner) => !partner.goto27_hidden)
         .filter((partner) => partnerFilter === "all" || String(partner.id) === partnerFilter)
         .filter((partner) => !query || String(partner.name || "").toLocaleLowerCase("fr").includes(query))
         .map((partner) => [String(partner.id), { id: partner.id, name: partner.name, accounts: partner.accounts || [], documents: [] }])
@@ -189,7 +185,7 @@ export default function GOTO27() {
       groups.get(key).documents.push(document);
     });
     return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, "fr"));
-  }, [filteredDocuments, isAdmin, partners, partnerFilter, search, showHiddenPartners]);
+  }, [filteredDocuments, isAdmin, partners, partnerFilter, search]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -294,23 +290,6 @@ export default function GOTO27() {
     }
   };
 
-  const setPartnerVisibility = async (partner, hidden) => {
-    const accepted = await confirm({
-      title: hidden ? `Masquer « ${partner.name} » dans GOTO27 ?` : `Réafficher « ${partner.name} » dans GOTO27 ?`,
-      body: hidden ? "Le partenaire et ses documents resteront dans Inside ODC, mais ne seront plus affichés dans GOTO27." : "Le partenaire et ses documents redeviendront visibles dans GOTO27.",
-      destructive: hidden,
-    });
-    if (!accepted) return;
-    try {
-      await api.patch(`/goto27/partners/${partner.id}/visibility`, { hidden });
-      toast.success(hidden ? `« ${partner.name} » masqué dans GOTO27.` : `« ${partner.name} » réaffiché dans GOTO27.`);
-      if (partnerFilter === String(partner.id)) setPartnerFilter("all");
-      await loadData();
-    } catch (error) {
-      toast.error(error.response?.data?.error || "Impossible de modifier la visibilité de ce partenaire.");
-    }
-  };
-
   const documentCard = (document) => (
     <article key={document.id} className="flex w-full flex-col gap-3 rounded-2xl border border-orange-200 bg-white p-4 shadow-sm transition hover:border-orange-400 hover:shadow-md">
       <div className="flex min-w-0 items-start gap-3">
@@ -344,7 +323,7 @@ export default function GOTO27() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 bg-white/10 text-orange-200"><FolderLock className="h-5 w-5" /></span>
-            <div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">Espace documentaire privé</p><h1 className="mt-0.5 text-2xl font-bold tracking-tight">GOTO27</h1><p className="mt-0.5 text-xs text-slate-300">Les documents utiles, accessibles aux bonnes personnes.</p></div>
+            <div><h1 className="text-2xl font-bold tracking-tight">GOTO27</h1><p className="mt-0.5 text-xs text-slate-300">Les documents utiles, accessibles aux bonnes personnes.</p></div>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-stretch">
             <button type="button" onClick={formOpen ? closeForm : openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-400">
@@ -381,8 +360,7 @@ export default function GOTO27() {
 
       <section className="flex flex-col gap-3 rounded-2xl border border-orange-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:p-4">
         <div className="relative min-w-0 flex-1"><Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un document, un fichier…" className="input !pl-10" /></div>
-        {isAdmin && <select aria-label="Filtrer par partenaire" className="select sm:max-w-xs" value={partnerFilter} onChange={(event) => setPartnerFilter(event.target.value)}><option value="all">Tous les partenaires</option>{partners.filter((partner) => Boolean(partner.goto27_hidden) === showHiddenPartners).map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}</select>}
-        {isAdmin && <button type="button" onClick={() => { setShowHiddenPartners(!showHiddenPartners); setPartnerFilter("all"); }} className="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-900 hover:bg-orange-100">{showHiddenPartners ? "Voir partenaires visibles" : `Voir masqués (${partners.filter((partner) => partner.goto27_hidden).length})`}</button>}
+        {isAdmin && <select aria-label="Filtrer par partenaire" className="select sm:max-w-xs" value={partnerFilter} onChange={(event) => setPartnerFilter(event.target.value)}><option value="all">Tous les partenaires</option>{partners.filter((partner) => !partner.goto27_hidden).map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}</select>}
         <span className="shrink-0 rounded-full bg-orange-100 px-3 py-1.5 text-xs font-bold text-orange-900">{filteredDocuments.length} fichier{filteredDocuments.length === 1 ? "" : "s"}</span>
       </section>
 
@@ -392,16 +370,12 @@ export default function GOTO27() {
         <div className={`grid items-stretch gap-4 ${partnerFilter !== "all" ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"}`}>
           {groupedDocuments.map((group) => (
             <section key={group.id} className="flex min-w-0 flex-col rounded-2xl border-2 border-orange-200 bg-orange-50/50 shadow-sm">
-              <header className="flex flex-col gap-3 border-b-2 border-orange-200 bg-gradient-to-r from-orange-200 via-orange-100 to-amber-50 px-4 py-4 sm:px-5">
-                <div className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-600 text-white shadow-sm"><Building2 className="h-5 w-5" /></span><div className="min-w-0 flex-1"><p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-orange-900">Partenaire</p><h2 className="w-max whitespace-nowrap text-lg font-black leading-tight text-slate-950 sm:text-xl">{group.name}</h2><p className="mt-0.5 text-xs font-semibold text-orange-950/70">Espace documentaire privé</p></div></div>
-                <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2"><span className="mr-1 rounded-full bg-orange-600 px-2.5 py-1 text-xs font-extrabold text-white">{group.documents.length} doc.</span><button type="button" onClick={() => openCreateForPartner(group.id)} title={`Déposer un document pour ${group.name}`} aria-label={`Déposer un document pour ${group.name}`} className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white transition hover:bg-orange-700"><Plus className="h-4 w-4" /></button>{showHiddenPartners ? <button type="button" onClick={() => setPartnerVisibility(group, false)} title={`Réafficher ${group.name} dans GOTO27`} aria-label={`Réafficher ${group.name} dans GOTO27`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-2.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50"><Eye className="h-4 w-4" /><span>Réintégrer à GOTO27</span></button> : <button type="button" onClick={() => setPartnerVisibility(group, true)} title={`Exclure ${group.name} de GOTO27`} aria-label={`Exclure ${group.name} de GOTO27`} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50"><EyeOff className="h-4 w-4" /><span>Exclure de GOTO27</span></button>}</div>
+              <header className="flex items-start justify-between gap-3 border-b-2 border-orange-200 bg-gradient-to-r from-orange-200 via-orange-100 to-amber-50 px-4 py-4 sm:px-5">
+                <div className="min-w-0 flex-1"><h2 className="break-words text-lg font-black leading-tight text-slate-950 sm:text-xl">{group.name}</h2>{group.accounts.map((account) => <div key={account.id} className="mt-1 min-w-0"><p className="break-words text-xs font-semibold text-slate-800">{account.full_name || account.email}</p>{account.full_name && <p className="break-all text-xs text-slate-600">{account.email}</p>}</div>)}</div>
+                <div className="flex shrink-0 items-center gap-2"><span className="rounded-full bg-orange-600 px-2.5 py-1 text-xs font-extrabold text-white">{group.documents.length} doc.</span><button type="button" onClick={() => openCreateForPartner(group.id)} title={`Déposer un document pour ${group.name}`} aria-label={`Déposer un document pour ${group.name}`} className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-600 text-white transition hover:bg-orange-700"><Plus className="h-4 w-4" /></button></div>
               </header>
               <div className="flex-1 space-y-3 rounded-b-2xl bg-orange-50/70 p-3 sm:p-4">
-                {showHiddenPartners && <p className="rounded-xl border border-orange-300 bg-orange-100 px-3 py-2 text-xs font-bold text-orange-950">Ce partenaire est exclu de GOTO27. Il peut toujours faire partie d’Inside ODC.</p>}
-                <div className="rounded-xl border border-orange-200 bg-white px-3 py-2.5">
-                  <div className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-orange-800"><Users className="h-3.5 w-3.5" />Accès partenaires <span className="rounded-full bg-orange-100 px-1.5 py-0.5">{group.accounts.length}</span></div>
-                  {group.accounts.length ? <div className="flex flex-wrap gap-2">{group.accounts.map((account) => <span key={account.id} className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-lg bg-orange-50 px-2.5 py-1.5 text-xs text-slate-700"><span className="break-words font-semibold">{account.full_name || account.email}</span>{account.full_name && <span className="min-w-0 max-w-full whitespace-normal break-all text-slate-500">· {account.email}</span>}</span>)}</div> : <p className="text-xs text-slate-500">Aucun compte partenaire ajouté.</p>}
-                </div>
+                {!group.accounts.length && <p className="text-xs text-slate-500">Aucun compte partenaire ajouté.</p>}
                 {group.documents.length ? group.documents.map(documentCard) : <p className="rounded-xl border border-dashed border-orange-300 bg-white/80 px-3 py-5 text-center text-xs font-medium text-slate-500">Aucun document déposé pour ce partenaire.</p>}
               </div>
             </section>
