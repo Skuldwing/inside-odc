@@ -72,6 +72,9 @@ export default function Activities({
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  /* Un partenaire voit aussi ce qu'ont réalisé ses coachs : « toutes »,
+     « direct » (les siennes) ou « coachs ». */
+  const [realisePar, setRealisePar] = useState("toutes");
   const [partnerFilter, setPartnerFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -205,7 +208,9 @@ export default function Activities({
       const partnerScoped = role === "partner" ||
         (user?.partner_id != null && !["admin", "coach"].includes(role));
       const rows = partnerScoped
-        ? (res.data || []).filter((activity) => String(activity.partner_id) === String(user?.partner_id || ""))
+        /* Les siennes, et celles de ses coachs, que le serveur marque. */
+        ? (res.data || []).filter((activity) =>
+            String(activity.partner_id) === String(user?.partner_id || "") || activity.par_un_coach === true)
         : (res.data || []);
       const mapped = rows.map((a) => {
         const date = a.activity_date
@@ -228,6 +233,9 @@ export default function Activities({
           device: a.device_name || "-",
           coach_id: a.coach_id || null,
           coach_name: a.coach_name || null,
+          /* Pour un partenaire : activité d'un de ses coachs, en lecture. */
+          par_un_coach: a.par_un_coach === true,
+          lecture_seule: a.lecture_seule === true,
           location: a.location || "-",
           date,
           duration_hours: a.duration_hours || "",
@@ -362,10 +370,13 @@ export default function Activities({
         if (String(a.device_id || "") !== String(deviceFilter)) return false;
       }
       if (status !== "all" && a.status !== status) return false;
+      if (realisePar === "direct" && a.par_un_coach) return false;
+      if (realisePar === "coachs" && !a.par_un_coach) return false;
       if (q && !(a.title || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [activities, role, partnerFilter, deviceFilter, status, search]);
+  }, [activities, role, partnerFilter, deviceFilter, status, search, realisePar]);
+  const nbParCoachs = useMemo(() => activities.filter((a) => a.par_un_coach).length, [activities]);
   const totalPages = Math.ceil(filteredActivities.length / ITEMS_PER_PAGE);
   const sectionPageActivities = filteredActivities.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
@@ -374,7 +385,7 @@ export default function Activities({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [activities, role, partnerFilter, deviceFilter, status, search, viewMode]);
+  }, [activities, role, partnerFilter, deviceFilter, status, search, viewMode, realisePar]);
 
   /* La vue « Par section » affiche chaque activité sous forme de rectangle
      (grille de cartes), par opposition à la liste complète qui aligne des
@@ -1228,6 +1239,37 @@ export default function Activities({
         </div>
       )}
 
+      {/* Ce que les coachs rattachés au partenaire ont réalisé s'affiche ici
+          aussi, à part : elles comptent dans son réalisé, mais ce ne sont pas
+          les siennes — il les consulte sans pouvoir les modifier. */}
+      {nbParCoachs > 0 && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Réalisées par">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Réalisées par</span>
+          {[
+            ["toutes", `Toutes (${activities.length})`],
+            ["direct", `Notre structure (${activities.length - nbParCoachs})`],
+            ["coachs", `Nos coachs (${nbParCoachs})`],
+          ].map(([cle, libelle]) => (
+            <button
+              key={cle}
+              type="button"
+              aria-pressed={realisePar === cle}
+              onClick={() => setRealisePar(cle)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                realisePar === cle
+                  ? cle === "coachs" ? "border-purple-500 bg-purple-600 text-white" : "border-orange-500 bg-orange-500 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {libelle}
+            </button>
+          ))}
+          {realisePar === "coachs" && (
+            <span className="text-xs text-slate-500">En lecture : ces activités appartiennent à vos coachs.</span>
+          )}
+        </div>
+      )}
+
       {viewMode === "calendrier" ? (
         <CalendarView
           activities={filteredActivities}
@@ -1289,7 +1331,7 @@ export default function Activities({
                 <ActivityGridCard
                   key={activity.id}
                   activity={activity}
-                  canEdit={!isViewer}
+                  canEdit={!isViewer && !activity.lecture_seule}
                   onOpenDetail={() => navigate(`/activities/${activity.id}`)}
                   onEdit={() => openEdit(activity)}
                   onDelete={() => handleDelete(activity.id)}
@@ -1358,7 +1400,7 @@ export default function Activities({
                   cardPadding={cardPadding}
                   key={activity.id}
                   activity={activity}
-                  canEdit={!isViewer}
+                  canEdit={!isViewer && !activity.lecture_seule}
                   onOpenDetail={() => navigate(`/activities/${activity.id}`)}
                   onEdit={() => openEdit(activity)}
                   onDelete={() => handleDelete(activity.id)}
@@ -3838,7 +3880,7 @@ function CalendarView({
                 <ActivityCard
                   key={activity.id}
                   activity={activity}
-                  canEdit={canEdit}
+                  canEdit={canEdit && !activity.lecture_seule}
                   onEdit={() => onEdit(activity)}
                   onDelete={() => onDelete(activity.id)}
                   onQrCode={() => onQrCode && onQrCode(activity)}

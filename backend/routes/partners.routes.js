@@ -48,16 +48,42 @@ async function avecSchema(travail) {
  * L'agregation passe par une sous-requete plutot que par des jointures a plat
  * pour que le compte des activites ne soit pas gonfle par celui des
  * inscriptions, et inversement. */
+/* Ce qu'a réalisé un partenaire : ses propres activités, et celles des coachs
+   qui lui sont rattachés — un coach déclare sans partenaire sur l'activité,
+   c'est son compte qui porte le rattachement. Le tableau de bord et le budget
+   comptaient déjà ainsi ; cette page ne voyait que la première moitié.
+   « _coachs » isole ce qui a été fait par les coachs, pour l'afficher à part. */
 const COMPTES_PAR_PARTENAIRE = `
-  SELECT a.partner_id,
+  SELECT COALESCE(a.partner_id, uc.partner_id) AS partner_id,
          COUNT(DISTINCT a.id)::int AS activites,
          COUNT(ap.participant_id)::int AS participations,
-         COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id))::int AS personnes
+         COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id))::int AS personnes,
+         COUNT(DISTINCT a.id) FILTER (WHERE a.coach_id IS NOT NULL)::int AS activites_coachs,
+         COUNT(ap.participant_id) FILTER (WHERE a.coach_id IS NOT NULL)::int AS participations_coachs
   FROM activities a
+  LEFT JOIN users uc ON uc.id = a.coach_id
   LEFT JOIN activity_participants ap ON ap.activity_id = a.id
   LEFT JOIN participants pa ON pa.id = ap.participant_id
-  WHERE a.partner_id IS NOT NULL
-  GROUP BY a.partner_id
+  WHERE COALESCE(a.partner_id, uc.partner_id) IS NOT NULL
+  GROUP BY COALESCE(a.partner_id, uc.partner_id)
+`;
+
+/* Le détail par coach : ce que chacun a réalisé, face à l'objectif qui lui a
+   été confié sur celui du partenaire. */
+const REALISE_PAR_COACH = `
+  SELECT u.id, u.full_name, u.email, u.status,
+         COALESCE(u.objective_beneficiaries, 0)::int AS objective_beneficiaries,
+         COUNT(DISTINCT a.id)::int AS activites,
+         COUNT(ap.participant_id)::int AS participations,
+         COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id)) FILTER (WHERE pa.id IS NOT NULL)::int AS personnes,
+         MAX(a.activity_date) AS derniere_activite
+  FROM users u
+  LEFT JOIN activities a ON a.coach_id = u.id
+  LEFT JOIN activity_participants ap ON ap.activity_id = a.id
+  LEFT JOIN participants pa ON pa.id = ap.participant_id
+  WHERE u.role = 'coach' AND u.partner_id = $1
+  GROUP BY u.id
+  ORDER BY COUNT(ap.participant_id) DESC, u.full_name
 `;
 
 /* Le plafond et la reserve, joints a la fiche.
@@ -89,6 +115,8 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
         COALESCE(c.activites, 0) AS activities_count,
         COALESCE(c.participations, 0) AS beneficiaries_count,
         COALESCE(c.personnes, 0) AS personnes_distinctes,
+        COALESCE(c.activites_coachs, 0) AS coach_activities_count,
+        COALESCE(c.participations_coachs, 0) AS coach_beneficiaries_count,
         COALESCE((
           SELECT SUM(u.objective_beneficiaries)
           FROM users u
@@ -120,7 +148,9 @@ router.get("/:id", authMiddleware, requireAdmin, async (req, res) => {
         p.*,
         COALESCE(c.activites, 0) AS activities_count,
         COALESCE(c.participations, 0) AS beneficiaries_count,
-        COALESCE(c.personnes, 0) AS personnes_distinctes
+        COALESCE(c.personnes, 0) AS personnes_distinctes,
+        COALESCE(c.activites_coachs, 0) AS coach_activities_count,
+        COALESCE(c.participations_coachs, 0) AS coach_beneficiaries_count
       FROM partners p
       LEFT JOIN (${COMPTES_PAR_PARTENAIRE}) c ON c.partner_id = p.id
       WHERE p.id = $1
@@ -128,7 +158,8 @@ router.get("/:id", authMiddleware, requireAdmin, async (req, res) => {
       [req.params.id]
     ));
     if (!result.rows.length) return res.status(404).json({ error: "Partenaire introuvable" });
-    res.json(avecReserve(result.rows[0]));
+    const coachs = await pool.query(REALISE_PAR_COACH, [req.params.id]);
+    res.json({ ...avecReserve(result.rows[0]), coachs: coachs.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -249,8 +280,10 @@ router.get("/:id/timeline", authMiddleware, requireAdmin, async (req, res) => {
     const { id } = req.params;
     const [activitiesRes, notesRes, tasksRes, stageChangesRes] = await Promise.all([
       pool.query(
-        `SELECT id, title, activity_date AS date, reliability_score, reliability_status
-         FROM activities WHERE partner_id = $1 ORDER BY activity_date DESC`,
+        `SELECT a.id, a.title, a.activity_date AS date, a.reliability_score, a.reliability_status,
+                a.coach_id, uc.full_name AS coach_name
+         FROM activities a LEFT JOIN users uc ON uc.id = a.coach_id
+         WHERE COALESCE(a.partner_id, uc.partner_id) = $1 ORDER BY a.activity_date DESC`,
         [id]
       ),
       pool.query(

@@ -99,6 +99,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
       WITH base AS (
         SELECT a.id AS activity_id,
                a.title,
+               (a.coach_id IS NOT NULL) AS par_coach,
                a.activity_date,
                ${durationExpr} AS duration_hours,
                ${participantsManualExpr} AS participants_manual,
@@ -131,6 +132,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
           MAX(device_color)   AS device_color,
           MAX(partner_id)     AS partner_id,
           MAX(partner_name)   AS partner_name,
+          BOOL_OR(par_coach)  AS par_coach,
           MAX(activity_date)  AS activity_date,
           MAX(duration_hours) AS duration_hours,
           MAX(location)       AS location,
@@ -215,10 +217,12 @@ router.get("/summary", authMiddleware, async (req, res) => {
       SELECT pr.name,
              pr.objective_beneficiaries,
              ${reserveExpr}::int AS reserve_activee,
-             COALESCE(b.value, 0)::int AS value
+             COALESCE(b.value, 0)::int AS value,
+             COALESCE(b.value_coachs, 0)::int AS value_coachs
       FROM partners pr
       LEFT JOIN (
-        SELECT partner_id, SUM(effective_count)::int AS value
+        SELECT partner_id, SUM(effective_count)::int AS value,
+               SUM(effective_count) FILTER (WHERE par_coach)::int AS value_coachs
         FROM eff
         GROUP BY partner_id
       ) b ON b.partner_id = pr.id
@@ -472,6 +476,9 @@ router.get("/summary", authMiddleware, async (req, res) => {
       return {
         name: r.name,
         value: r.value,
+        /* La part réalisée par les coachs rattachés au partenaire, comprise
+           dans « value » et affichée à part. */
+        value_coachs: r.value_coachs || 0,
         objective: r.objective_beneficiaries || 0,
         reserve: calcul,
       };
@@ -610,10 +617,13 @@ router.get("/export", authMiddleware, async (req, res) => {
       WITH base AS (
         SELECT a.id AS activity_id,
                a.activity_date,
-               a.partner_id,
+               /* Comme l'écran : le travail d'un coach compte pour son partenaire. */
+               COALESCE(a.partner_id, uc_exp.partner_id) AS partner_id,
+               (a.coach_id IS NOT NULL) AS par_coach,
                ${pmExpr} AS participants_manual,
                ap.participant_id
         FROM activities a
+        LEFT JOIN users uc_exp ON uc_exp.id = a.coach_id
         LEFT JOIN activity_participants ap ON ap.activity_id = a.id
         LEFT JOIN participants part ON part.id = ap.participant_id
         WHERE ${where}
@@ -623,14 +633,16 @@ router.get("/export", authMiddleware, async (req, res) => {
                CASE WHEN COUNT(participant_id) > 0
                     THEN COUNT(participant_id)::int
                     ELSE 0
-               END AS effective_count
+               END AS effective_count,
+               BOOL_OR(par_coach) AS par_coach
         FROM base
         GROUP BY activity_id, partner_id
       )
       SELECT pr.name,
              pr.objective_beneficiaries,
              ${reserveExpr}::int AS reserve_activee,
-             COALESCE(SUM(b.effective_count), 0)::int AS realized
+             COALESCE(SUM(b.effective_count), 0)::int AS realized,
+             COALESCE(SUM(b.effective_count) FILTER (WHERE b.par_coach), 0)::int AS realized_coachs
       FROM partners pr
       LEFT JOIN eff b ON b.partner_id = pr.id
       /* Sur la cle primaire : les autres colonnes de « pr » en dependent
@@ -662,11 +674,12 @@ router.get("/export", authMiddleware, async (req, res) => {
         calcul.retenu,
         calcul.objectif,
         calcul.brut,
+        r.realized_coachs,
         calcul.reserve_disponible,
       ];
     });
 
-    const header = ["Partenaire", "Realise retenu", "Objectif", "Realise brut", "En reserve"];
+    const header = ["Partenaire", "Realise retenu", "Objectif", "Realise brut", "Dont coachs", "En reserve"];
     const csv = [header, ...rows]
       .map((r) => r.join(";"))
       .join("\n");
