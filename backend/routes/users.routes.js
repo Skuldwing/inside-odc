@@ -12,6 +12,7 @@ const crypto = require("crypto");
 const { logAudit } = require("../services/audit");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 const { ecrireAccesGoto27, LIRE_IS_GOTO27 } = require("../migrations/goto27Acces");
+const { rattachementCoachPret } = require("../migrations/rattachementCoach");
 
 let userJobTitleSchemaPromise;
 async function ensureUserJobTitleColumn() {
@@ -136,6 +137,11 @@ router.get("/", async (req, res) => {
               ${LIRE_IS_GOTO27} AS is_goto27,
               p.name AS partner,
               ${statusExpr} AS status,
+              /* Pour un coach : les activités qu'il a déclarées avant de l'être
+                 (sans coach), qui ne le suivent pas encore. */
+              CASE WHEN u.role = 'coach' THEN (
+                SELECT COUNT(*) FROM activities a WHERE a.created_by = u.id AND a.coach_id IS NULL
+              ) ELSE 0 END::int AS realisations_a_rattacher,
               COALESCE(ud.device_ids, ARRAY[]::int[])   AS device_ids,
               COALESCE(ud.device_names, ARRAY[]::text[]) AS device_names
        FROM users u
@@ -154,6 +160,129 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* ===== RÉALISATIONS D'AVANT : UN COMPTE DEVENU COACH =====
+   Les activités qu'il a déclarées quand il n'était pas coach — elles portent
+   le partenaire d'alors et aucun coach. Voir migrations/rattachementCoach.js. */
+async function lireCoach(id) {
+  const { rows } = await pool.query(
+    `SELECT u.id, u.full_name, u.email, u.role, u.partner_id, p.name AS partenaire
+       FROM users u LEFT JOIN partners p ON p.id = u.partner_id WHERE u.id = $1`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
+router.get("/:id/realisations-anterieures", async (req, res) => {
+  try {
+    await rattachementCoachPret();
+    const coach = await lireCoach(req.params.id);
+    if (!coach) return res.status(404).json({ error: "Utilisateur introuvable" });
+    const { rows: activites } = await pool.query(
+      `SELECT a.id, a.title, a.activity_date, a.partner_id, p.name AS partenaire,
+              (SELECT COUNT(*) FROM activity_participants ap WHERE ap.activity_id = a.id)::int AS participations
+         FROM activities a LEFT JOIN partners p ON p.id = a.partner_id
+        WHERE a.created_by = $1 AND a.coach_id IS NULL
+        ORDER BY a.activity_date DESC`,
+      [coach.id]
+    );
+    const { rows: [deja] } = await pool.query(
+      `SELECT COUNT(*)::int AS n, MAX(fait_le) AS le FROM rattachements_coach WHERE coach_id = $1`,
+      [coach.id]
+    );
+    res.json({
+      coach: { id: coach.id, role: coach.role, partner_id: coach.partner_id, partenaire: coach.partenaire },
+      activites,
+      participations: activites.reduce((s, a) => s + a.participations, 0),
+      anciens_partenaires: [...new Set(activites.map((a) => a.partenaire).filter(Boolean))],
+      deja_rattachees: deja.n,
+      rattachees_le: deja.le,
+    });
+  } catch (err) {
+    console.error("[RÉALISATIONS ANTÉRIEURES]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+/* Rattacher : le coach devient l'auteur, et c'est son partenaire actuel qui
+   les compte — dans « par ses coachs ». */
+router.post("/:id/realisations-anterieures/rattacher", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await rattachementCoachPret();
+    const coach = await lireCoach(req.params.id);
+    if (!coach) return res.status(404).json({ error: "Utilisateur introuvable" });
+    if (coach.role !== "coach") return res.status(400).json({ error: "Ce compte n'est pas coach." });
+    if (!coach.partner_id) {
+      return res.status(400).json({ error: "Rattachez d'abord ce coach à un partenaire : c'est lui qui comptera ces réalisations." });
+    }
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT id, partner_id FROM activities WHERE created_by = $1 AND coach_id IS NULL FOR UPDATE`,
+      [coach.id]
+    );
+    for (const a of rows) {
+      await client.query(
+        `INSERT INTO rattachements_coach (coach_id, activity_id, partner_id_avant, fait_par)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (activity_id) DO UPDATE SET coach_id = EXCLUDED.coach_id,
+           partner_id_avant = EXCLUDED.partner_id_avant, fait_le = NOW(), fait_par = EXCLUDED.fait_par`,
+        [coach.id, a.id, a.partner_id, req.user.id]
+      );
+    }
+    await client.query(
+      `UPDATE activities SET coach_id = $1, partner_id = NULL WHERE id = ANY($2::int[])`,
+      [coach.id, rows.map((a) => a.id)]
+    );
+    await client.query("COMMIT");
+    logAudit(req, "UPDATE", "users", coach.id, coach.full_name || coach.email, {
+      action: "realisations_rattachees",
+      activites: rows.length,
+      vers_partenaire: coach.partner_id,
+    });
+    res.json({ rattachees: rows.length, partenaire: coach.partenaire });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[RATTACHER RÉALISATIONS]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
+  }
+});
+
+/* Défaire : chaque activité retrouve le partenaire qu'elle portait, sans
+   coach. Seules celles que le rattachement a touchées. */
+router.post("/:id/realisations-anterieures/annuler", async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await rattachementCoachPret();
+    const coach = await lireCoach(req.params.id);
+    if (!coach) return res.status(404).json({ error: "Utilisateur introuvable" });
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `DELETE FROM rattachements_coach WHERE coach_id = $1 RETURNING activity_id, partner_id_avant`,
+      [coach.id]
+    );
+    for (const r of rows) {
+      await client.query(
+        `UPDATE activities SET coach_id = NULL, partner_id = $2 WHERE id = $1 AND coach_id = $3`,
+        [r.activity_id, r.partner_id_avant, coach.id]
+      );
+    }
+    await client.query("COMMIT");
+    logAudit(req, "UPDATE", "users", coach.id, coach.full_name || coach.email, {
+      action: "realisations_rattachement_annule",
+      activites: rows.length,
+    });
+    res.json({ annulees: rows.length });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("[ANNULER RATTACHEMENT]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  } finally {
+    client.release();
   }
 });
 
