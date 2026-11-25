@@ -663,6 +663,16 @@ export default function Utilisateurs() {
                   </div>
                 )}
 
+                {/* Un compte passé de partenaire à coach : ses réalisations
+                    d'avant ne le suivent pas d'elles-mêmes. */}
+                {editing && form.role === "coach" && (
+                  <RealisationsAnterieures
+                    userId={editing}
+                    partnerIdFormulaire={form.partner_id}
+                    onChange={fetchUsers}
+                  />
+                )}
+
                 {!editing && (
                   <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-700">
                     Après création, un lien d'invitation sera généré pour que l'utilisateur définisse son mot de passe.
@@ -862,6 +872,7 @@ export default function Utilisateurs() {
                         <BadgeRole role={u.role} />
                         {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
                         {aAccesGoto27(u) && <ChipGoto27 />}
+                        {u.role === "coach" && u.realisations_a_rattacher > 0 && <ChipARattacher n={u.realisations_a_rattacher} />}
                       </div>
                     </td>
 
@@ -985,6 +996,140 @@ function ChipMbootay() {
   );
 }
 
+/* Un coach qui a des réalisations d'avant à reprendre. */
+function ChipARattacher({ n }) {
+  return (
+    <span
+      title="Activités déclarées avant son passage en coach : ouvrez sa fiche pour les rattacher"
+      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-800"
+    >
+      {n} à rattacher
+    </span>
+  );
+}
+
+/* Les réalisations d'un compte devenu coach.
+ *
+ * Déclarées quand il était partenaire, ses activités portent l'ancien
+ * partenaire et aucun coach : il ne les voit plus, et son partenaire actuel ne
+ * les compte pas. On les lui rattache d'un geste — elles comptent alors pour
+ * son partenaire actuel, dans « par ses coachs » — et on peut défaire. */
+function RealisationsAnterieures({ userId, partnerIdFormulaire, onChange }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [etat, setEtat] = useState(null);
+  const [enCours, setEnCours] = useState(false);
+
+  const charger = useCallback(async () => {
+    try {
+      const r = await api.get(`/users/${userId}/realisations-anterieures`);
+      setEtat(r.data);
+    } catch {
+      setEtat(null);
+    }
+  }, [userId]);
+  useEffect(() => { charger(); }, [charger]);
+
+  if (!etat || (!etat.activites.length && !etat.deja_rattachees)) return null;
+  const n = etat.activites.length;
+  const partenaireActuel = etat.coach.partenaire;
+  const partenaireModifie = String(partnerIdFormulaire || "") !== String(etat.coach.partner_id || "");
+
+  const rattacher = async () => {
+    const ok = await confirm({
+      title: `Rattacher ${n} activité${n > 1 ? "s" : ""} à ce coach ?`,
+      body:
+        `Elles compteront pour ${partenaireActuel}, dans « par ses coachs », et non plus pour ` +
+        `${etat.anciens_partenaires.join(", ") || "l'ancien partenaire"}. Le coach les retrouvera dans ses activités. ` +
+        "Vous pourrez annuler.",
+      confirmLabel: "Rattacher",
+    });
+    if (!ok) return;
+    setEnCours(true);
+    try {
+      const r = await api.post(`/users/${userId}/realisations-anterieures/rattacher`);
+      toast.success(`${r.data.rattachees} activité${r.data.rattachees > 1 ? "s" : ""} rattachée${r.data.rattachees > 1 ? "s" : ""} — comptée${r.data.rattachees > 1 ? "s" : ""} pour ${r.data.partenaire}.`);
+      await charger();
+      onChange?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Le rattachement n'a pas abouti.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  const annuler = async () => {
+    const ok = await confirm({
+      title: "Annuler le rattachement ?",
+      body: "Les activités retrouvent le partenaire qu'elles portaient, sans coach.",
+      confirmLabel: "Annuler le rattachement",
+      destructive: true,
+    });
+    if (!ok) return;
+    setEnCours(true);
+    try {
+      const r = await api.post(`/users/${userId}/realisations-anterieures/annuler`);
+      toast.success(`${r.data.annulees} activité${r.data.annulees > 1 ? "s" : ""} rendue${r.data.annulees > 1 ? "s" : ""} à leur ancien partenaire.`);
+      await charger();
+      onChange?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "L'annulation n'a pas abouti.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3" aria-label="Réalisations d'avant">
+      {n > 0 && (
+        <>
+          <p className="text-sm font-medium text-amber-900">
+            {n} activité{n > 1 ? "s" : ""} déclarée{n > 1 ? "s" : ""} avant son passage en coach · {etat.participations} participation{etat.participations > 1 ? "s" : ""}
+          </p>
+          <p className="text-xs text-amber-800">
+            Elles comptent encore pour {etat.anciens_partenaires.join(", ") || "aucun partenaire"} et n&apos;ont pas suivi le
+            changement de rôle : ce coach ne les voit pas dans ses activités{partenaireActuel ? `, et ${partenaireActuel} ne les compte pas` : ""}.
+          </p>
+          <ul className="max-h-28 overflow-y-auto text-xs text-amber-900/80">
+            {etat.activites.slice(0, 50).map((a) => (
+              <li key={a.id}>
+                {a.activity_date ? String(a.activity_date).slice(0, 10).split("-").reverse().join("/") : "—"} · {a.title} · {a.participations} part.
+              </li>
+            ))}
+          </ul>
+          {!etat.coach.partner_id || partenaireModifie ? (
+            <p className="text-xs font-medium text-amber-900">
+              {partenaireModifie
+                ? "Enregistrez d'abord le partenaire choisi : c'est lui qui comptera ces réalisations."
+                : "Rattachez d'abord ce coach à un partenaire : c'est lui qui comptera ces réalisations."}
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={rattacher}
+              disabled={enCours}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+            >
+              {enCours ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+              Rattacher à ce coach — compter pour {partenaireActuel}
+            </button>
+          )}
+        </>
+      )}
+      {etat.deja_rattachees > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-emerald-800">
+          <Check className="h-3.5 w-3.5" />
+          {etat.deja_rattachees} activité{etat.deja_rattachees > 1 ? "s" : ""} d&apos;avant déjà rattachée{etat.deja_rattachees > 1 ? "s" : ""}
+          {partenaireActuel ? ` — comptée${etat.deja_rattachees > 1 ? "s" : ""} pour ${partenaireActuel}` : ""}.
+          <button type="button" onClick={annuler} disabled={enCours} className="font-medium text-slate-600 underline hover:text-slate-800">
+            Annuler
+          </button>
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* GOTO27, même facture que Mbootay. Affiché pour les partenaires et les
    coachs seulement : chez un admin il irait de soi, et le répéter sur chaque
    ligne d'admin noierait le seul cas qui compte — un compte ouvert ou fermé. */
@@ -1073,6 +1218,7 @@ function CarteUtilisateur({ u, onEdit, onLink, onDelete }) {
         <BadgeRole role={u.role} />
         {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
                         {aAccesGoto27(u) && <ChipGoto27 />}
+                        {u.role === "coach" && u.realisations_a_rattacher > 0 && <ChipARattacher n={u.realisations_a_rattacher} />}
       </div>
 
       {u.job_title && (

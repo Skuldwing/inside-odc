@@ -55,6 +55,7 @@ const { ensureGenreSource } = require("./migrations/genreSource");
 const { ensureGoto27Acces } = require("./migrations/goto27Acces");
 const { validationPrete } = require("./migrations/validationActivites");
 const { contreVerificationPrete } = require("./migrations/contreVerification");
+const { rattachementCoachPret } = require("./migrations/rattachementCoach");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -1017,6 +1018,12 @@ pool.query(`
     console.log("Migration OK: contre-vérification");
   } catch (e) {
     console.error("Migration contre-vérification ECHOUEE :", e.message);
+  }
+  try {
+    await rattachementCoachPret();
+    console.log("Migration OK: rattachements de coachs");
+  } catch (e) {
+    console.error("Migration rattachements de coachs ECHOUEE :", e.message);
   }
 })();
 
