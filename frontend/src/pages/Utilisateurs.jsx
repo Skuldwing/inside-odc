@@ -80,9 +80,18 @@ const JOB_TITLES = [
   "Autre fonction",
 ];
 
-/* « is_goto27 » coché par défaut : un compte partenaire voyait GOTO27 avant que
-   la case existe, et c'est le cas le plus courant. On décoche pour fermer. */
-const EMPTY_FORM = { full_name: "", email: "", role: "viewer", job_title: "", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false, is_goto27: true, device_ids: [] };
+/* GOTO27 : un partenaire l'avait avant que la case existe — coché par défaut,
+   on décoche pour fermer. Un coach ne l'avait jamais — décoché par défaut, on
+   coche pour ouvrir. « is_goto27 » vaut NULL tant que personne n'a choisi :
+   c'est le rôle qui tranche, comme côté serveur (migrations/goto27Acces.js). */
+const goto27ParDefaut = (role) => role !== "coach";
+const goto27DuCompte = (u) => (u.role === "coach" ? u.is_goto27 === true : u.is_goto27 !== false);
+/* Un coach entre dans GOTO27 par son partenaire : sans partenaire, pas d'accès. */
+const aAccesGoto27 = (u) =>
+  (u.role === "partner" && u.is_goto27 !== false) ||
+  (u.role === "coach" && u.is_goto27 === true && Boolean(u.partner_id));
+
+const EMPTY_FORM = { full_name: "", email: "", role: "viewer", job_title: "", partner_id: "", status: "active", objective_beneficiaries: "", is_team_odc: false, is_goto27: goto27ParDefaut("viewer"), device_ids: [] };
 
 export default function Utilisateurs() {
   const toast = useToast();
@@ -152,7 +161,7 @@ export default function Utilisateurs() {
   };
 
   const openEdit = (u) => {
-    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, job_title: u.job_title || "", partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc, is_goto27: u.is_goto27 !== false, device_ids: u.device_ids || [] });
+    setForm({ full_name: u.full_name || "", email: u.email, role: u.role, job_title: u.job_title || "", partner_id: u.partner_id || "", status: u.status, objective_beneficiaries: u.objective_beneficiaries ?? "", is_team_odc: !!u.is_team_odc, is_goto27: goto27DuCompte(u), device_ids: u.device_ids || [] });
     setEditing(u.id);
     setFormError("");
     setInviteData(null);
@@ -167,6 +176,9 @@ export default function Utilisateurs() {
   };
 
   /* ── soumettre ── */
+  const formulairePourEnvoi = (f) =>
+    f.role === "coach" && !f.partner_id ? { ...f, is_goto27: false } : f;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.full_name.trim()) { setFormError("Le nom complet est requis."); return; }
@@ -175,10 +187,10 @@ export default function Utilisateurs() {
     setFormError("");
     try {
       if (editing) {
-        await api.put(`/users/${editing}`, form);
+        await api.put(`/users/${editing}`, formulairePourEnvoi(form));
         closeModal();
       } else {
-        const res = await api.post("/users", form);
+        const res = await api.post("/users", formulairePourEnvoi(form));
         setInviteData({ link: res.data.invite_link, full_name: res.data.full_name || form.full_name });
         fetchUsers();
       }
@@ -436,7 +448,7 @@ export default function Utilisateurs() {
                 <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="text-sm font-semibold text-slate-700">Accès à la plateforme</label>
-                  <select className="select mt-1" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}>
+                  <select className="select mt-1" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value, is_goto27: f.role === e.target.value ? f.is_goto27 : goto27ParDefaut(e.target.value) }))}>
                     {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                   </select>
                 </div>
@@ -617,18 +629,19 @@ export default function Utilisateurs() {
                 )}
 
                 {/* GOTO27 : l'espace de documents partagés avec les
-                    partenaires. Les admins l'ont d'office ; pour un partenaire,
-                    c'est ici qu'on l'ouvre ou qu'on le ferme. Les coachs et
+                    partenaires. Les admins l'ont d'office ; pour un partenaire
+                    ou un coach, c'est ici qu'on l'ouvre ou qu'on le ferme. Un
+                    coach y entre par le partenaire auquel il est rattaché. Les
                     lecteurs n'y ont pas accès : la case ne leur est pas
                     proposée. */}
-                {(form.role === "partner" || form.role === "admin") && (
+                {(form.role === "partner" || form.role === "coach" || form.role === "admin") && (
                   <div className="rounded-xl border border-slate-200 px-4 py-3">
                     <label className="flex items-start gap-3 cursor-pointer">
                       <input
                         type="checkbox"
                         className="w-4 h-4 accent-orange-500 mt-0.5"
-                        checked={form.role === "admin" ? true : form.is_goto27 !== false}
-                        disabled={form.role === "admin"}
+                        checked={form.role === "admin" ? true : form.role === "coach" ? Boolean(form.is_goto27 && form.partner_id) : form.is_goto27 !== false}
+                        disabled={form.role === "admin" || (form.role === "coach" && !form.partner_id)}
                         onChange={e => setForm(f => ({ ...f, is_goto27: e.target.checked }))}
                       />
                       <span>
@@ -639,7 +652,11 @@ export default function Utilisateurs() {
                         <span className="block text-xs text-slate-500 mt-0.5">
                           {form.role === "admin"
                             ? "Les administrateurs accèdent à GOTO27 d'office."
-                            : "Ce partenaire voit son espace GOTO27 et peut y déposer ses documents. Décocher le lui ferme aussitôt."}
+                            : form.role === "coach"
+                              ? form.partner_id
+                                ? `Ce coach voit l'espace GOTO27 de ${partners.find(p => String(p.id) === String(form.partner_id))?.name || "son partenaire"} et peut y déposer des documents. Décocher le lui ferme aussitôt.`
+                                : "Rattachez d'abord ce coach à un partenaire : GOTO27 est l'espace de son partenaire."
+                              : "Ce partenaire voit son espace GOTO27 et peut y déposer ses documents. Décocher le lui ferme aussitôt."}
                         </span>
                       </span>
                     </label>
@@ -844,7 +861,7 @@ export default function Utilisateurs() {
                       <div className="flex flex-wrap items-center gap-1.5">
                         <BadgeRole role={u.role} />
                         {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
-                        {u.role === "partner" && u.is_goto27 !== false && <ChipGoto27 />}
+                        {aAccesGoto27(u) && <ChipGoto27 />}
                       </div>
                     </td>
 
@@ -968,9 +985,9 @@ function ChipMbootay() {
   );
 }
 
-/* GOTO27, même facture que Mbootay. Affiché pour les partenaires seulement :
-   chez un admin il irait de soi, et le répéter sur chaque ligne d'admin
-   noierait le seul cas qui compte — un partenaire ouvert ou fermé. */
+/* GOTO27, même facture que Mbootay. Affiché pour les partenaires et les
+   coachs seulement : chez un admin il irait de soi, et le répéter sur chaque
+   ligne d'admin noierait le seul cas qui compte — un compte ouvert ou fermé. */
 function ChipGoto27() {
   return (
     <span
@@ -1055,7 +1072,7 @@ function CarteUtilisateur({ u, onEdit, onLink, onDelete }) {
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         <BadgeRole role={u.role} />
         {(u.role === "admin" || u.is_team_odc) && <ChipMbootay />}
-                        {u.role === "partner" && u.is_goto27 !== false && <ChipGoto27 />}
+                        {aAccesGoto27(u) && <ChipGoto27 />}
       </div>
 
       {u.job_title && (
