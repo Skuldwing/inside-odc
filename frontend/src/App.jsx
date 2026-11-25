@@ -58,7 +58,7 @@ function Ailleurs() {
   return <Navigate to={isAuthenticated ? "/dashboard" : "/"} replace />;
 }
 
-/* GOTO27 : admins d'office, partenaires selon le choix fait sur leur fiche
+/* GOTO27 : admins d'office, partenaires et coachs selon le choix fait sur leur fiche
    utilisateur. Le garde évite une page vide ; la vraie protection est au
    serveur, qui relit le choix à chaque requête. */
 function GOTO27Route({ children }) {

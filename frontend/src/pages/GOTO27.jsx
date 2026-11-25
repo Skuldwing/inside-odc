@@ -125,7 +125,7 @@ function StatCard({ icon: Icon, label, value, tone = "orange" }) {
 export default function GOTO27() {
   const toast = useToast();
   const confirm = useConfirm();
-  const { user, isAdmin, isPartner } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -190,7 +190,7 @@ export default function GOTO27() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ ...EMPTY_FORM, partner_id: isPartner ? String(user?.partner_id || "") : "" });
+    setForm({ ...EMPTY_FORM, partner_id: !isAdmin ? String(user?.partner_id || "") : "" });
     setFormOpen(true);
   };
 

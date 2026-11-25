@@ -342,7 +342,7 @@ router.put("/:id", async (req, res) => {
       status,
       is_team_odc: updatedUser.is_team_odc,
       /* Tracé seulement quand la fiche l'envoie : c'est la décision prise. */
-      is_goto27: updatedUser.role === "partner" && req.body.is_goto27 !== undefined
+      is_goto27: ["partner", "coach"].includes(updatedUser.role) && req.body.is_goto27 !== undefined
         ? Boolean(req.body.is_goto27)
         : undefined,
     });

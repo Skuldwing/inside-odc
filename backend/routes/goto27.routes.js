@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
-const { accesGoto27, LIRE_IS_GOTO27 } = require("../migrations/goto27Acces");
+const { accesGoto27, LIRE_IS_GOTO27, ROLES_GOTO27 } = require("../migrations/goto27Acces");
 const { logAudit } = require("../services/audit");
 const { sendEmail } = require("../services/mail");
 
@@ -89,32 +89,42 @@ async function notifierAdminsNouveauDocument(document, partnerId, uploaderId) {
   }).catch((error) => console.error(`[GOTO27 NOTIFICATION] Echec pour ${admin.email}:`, error.message))));
 }
 
+/* Admin, ou compte à qui l'accès est ouvert : partenaire, ou coach rattaché
+   à un partenaire. Pour ces derniers, rôle, partenaire et accès sont relus en
+   base à chaque requête et non dans le jeton : un accès retiré, ou un compte
+   changé de partenaire, l'est tout de suite — pas à l'expiration de la
+   session huit heures plus tard. L'espace consulté est celui du partenaire
+   lu en base. */
 async function autoriserAdminOuPartenaire(req, res, next) {
-  if (req.user?.role !== "admin" && req.user?.role !== "partner") {
-    return res.status(403).json({ error: "Accès réservé aux administrateurs et aux partenaires." });
+  if (req.user?.role === "admin") return next();
+  if (!ROLES_GOTO27.includes(req.user?.role)) {
+    return res.status(403).json({ error: "Accès réservé aux administrateurs et aux comptes autorisés." });
   }
-  if (req.user.role === "partner" && (!Number.isInteger(Number(req.user.partner_id)) || Number(req.user.partner_id) < 1)) {
-    return res.status(403).json({ error: "Aucun partenaire n'est associé à ce compte." });
-  }
-  /* Le choix fait sur la fiche utilisateur. Lu en base à chaque requête et
-     non dans le jeton : un accès retiré doit l'être tout de suite, pas à
-     l'expiration de la session huit heures plus tard. */
-  if (req.user.role === "partner") {
-    try {
-      const { rows } = await pool.query(
-        `SELECT role, ${LIRE_IS_GOTO27} AS is_goto27 FROM users u WHERE u.id = $1`,
-        [req.user.id]
-      );
-      if (!accesGoto27(rows[0])) {
-        return res.status(403).json({ error: "Votre accès à GOTO27 n'est pas ouvert. Adressez-vous à un administrateur." });
-      }
-    } catch (err) {
-      console.error("[GOTO27 ACCES]", err);
-      return res.status(500).json({ error: "Erreur serveur" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT role, partner_id, ${LIRE_IS_GOTO27} AS is_goto27 FROM users u WHERE u.id = $1`,
+      [req.user.id]
+    );
+    const compte = rows[0];
+    if (!compte || compte.role === "admin" || !ROLES_GOTO27.includes(compte.role)) {
+      return res.status(403).json({ error: "Accès réservé aux administrateurs et aux comptes autorisés." });
     }
+    if (!Number.isInteger(Number(compte.partner_id)) || Number(compte.partner_id) < 1) {
+      return res.status(403).json({ error: "Aucun partenaire n'est associé à ce compte." });
+    }
+    if (!accesGoto27(compte)) {
+      return res.status(403).json({ error: "Votre accès à GOTO27 n'est pas ouvert. Adressez-vous à un administrateur." });
+    }
+    req.user = { ...req.user, role: compte.role, partner_id: Number(compte.partner_id) };
+  } catch (err) {
+    console.error("[GOTO27 ACCES]", err);
+    return res.status(500).json({ error: "Erreur serveur" });
   }
   next();
 }
+
+/* Un compte non administrateur ne voit que l'espace de son partenaire. */
+const espacePartenaire = (req) => req.user.role !== "admin";
 
 function recevoirFichier(req, res, next) {
   upload.single("file")(req, res, (error) => {
@@ -138,9 +148,11 @@ router.get("/partners", async (req, res) => {
        FROM partners p
        LEFT JOIN goto27_documents d ON d.partner_id = p.id
        LEFT JOIN LATERAL (
-         SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name, 'email', u.email)
+         SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name, 'email', u.email, 'role', u.role)
                          ORDER BY COALESCE(u.full_name, u.email)) AS accounts
-         FROM users u WHERE u.partner_id = p.id AND u.role = 'partner'
+         FROM users u WHERE u.partner_id = p.id
+           AND ((u.role = 'partner' AND ${LIRE_IS_GOTO27} IS DISTINCT FROM FALSE)
+             OR (u.role = 'coach' AND ${LIRE_IS_GOTO27} IS TRUE))
        ) member_list ON TRUE
        GROUP BY p.id, p.name
        ORDER BY p.name`
@@ -158,9 +170,11 @@ router.get("/partners", async (req, res) => {
                 COALESCE((array_agg(member_list.accounts))[1], '[]'::json) AS accounts
          FROM partners p LEFT JOIN goto27_documents d ON d.partner_id = p.id
          LEFT JOIN LATERAL (
-           SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name, 'email', u.email)
+           SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name, 'email', u.email, 'role', u.role)
                            ORDER BY COALESCE(u.full_name, u.email)) AS accounts
-           FROM users u WHERE u.partner_id = p.id AND u.role = 'partner'
+           FROM users u WHERE u.partner_id = p.id
+           AND ((u.role = 'partner' AND ${LIRE_IS_GOTO27} IS DISTINCT FROM FALSE)
+             OR (u.role = 'coach' AND ${LIRE_IS_GOTO27} IS TRUE))
          ) member_list ON TRUE
          GROUP BY p.id, p.name ORDER BY p.name`
       );
@@ -195,7 +209,7 @@ router.get("/documents", async (req, res) => {
     await ensureSchema();
     const values = [];
     let partnerClause = "";
-    if (req.user.role === "partner") {
+    if (espacePartenaire(req)) {
       values.push(Number(req.user.partner_id));
       partnerClause = `WHERE d.partner_id = $${values.length} AND p.goto27_hidden = FALSE`;
     } else if (req.query.partner_id) {
@@ -231,7 +245,7 @@ router.post("/documents", recevoirFichier, async (req, res) => {
     if (!Number.isInteger(partnerId) || partnerId < 1) return res.status(400).json({ error: "Sélectionnez un partenaire." });
     const partnerExists = await pool.query("SELECT goto27_hidden FROM partners WHERE id = $1", [partnerId]);
     if (!partnerExists.rowCount) return res.status(400).json({ error: "Partenaire introuvable." });
-    if (req.user.role === "partner" && partnerExists.rows[0].goto27_hidden) {
+    if (espacePartenaire(req) && partnerExists.rows[0].goto27_hidden) {
       return res.status(403).json({ error: "Cet espace partenaire est masqué dans GOTO27." });
     }
     const title = String(req.body.title || req.file.originalname).trim().slice(0, 180);
@@ -248,7 +262,7 @@ router.post("/documents", recevoirFichier, async (req, res) => {
     const document = result.rows[0];
     logAudit(req, "CREATE", "goto27_documents", document.id, document.title, { partner_id: partnerId, filename: document.filename });
     res.status(201).json(document);
-    if (req.user.role === "partner") {
+    if (espacePartenaire(req)) {
       notifierAdminsNouveauDocument(document, partnerId, req.user.id)
         .catch((error) => console.error("[GOTO27 NOTIFICATION]", error));
     }
@@ -262,8 +276,8 @@ router.get("/documents/:id/download", async (req, res) => {
   try {
     await ensureSchema();
     const values = [req.params.id];
-    const accessClause = req.user.role === "partner" ? "AND partner_id = $2 AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)" : "";
-    if (req.user.role === "partner") values.push(Number(req.user.partner_id));
+    const accessClause = espacePartenaire(req) ? "AND partner_id = $2 AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)" : "";
+    if (espacePartenaire(req)) values.push(Number(req.user.partner_id));
     const result = await pool.query(
       `SELECT filename, mime_type, file_data FROM goto27_documents WHERE id = $1 ${accessClause}`,
       values
@@ -296,7 +310,7 @@ router.put("/documents/:id", recevoirFichier, async (req, res) => {
     values.push(req.params.id);
     let idParameter = values.length;
     let partnerClause = "";
-    if (req.user.role === "partner") {
+    if (espacePartenaire(req)) {
       values.push(Number(req.user.partner_id));
       partnerClause = ` AND partner_id = $${values.length} AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)`;
     }
@@ -319,8 +333,8 @@ router.delete("/documents/:id", async (req, res) => {
   try {
     await ensureSchema();
     const values = [req.params.id];
-    const partnerClause = req.user.role === "partner" ? "AND partner_id = $2 AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)" : "";
-    if (req.user.role === "partner") values.push(Number(req.user.partner_id));
+    const partnerClause = espacePartenaire(req) ? "AND partner_id = $2 AND EXISTS (SELECT 1 FROM partners p WHERE p.id = goto27_documents.partner_id AND p.goto27_hidden = FALSE)" : "";
+    if (espacePartenaire(req)) values.push(Number(req.user.partner_id));
     const result = await pool.query(
       `DELETE FROM goto27_documents WHERE id = $1 ${partnerClause} RETURNING id, title, partner_id`,
       values

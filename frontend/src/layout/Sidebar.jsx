@@ -66,7 +66,7 @@ const GROUPES = [
     items: [
       { name: "Mbootay 🐼", icon: KanbanSquare, path: "/mbootay", matchPrefix: true, teamOnly: true },
       { name: "XALLETTE SPACE 🧡", icon: Rocket, path: "/cm-xalette", teamOnly: true },
-      { name: "GOTO27", icon: Sparkles, path: "/goto27", roles: ["admin", "partner"], goto27Only: true },
+      { name: "GOTO27", icon: Sparkles, path: "/goto27", roles: ["admin", "partner", "coach"], goto27Only: true },
     ],
   },
   {
