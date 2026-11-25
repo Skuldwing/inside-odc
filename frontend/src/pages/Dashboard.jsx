@@ -827,6 +827,13 @@ function BeneficiariesByPartnerTable({ data }) {
                 <tr key={row.name} className="table-row">
                   <td className="p-4 font-medium break-words">
                     {row.name}
+                    {/* Le travail des coachs rattachés est compris dans le
+                        réalisé ; on dit lequel, à part. */}
+                    {Number(row.value_coachs || 0) > 0 && (
+                      <span className="block text-xs font-normal text-purple-700">
+                        dont {row.value_coachs} par ses coachs · {Number(row.value) - Number(row.value_coachs)} en direct
+                      </span>
+                    )}
                     <BadgeReserve reserve={reserve} className="mt-1" />
                   </td>
                   <td className="p-4 text-right">

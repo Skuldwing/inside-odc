@@ -549,6 +549,22 @@ export default function Partenaires() {
                   </div>
                 </div>
 
+                {/* Le travail des coachs rattachés compte dans le réalisé du
+                    partenaire ; il est rappelé à part, pour qu'on sache qui a
+                    fait quoi. */}
+                {Number(p.coach_activities_count || 0) > 0 && (
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg bg-purple-50/70 px-3 py-1.5 text-xs text-purple-800">
+                    <Users className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Dont par ses coachs : <strong>{Number(p.coach_beneficiaries_count || 0)}</strong> participation{Number(p.coach_beneficiaries_count || 0) > 1 ? "s" : ""}
+                      {" "}· {p.coach_activities_count} activité{Number(p.coach_activities_count) > 1 ? "s" : ""}
+                    </span>
+                    <span className="text-purple-600/80">
+                      — en direct : {beneficiaries - Number(p.coach_beneficiaries_count || 0)}
+                    </span>
+                  </p>
+                )}
+
                 <div>
                   <div className="flex items-center justify-between text-sm text-slate-600">
                     <div className="flex items-center gap-2">

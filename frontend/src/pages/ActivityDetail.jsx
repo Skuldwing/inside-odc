@@ -811,6 +811,9 @@ export default function ActivityDetail() {
   }
 
   const { activity, participants, form: formInfo, photos, stats } = data;
+  /* Ouverte par le partenaire d'un coach : il consulte ce que son coach a
+     réalisé, sans pouvoir y toucher — comme un lecteur. */
+  const enLecture = isViewer || Boolean(activity?.lecture_seule);
 
   const statusColors = {
     planned: "bg-slate-100 border-slate-200 text-slate-600",
@@ -854,7 +857,7 @@ export default function ActivityDetail() {
             <Download className="w-4 h-4" />
             <span>Export Excel</span>
           </button>
-          {!isViewer && (
+          {!enLecture && (
             <button
               onClick={() => startRename("list", activity.list_export_name || "")}
               disabled={renaming === "list"}
@@ -865,7 +868,7 @@ export default function ActivityDetail() {
               <span>Renommer</span>
             </button>
           )}
-          {!isViewer && (
+          {!enLecture && (
             <button
               onClick={handleSendAttestations}
               disabled={sendingAttestations || stats.avec_email === 0}
@@ -949,18 +952,25 @@ export default function ActivityDetail() {
               {activity.title}
             </h1>
 
+            {activity.lecture_seule && (
+              <p className="rounded-xl border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-800">
+                Activité réalisée par votre coach{activity.coach_name ? ` ${activity.coach_name}` : ""} : elle compte dans
+                vos réalisations, et vous la consultez en lecture.
+              </p>
+            )}
+
             {activity.reliability_status === "rejetee" && (
               <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 text-sm text-red-800">
                   <p className="font-semibold">Déclaration rejetée par ODC</p>
                   {activity.validation_motif && <p className="mt-0.5 text-red-700">{activity.validation_motif}</p>}
-                  {!isAdmin && !isViewer && (
+                  {!isAdmin && !enLecture && (
                     <p className="mt-0.5 text-xs text-red-700/80">
                       Corrigez ce qui est demandé, puis renvoyez-la : un administrateur la reverra.
                     </p>
                   )}
                 </div>
-                {!isAdmin && !isViewer && (
+                {!isAdmin && !enLecture && (
                   <button
                     type="button"
                     onClick={renvoyerPourValidation}
@@ -1013,7 +1023,8 @@ export default function ActivityDetail() {
             </div>
           </div>
 
-          {/* Quick Actions Panel */}
+          {/* Quick Actions Panel — rien à faire ici pour qui consulte en lecture. */}
+          {!enLecture && (
           <div className="flex flex-col sm:flex-row lg:flex-col gap-1.5 shrink-0">
             <button
               onClick={openAddModal}
@@ -1031,6 +1042,7 @@ export default function ActivityDetail() {
               {formInfo.emargement_actif ? "Fermer l'émargement" : "Ouvrir l'émargement"}
             </button>
           </div>
+          )}
         </div>
       </section>
 
@@ -1509,7 +1521,7 @@ export default function ActivityDetail() {
                             >
                               <User className="w-4 h-4" />
                             </Link>
-                            {!isViewer && (
+                            {!enLecture && (
                               <button
                                 onClick={() => handleRemoveParticipant(p)}
                                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -1782,7 +1794,7 @@ export default function ActivityDetail() {
                     : `${taskStats.done} tâche(s) terminée(s) sur ${taskStats.total}.`}
                 </p>
               </div>
-              {!isViewer && (
+              {!enLecture && (
                 <button
                   onClick={() => openTaskForm()}
                   className="btn-primary text-sm"
@@ -1809,7 +1821,7 @@ export default function ActivityDetail() {
           </div>
 
           {/* Création / modification d'une tâche */}
-          {taskForm && !isViewer && (
+          {taskForm && !enLecture && (
             <form onSubmit={saveTask} className="space-y-4 rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50/70 to-white p-4 shadow-sm sm:p-5">
               <h4 className="font-semibold text-slate-900 text-sm">
                 {taskForm.id ? "Modifier la tâche" : "Nouvelle tâche"}
@@ -1926,7 +1938,7 @@ export default function ActivityDetail() {
             <div className="card p-8 text-center text-slate-500 border border-dashed">
               <CheckCircle2 className="w-8 h-8 text-slate-300 mx-auto mb-2" />
               <p className="text-sm">Aucune tâche pour cette activité.</p>
-              {!isViewer && (
+              {!enLecture && (
                 <button
                   onClick={() => openTaskForm()}
                   className="btn-primary text-sm mt-3"
@@ -1946,7 +1958,7 @@ export default function ActivityDetail() {
                       <th className="w-52 px-4 py-3.5 font-bold">Responsable</th>
                       <th className="w-40 px-4 py-3.5 font-bold">Échéance</th>
                       <th className="w-40 px-4 py-3.5 font-bold">État</th>
-                      {!isViewer && (
+                      {!enLecture && (
                         <th className="w-24 px-4 py-3.5 text-right font-bold">Actions</th>
                       )}
                     </tr>
@@ -2010,7 +2022,7 @@ export default function ActivityDetail() {
                           </td>
 
                           <td className="px-4 py-3 align-middle">
-                            {isViewer ? (
+                            {enLecture ? (
                               <span
                                 className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${style.chip}`}
                               >
@@ -2031,7 +2043,7 @@ export default function ActivityDetail() {
                             )}
                           </td>
 
-                          {!isViewer && (
+                          {!enLecture && (
                             <td className="px-4 py-3 align-middle">
                               <div className="flex items-center justify-end gap-1">
                                 <button
@@ -2119,7 +2131,7 @@ export default function ActivityDetail() {
                   <Camera className="w-5 h-5 text-orange-500" />
                   Photos de l&apos;activité ({photos?.length || 0})
                 </h3>
-                {!isViewer && (
+                {!enLecture && (
                   <label className="btn-secondary text-xs py-1.5 px-2.5 cursor-pointer flex items-center gap-1">
                     <Upload className="w-3.5 h-3.5" />
                     <span>{uploadingPhoto ? "Ajout..." : "Ajouter une photo"}</span>
@@ -2239,7 +2251,7 @@ export default function ActivityDetail() {
                       <Download className="w-3.5 h-3.5" />
                       Télécharger
                     </a>
-                    {!isViewer && (
+                    {!enLecture && (
                       <button
                         type="button"
                         onClick={() => startRename("report", activity.report_filename)}
@@ -2250,7 +2262,7 @@ export default function ActivityDetail() {
                         Renommer
                       </button>
                     )}
-                    {!isViewer && (
+                    {!enLecture && (
                       <button
                         type="button"
                         onClick={handleDeleteReport}

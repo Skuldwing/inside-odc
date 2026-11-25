@@ -125,6 +125,19 @@ function isOwner(req, activity) {
   return true; // admin
 }
 
+/* Lecture seule : un partenaire voit aussi ce qu'ont réalisé les coachs qui
+   lui sont rattachés. Il ne les modifie pas — l'activité reste celle du
+   coach : toutes les écritures continuent de passer par isOwner. */
+async function peutConsulter(req, activite) {
+  if (isOwner(req, activite)) return true;
+  if (req.user.role !== "partner" || req.user.partner_id == null || !activite?.coach_id) return false;
+  const r = await pool.query(
+    "SELECT 1 FROM users WHERE id = $1 AND role = 'coach' AND partner_id = $2",
+    [activite.coach_id, req.user.partner_id]
+  );
+  return r.rowCount > 0;
+}
+
 /* ===== GET ACTIVITIES ===== */
 router.get("/", authMiddleware, async (req, res) => {
   try {
@@ -213,7 +226,9 @@ router.get("/", authMiddleware, async (req, res) => {
       (linkedPartnerId != null && !["admin", "coach"].includes(accessRole));
     if (partnerScoped) {
       if (!linkedPartnerId) return res.json([]);
-      query += " WHERE a.partner_id = $1";
+      /* Les siennes, et celles de ses coachs — affichées à part, en lecture. */
+      query += ` WHERE (a.partner_id = $1
+                  OR a.coach_id IN (SELECT id FROM users WHERE role = 'coach' AND partner_id = $1))`;
       params.push(linkedPartnerId);
     } else if (accessRole === "coach") {
       query += " WHERE a.coach_id = $1";
@@ -239,7 +254,16 @@ router.get("/", authMiddleware, async (req, res) => {
       result = await pool.query(query, params);
     }
     const pourRole = { user: { role: accessRole } };
-    res.json(result.rows.map((row) => masquerControles(row, pourRole)));
+    res.json(result.rows.map((row) => {
+      const ligne = masquerControles(row, pourRole);
+      /* Pour un partenaire : une activité de l'un de ses coachs se lit, ne se
+         modifie pas. L'écran s'en sert pour la ranger à part. */
+      if (partnerScoped) {
+        ligne.par_un_coach = row.coach_id != null && String(row.partner_id) !== String(linkedPartnerId);
+        ligne.lecture_seule = ligne.par_un_coach;
+      }
+      return ligne;
+    }));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -680,9 +704,11 @@ router.get("/:id", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "Activité introuvable" });
     }
     const activity = result.rows[0];
-    if (!isOwner(req, activity)) {
+    if (!(await peutConsulter(req, activity))) {
       return res.status(403).json({ error: "Accès refusé" });
     }
+    /* Ouverte par le partenaire d'un coach : il la lit, il n'y écrit pas. */
+    activity.lecture_seule = !isOwner(req, activity);
 
     // Liste des inscrits / présences
     const partRes = await pool.query(
@@ -936,7 +962,7 @@ router.get("/:id/participants", authMiddleware, async (req, res) => {
       [id]
     );
     if (!actRes.rows.length) return res.status(404).json({ error: "Activité introuvable" });
-    if (!isOwner(req, actRes.rows[0])) return res.status(403).json({ error: "Accès refusé" });
+    if (!(await peutConsulter(req, actRes.rows[0]))) return res.status(403).json({ error: "Accès refusé" });
 
     const r = await pool.query(
       `SELECT p.id, p.nom, p.prenom, p.email,
@@ -975,7 +1001,7 @@ router.get("/:id/participants/export", authMiddleware, async (req, res) => {
     if (req.user.role === "viewer") {
       return res.status(403).json({ error: "Accès refusé" });
     }
-    if (!isOwner(req, activity)) {
+    if (!(await peutConsulter(req, activity))) {
       return res.status(403).json({ error: "Accès refusé" });
     }
 
@@ -1491,7 +1517,7 @@ router.get("/:id/report", authMiddleware, async (req, res) => {
     if (!meta.data_size) return res.status(404).json({ error: "Aucun rapport disponible" });
 
     if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
-    if (!isOwner(req, meta)) return res.status(403).json({ error: "Accès refusé" });
+    if (!(await peutConsulter(req, meta))) return res.status(403).json({ error: "Accès refusé" });
 
     // Charger les données binaires seulement si autorisé
     const dataRes = await pool.query(

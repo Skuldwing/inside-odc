@@ -16,6 +16,7 @@ import {
   Check,
   Trash2,
   ArrowRightLeft,
+  Users,
 } from "lucide-react";
 import api from "../api";
 import { lireReserve, BadgeReserve } from "../components/Reserve";
@@ -34,6 +35,86 @@ function scoreTextColor(score) {
   return "text-red-600";
 }
 
+/* Ce qu'a fait le partenaire lui-même, et ce qu'ont fait les coachs qui lui
+   sont rattachés. Les deux comptent dans son réalisé ; on les montre à part,
+   coach par coach, face à l'objectif confié à chacun. */
+function RepartitionRealise({ partner, beneficiaries }) {
+  const coachs = partner.coachs || [];
+  const parCoachs = Number(partner.coach_beneficiaries_count || 0);
+  const activitesCoachs = Number(partner.coach_activities_count || 0);
+  const activites = Number(partner.activities_count || 0);
+  if (!coachs.length && !activitesCoachs) return null;
+  const derniere = (d) => (d ? format(parseISO(String(d).slice(0, 10)), "dd/MM/yyyy", { locale: fr }) : "—");
+  return (
+    <section className="mt-5 space-y-3" aria-labelledby="titre-repartition">
+      <h2 id="titre-repartition" className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+        <Users className="h-4 w-4 text-purple-600" />
+        Répartition du réalisé
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-100 p-3">
+          <p className="text-xs text-slate-500">Par le partenaire, en direct</p>
+          <p className="mt-0.5 text-lg font-semibold text-slate-900">
+            {beneficiaries - parCoachs} <span className="text-xs font-normal text-slate-500">participations</span>
+          </p>
+          <p className="text-xs text-slate-500">{activites - activitesCoachs} activité{activites - activitesCoachs > 1 ? "s" : ""}</p>
+        </div>
+        <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3">
+          <p className="text-xs text-purple-700">Par ses coachs</p>
+          <p className="mt-0.5 text-lg font-semibold text-purple-900">
+            {parCoachs} <span className="text-xs font-normal text-purple-700">participations</span>
+          </p>
+          <p className="text-xs text-purple-700">{activitesCoachs} activité{activitesCoachs > 1 ? "s" : ""}</p>
+        </div>
+      </div>
+      {coachs.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-slate-100">
+          <table className="table text-sm">
+            <thead className="table-head">
+              <tr>
+                <th className="px-3 py-2">Coach</th>
+                <th className="px-3 py-2 text-right">Activités</th>
+                <th className="px-3 py-2 text-right">Participations</th>
+                <th className="px-3 py-2">Objectif confié</th>
+                <th className="px-3 py-2">Dernière activité</th>
+              </tr>
+            </thead>
+            <tbody>
+              {coachs.map((c) => {
+                const obj = Number(c.objective_beneficiaries || 0);
+                const pctCoach = obj > 0 ? Math.min(100, Math.round((c.participations / obj) * 100)) : null;
+                return (
+                  <tr key={c.id} className="table-row">
+                    <td className="px-3 py-2">
+                      <span className="font-medium text-slate-800">{c.full_name || c.email}</span>
+                      {c.status === "inactive" && <span className="ml-1.5 text-xs text-slate-400">(inactif)</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{c.activites}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{c.participations}</td>
+                    <td className="px-3 py-2">
+                      {obj > 0 ? (
+                        <span className="flex items-center gap-2">
+                          <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                            <span className="block h-full rounded-full bg-purple-500" style={{ width: `${pctCoach}%` }} />
+                          </span>
+                          <span className="text-xs tabular-nums text-slate-600">{c.participations} / {obj}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-400">non défini</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{derniere(c.derniere_activite)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function TimelineEvent({ event }) {
   const date = event.date ? format(parseISO(event.date), "dd/MM/yyyy", { locale: fr }) : "—";
 
@@ -49,6 +130,11 @@ function TimelineEvent({ event }) {
           <p className="text-xs text-slate-500">{date}</p>
           <p className="text-sm text-slate-800">
             Activité <span className="font-medium">{event.data.title}</span>
+            {event.data.coach_name && (
+              <span className="ml-2 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-700">
+                par {event.data.coach_name}
+              </span>
+            )}
             {score != null && (
               <span className={`ml-2 text-xs font-semibold ${scoreTextColor(score)}`}>
                 Fiabilité {score.toFixed(0)}%
@@ -368,6 +454,8 @@ export default function PartenaireDetail() {
         </div>
 
         <BadgeReserve reserve={reserve} className="mt-3" />
+
+        <RepartitionRealise partner={partner} beneficiaries={beneficiaries} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
