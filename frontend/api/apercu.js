@@ -50,7 +50,7 @@ export async function contenuApercu({ type, id, api }) {
     const f = await lireJson(`${api}/forms/public/${encodeURIComponent(id)}/apercu`);
     if (!f?.titre) return null;
     return {
-      titre: f.titre,
+      titre: String(f.titre).trim(),
       description: f.description || "Formulaire en ligne — Orange Digital Center.",
       image: f.image || null,
       chemin: `/f/${encodeURIComponent(id)}`,
@@ -64,7 +64,7 @@ export async function contenuApercu({ type, id, api }) {
       .filter(Boolean)
       .join(" · ");
     return {
-      titre: a.title,
+      titre: String(a.title).trim(),
       description: `Émargement${details ? ` — ${details}` : ""}. Enregistrez votre présence en un instant.`,
       image: null,
       chemin: `/checkin/${encodeURIComponent(id)}`,
