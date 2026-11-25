@@ -1612,7 +1612,9 @@ router.patch("/:id/rename-file", authMiddleware, requireWriteAccess, async (req,
    référence (PDF) : le système modifiera directement ce PDF en remplaçant
    les données (dates, nombres, contacts) par celles de l'activité.
    Le résultat remplace tout rapport précédent dans report_data. */
-router.post("/:id/generate-report", authMiddleware, requireWriteAccess, reportUpload.single("reference"), async (req, res) => {
+/* Générer un rapport depuis les données : réservé aux administrateurs. Les
+   partenaires et coachs gardent le dépôt de leur propre PDF (POST /:id/report). */
+router.post("/:id/generate-report", authMiddleware, requireAdmin, reportUpload.single("reference"), async (req, res) => {
   try {
     const { id } = req.params;
     const reportType = req.body?.report_type || "rapport_synthese";
