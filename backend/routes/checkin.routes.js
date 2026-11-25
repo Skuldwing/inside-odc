@@ -261,6 +261,10 @@ router.post("/:activityId", async (req, res) => {
       via: "checkin_public",
       fiche_existante: Boolean(fiche),
       champs_completes: champsCompletes,
+      /* Le navigateur, avec l'adresse IP que le journal note déjà : de quoi
+         voir qu'un même téléphone a émargé pour toute une salle. Réservé au
+         contrôle des administrateurs. */
+      navigateur: String(req.headers["user-agent"] || "").slice(0, 300) || null,
     });
     await computeAndStoreReliability(activityId).catch((e) => console.warn("Reliability:", e.message));
 

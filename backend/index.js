@@ -23,6 +23,8 @@ const socialDashboardRoutes = require("./routes/socialDashboard.routes");
 const socialReportRoutes = require("./routes/socialReport.routes");
 const formsRoutes = require("./routes/forms.routes");
 const checkinRoutes = require("./routes/checkin.routes");
+const controleRoutes = require("./routes/controle.routes");
+const verificationRoutes = require("./routes/verification.routes");
 const voteRoutes = require("./routes/vote.routes");
 const { router: emailTemplatesRoutes } = require("./routes/emailTemplates.routes");
 const auditRoutes = require("./routes/audit.routes");
@@ -51,6 +53,8 @@ const { ensureActivityDetailAndProfileSchema } = require("./migrations/activityD
 const { ensureActivityTasksSchema } = require("./migrations/activityTasks");
 const { ensureGenreSource } = require("./migrations/genreSource");
 const { ensureGoto27Acces } = require("./migrations/goto27Acces");
+const { validationPrete } = require("./migrations/validationActivites");
+const { contreVerificationPrete } = require("./migrations/contreVerification");
 const modelesAttestationRoutes = require("./routes/modelesAttestation.routes");
 const attestationsParticipantRoutes = require("./routes/attestationsParticipant.routes");
 const desabonnementRoutes = require("./routes/desabonnement.routes");
@@ -211,6 +215,10 @@ app.use("/vote", voteRoutes);
 app.use("/email-templates", emailTemplatesRoutes);
 app.use("/audit-logs", auditRoutes);
 app.use("/reliability", reliabilityRoutes);
+/* Contre-vérification : le tirage et les résultats sont réservés aux
+   administrateurs ; la page de réponse est publique, protégée par son jeton. */
+app.use("/controle", controleRoutes);
+app.use("/verification", verificationRoutes);
 app.use("/mbootay", mbootayRoutes);
 app.use("/goto27", goto27Routes);
 app.use("/profile", profileRoutes);
@@ -992,6 +1000,23 @@ pool.query(`
     console.log("Migration OK: participants.genre_source");
   } catch (e) {
     console.error("Migration participants.genre_source ECHOUEE :", e.message);
+  }
+})();
+
+/* ── Validation des activités par un administrateur ──
+   Le score ne valide plus rien tout seul. Voir migrations/validationActivites.js. */
+(async () => {
+  try {
+    await validationPrete();
+    console.log("Migration OK: validation des activités");
+  } catch (e) {
+    console.error("Migration validation des activités ECHOUEE :", e.message);
+  }
+  try {
+    await contreVerificationPrete();
+    console.log("Migration OK: contre-vérification");
+  } catch (e) {
+    console.error("Migration contre-vérification ECHOUEE :", e.message);
   }
 })();
 

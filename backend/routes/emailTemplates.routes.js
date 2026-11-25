@@ -187,6 +187,28 @@ const DEFAULTS = {
             </table>`,
     variables: ["{{lien}}", "{{duree}}", "{{bouton}}"],
   },
+  verification_participation: {
+    slug: "verification_participation",
+    label: "Vérification de participation",
+    description: "Envoyé à un échantillon de bénéficiaires tiré au hasard, pour confirmer qu'ils ont bien participé à une activité déclarée par un partenaire.",
+    subject: "Avez-vous participé à « {{activite}} » ?",
+    apercu: "Une seule question, un clic : avez-vous participé à cette activité ?",
+    body_html: `            <p style="${P}">Bonjour <strong>{{prenom}}</strong>,</p>
+            <p style="${P}">${IDENTITE.nom} vérifie régulièrement la qualité des activités menées avec ses partenaires. Vous figurez sur la liste de présence de l'activité ci-dessous : pouvez-vous nous confirmer que vous y avez participé&nbsp;?</p>
+
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#FFF7ED;border-left:3px solid ${ORANGE};border-radius:0 8px 8px 0;margin:4px 0 16px">
+              <tr>
+                <td style="padding:16px">
+                  <div style="font-family:${POLICE};font-size:17px;font-weight:bold;line-height:24px;color:${ENCRE}">{{activite}}</div>
+                  <div style="font-family:${POLICE};font-size:14px;line-height:22px;color:${GRIS};padding-top:4px">{{date}}{{lieu}}{{partenaire}}</div>
+                </td>
+              </tr>
+            </table>
+
+{{bouton}}
+            <p style="${PETIT};text-align:center">Cela prend dix secondes. Votre réponse reste confidentielle et ne sert qu'à ce contrôle.</p>`,
+    variables: ["{{prenom}}", "{{activite}}", "{{date}}", "{{lieu}}", "{{partenaire}}", "{{lien}}", "{{bouton}}"],
+  },
   attestation: {
     slug: "attestation",
     label: "Attestation de participation",

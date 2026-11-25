@@ -26,6 +26,7 @@ import {
   ChevronLeft,
   UserCheck,
   RefreshCw,
+  RotateCcw,
   Sparkles,
   Share2,
   Eye,
@@ -41,6 +42,7 @@ import QRCode from "qrcode";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
 import { useToast, useConfirm } from "../components/ui";
+import StatutValidation from "../components/StatutValidation";
 
 function formatDate(iso) {
   if (!iso) return "—";
@@ -242,6 +244,27 @@ export default function ActivityDetail() {
   };
 
   const photosList = data?.photos || [];
+
+  /* Une déclaration rejetée revient dans la file une fois corrigée. */
+  const [renvoiEnCours, setRenvoiEnCours] = useState(false);
+  const renvoyerPourValidation = async () => {
+    const ok = await confirm({
+      title: "Renvoyer pour validation ?",
+      body: "L'activité repassera « en attente de validation » et un administrateur ODC la reverra.",
+      confirmLabel: "Renvoyer",
+    });
+    if (!ok) return;
+    setRenvoiEnCours(true);
+    try {
+      await api.post(`/activities/${id}/resoumettre`);
+      toast.success("Activité renvoyée pour validation.");
+      await fetchDetail();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Impossible de renvoyer l'activité.");
+    } finally {
+      setRenvoiEnCours(false);
+    }
+  };
 
   const fetchDetail = async () => {
     try {
@@ -913,16 +936,48 @@ export default function ActivityDetail() {
                   Partenaire : {activity.partner_name}
                 </span>
               )}
-              {activity.reliability_score != null && (
-                <span className="badge bg-emerald-50 border-emerald-200 text-emerald-700 font-medium">
-                  Fiabilité {Math.round(activity.reliability_score)}%
-                </span>
+              {activity.reliability_status && (
+                <StatutValidation
+                  statut={activity.reliability_status}
+                  score={activity.reliability_score}
+                  admin={isAdmin}
+                />
               )}
             </div>
 
             <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-orange-700 leading-tight">
               {activity.title}
             </h1>
+
+            {activity.reliability_status === "rejetee" && (
+              <div className="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 text-sm text-red-800">
+                  <p className="font-semibold">Déclaration rejetée par ODC</p>
+                  {activity.validation_motif && <p className="mt-0.5 text-red-700">{activity.validation_motif}</p>}
+                  {!isAdmin && !isViewer && (
+                    <p className="mt-0.5 text-xs text-red-700/80">
+                      Corrigez ce qui est demandé, puis renvoyez-la : un administrateur la reverra.
+                    </p>
+                  )}
+                </div>
+                {!isAdmin && !isViewer && (
+                  <button
+                    type="button"
+                    onClick={renvoyerPourValidation}
+                    disabled={renvoiEnCours}
+                    className="btn shrink-0 border border-red-300 bg-white text-sm text-red-700 hover:bg-red-100 disabled:opacity-60"
+                  >
+                    {renvoiEnCours ? <RefreshCw className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                    Renvoyer pour validation
+                  </button>
+                )}
+                {isAdmin && (
+                  <Link to="/fiabilite" className="shrink-0 text-sm font-medium text-red-700 hover:underline">
+                    Revoir dans Fiabilité
+                  </Link>
+                )}
+              </div>
+            )}
 
             {activity.description && (
               <p className="text-slate-600 text-sm leading-relaxed max-w-4xl">

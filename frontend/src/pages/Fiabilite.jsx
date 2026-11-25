@@ -1,35 +1,55 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   ShieldAlert,
+  ShieldCheck,
   RefreshCw,
   CheckCircle2,
   XCircle,
   Copy,
-  Settings2,
   Users,
   FileCheck,
   ListChecks,
   AlertTriangle,
+  OctagonAlert,
+  Info,
   Table,
   RotateCcw,
+  Mail,
+  MapPin,
+  QrCode,
+  Camera,
+  ExternalLink,
 } from "lucide-react";
 import api from "../api";
 import PageHeader from "../components/ui/PageHeader";
+import { Modal, useToast } from "../components/ui";
+import StatutValidation from "../components/StatutValidation";
+import ContreVerification from "../components/fiabilite/ContreVerification";
+import VisitesInopinees from "../components/fiabilite/VisitesInopinees";
+
+/* Le partenaire déclare, un administrateur ODC valide. Cette page est celle
+   de l'administrateur : la file des déclarations, avec pour chacune les
+   contrôles automatiques — qu'un partenaire ne voit jamais — puis la
+   contre-vérification auprès des bénéficiaires et les visites inopinées. */
+
+const SECTIONS = [
+  { key: "validation", label: "Validation des activités", Icone: ShieldCheck },
+  { key: "beneficiaires", label: "Vérification auprès des bénéficiaires", Icone: Mail },
+  { key: "visites", label: "Visites inopinées", Icone: MapPin },
+];
 
 const TABS = [
   { key: "a_verifier", label: "À vérifier" },
   { key: "validee", label: "Validées" },
   { key: "rejetee", label: "Rejetées" },
+  { key: "historique", label: "Anciennes validations automatiques" },
   { key: "all", label: "Toutes" },
 ];
 
-const STATUS_BADGE = {
-  validee: { label: "Validée", className: "bg-emerald-50 border-emerald-200 text-emerald-700" },
-  rejetee: { label: "Rejetée", className: "bg-red-50 border-red-200 text-red-700" },
-  a_verifier: { label: "À vérifier", className: "bg-amber-50 border-amber-200 text-amber-700" },
-};
+const PAGE = 50;
 
 const CRITERIA_META = {
   participants: { label: "Liste participants", icon: Users },
@@ -37,8 +57,22 @@ const CRITERIA_META = {
   metadata: { label: "Métadonnées", icon: ListChecks },
   duplicates: { label: "Absence de doublons", icon: Copy },
 };
-
 const CRITERIA_ORDER = ["participants", "proof", "metadata", "duplicates"];
+
+const NIVEAUX = {
+  alerte: { Icone: OctagonAlert, cls: "text-red-700", fond: "border-red-200 bg-red-50/70", libelle: "alerte" },
+  attention: { Icone: AlertTriangle, cls: "text-amber-700", fond: "border-amber-200 bg-amber-50/60", libelle: "à regarder" },
+  info: { Icone: Info, cls: "text-slate-500", fond: "border-slate-200 bg-slate-50/60", libelle: "info" },
+};
+
+const dateFr = (d) => {
+  if (!d) return "—";
+  try {
+    return format(typeof d === "string" ? parseISO(d) : d, "dd/MM/yyyy", { locale: fr });
+  } catch {
+    return "—";
+  }
+};
 
 function scoreColor(score) {
   if (score >= 70) return "bg-emerald-500";
@@ -46,49 +80,14 @@ function scoreColor(score) {
   return "bg-red-500";
 }
 
-function scoreTextColor(score) {
-  if (score >= 70) return "text-emerald-600";
-  if (score >= 40) return "text-amber-600";
-  return "text-red-600";
-}
-
-function ParticipantsCriterionNote({ c }) {
-  if (!c.has_real_list) {
-    return (
-      <p className="mt-1 flex items-center gap-1.5 text-xs text-amber-600">
-        <AlertTriangle className="w-3 h-3 shrink-0" />
-        Effectif estimé — aucune liste réelle importée
-      </p>
-    );
-  }
-  const gaps = [];
-  if (c.missing_email > 0) gaps.push(`${c.missing_email} sans email`);
-  if (c.missing_telephone > 0) gaps.push(`${c.missing_telephone} sans téléphone`);
-  if (c.missing_genre > 0) gaps.push(`${c.missing_genre} sans genre`);
-  if (c.missing_structure > 0) gaps.push(`${c.missing_structure} sans structure`);
-  if (gaps.length === 0) return null;
-  return (
-    <p className="mt-1 text-xs text-slate-500">
-      Sur {c.real_count} participant{c.real_count !== 1 ? "s" : ""} : {gaps.join(" · ")}
-    </p>
-  );
-}
-
-function DuplicatesCriterionNote({ c, duplicateOfTitle }) {
-  if (!c.duplicate_of) return null;
-  return (
-    <p className="mt-1 flex items-center gap-1.5 text-xs text-red-600">
-      <AlertTriangle className="w-3 h-3 shrink-0" />
-      Doublon potentiel avec « {duplicateOfTitle || `activité #${c.duplicate_of}`} » —
-      même partenaire/coach, même date
-    </p>
-  );
-}
-
-function ScoreBreakdown({ details, duplicateOfTitle }) {
+function ScoreBreakdown({ details }) {
   const criteria = details?.criteria || {};
   return (
     <div className="space-y-2.5">
+      <p className="text-xs text-slate-500">
+        Le score mesure si le dossier est complet (contacts, rapport, lieu, durée), pas s&apos;il est vrai :
+        c&apos;est une aide, pas une validation.
+      </p>
       {CRITERIA_ORDER.map((key) => {
         const c = criteria[key];
         if (!c) return null;
@@ -96,22 +95,17 @@ function ScoreBreakdown({ details, duplicateOfTitle }) {
         const Icon = meta.icon;
         return (
           <div key={key}>
-            <div className="flex items-center justify-between text-xs mb-1">
+            <div className="mb-1 flex items-center justify-between text-xs">
               <span className="flex items-center gap-1.5 text-slate-600">
-                <Icon className="w-3.5 h-3.5 text-slate-500" />
+                <Icon className="h-3.5 w-3.5 text-slate-500" />
                 {meta.label}
                 <span className="text-slate-500">({Math.round(c.weight * 100)}%)</span>
               </span>
-              <span className={`font-semibold ${scoreTextColor(c.score)}`}>{c.score}%</span>
+              <span className="font-semibold text-slate-700">{c.score}%</span>
             </div>
-            <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className={`h-full rounded-full ${scoreColor(c.score)} transition-all duration-500`}
-                style={{ width: `${c.score}%` }}
-              />
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full ${scoreColor(c.score)}`} style={{ width: `${c.score}%` }} />
             </div>
-            {key === "participants" && <ParticipantsCriterionNote c={c} />}
-            {key === "duplicates" && <DuplicatesCriterionNote c={c} duplicateOfTitle={duplicateOfTitle} />}
           </div>
         );
       })}
@@ -121,34 +115,23 @@ function ScoreBreakdown({ details, duplicateOfTitle }) {
 
 function ParticipantsList({ activityId }) {
   const [participants, setParticipants] = useState(null);
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     let mounted = true;
     api
       .get(`/reliability/${activityId}/participants`)
       .then((res) => { if (mounted) setParticipants(res.data); })
-      .catch(() => { if (mounted) setParticipants([]); })
-      .finally(() => { if (mounted) setLoading(false); });
+      .catch(() => { if (mounted) setParticipants([]); });
     return () => { mounted = false; };
   }, [activityId]);
 
-  if (loading) {
-    return <p className="text-xs text-slate-500 py-2">Chargement de la liste...</p>;
+  if (!participants) return <p className="py-2 text-xs text-slate-500">Chargement de la liste…</p>;
+  if (participants.length === 0) {
+    return <p className="py-2 text-xs text-slate-500">Aucune liste nominative pour cette activité.</p>;
   }
-
-  if (!participants || participants.length === 0) {
-    return (
-      <p className="text-xs text-slate-500 py-2">
-        Aucune liste nominative importée pour cette activité — uniquement un effectif estimé.
-      </p>
-    );
-  }
-
   return (
-    <div className="overflow-x-auto">
+    <div className="max-h-72 overflow-auto">
       <table className="table text-xs">
-        <thead className="table-head">
+        <thead className="table-head sticky top-0">
           <tr>
             <th className="px-2 py-1.5">Nom</th>
             <th className="px-2 py-1.5">Téléphone</th>
@@ -160,16 +143,8 @@ function ParticipantsList({ activityId }) {
           {participants.map((p) => (
             <tr key={p.id} className="table-row">
               <td className="px-2 py-1.5 text-slate-700">{p.prenom} {p.nom}</td>
-              <td className="px-2 py-1.5">
-                {p.telephone
-                  ? <span className="text-slate-600">{p.telephone}</span>
-                  : <span className="text-red-500 italic">manquant</span>}
-              </td>
-              <td className="px-2 py-1.5">
-                {p.email
-                  ? <span className="text-slate-600">{p.email}</span>
-                  : <span className="text-red-500 italic">manquant</span>}
-              </td>
+              <td className="px-2 py-1.5 text-slate-600">{p.telephone || <span className="italic text-slate-400">—</span>}</td>
+              <td className="px-2 py-1.5 text-slate-600">{p.email || <span className="italic text-slate-400">—</span>}</td>
               <td className="px-2 py-1.5 text-slate-500">{p.structure || "—"}</td>
             </tr>
           ))}
@@ -179,291 +154,377 @@ function ParticipantsList({ activityId }) {
   );
 }
 
-function ActivityRow({ activity, onValidate, onReject, onReset, busy }) {
-  const [expanded, setExpanded] = useState(false);
-  const [showList, setShowList] = useState(false);
-  const score = Number(activity.reliability_score ?? 0);
-  const hasRealList = activity.reliability_details?.criteria?.participants?.has_real_list;
-  const status = activity.reliability_status;
-  const statusMeta = STATUS_BADGE[status];
+/* D'où vient la décision, ou pourquoi l'activité est revenue dans la file. */
+function Origine({ a }) {
+  const effectif = a.participants_count;
+  if (a.validation_origine === "reouverte") {
+    return (
+      <p className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          <strong>Liste allongée après validation</strong> : {a.validation_effectif} participant{a.validation_effectif > 1 ? "s" : ""} à la
+          validation, {effectif} aujourd&apos;hui. À revalider.
+        </span>
+      </p>
+    );
+  }
+  if (a.validation_origine === "resoumise") {
+    return (
+      <p className="flex items-start gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs text-sky-800">
+        <RotateCcw className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          <strong>Corrigée et renvoyée par le partenaire</strong>
+          {a.validation_motif ? <> — motif du rejet précédent : « {a.validation_motif} »</> : null}
+        </span>
+      </p>
+    );
+  }
+  if (a.reliability_status === "a_verifier") return null;
+  const qui = a.validation_par_nom ? ` par ${a.validation_par_nom}` : "";
+  const quand = a.validation_le ? ` le ${dateFr(a.validation_le)}` : "";
+  let texte = null;
+  if (a.validation_origine === "historique") texte = "Validée automatiquement par l'ancien système, avant la validation par un administrateur.";
+  else if (a.validation_origine === "odc") texte = "Déclarée par un administrateur ODC : validée d'office.";
+  else if (a.reliability_status === "validee") texte = `Validée${qui}${quand}${a.validation_effectif != null ? `, sur ${a.validation_effectif} participant${a.validation_effectif > 1 ? "s" : ""}` : ""}.`;
+  else if (a.reliability_status === "rejetee") texte = `Rejetée${qui}${quand}${a.validation_motif ? ` — « ${a.validation_motif} »` : ""}.`;
+  return texte ? <p className="text-xs text-slate-500">{texte}</p> : null;
+}
+
+function Controles({ controles }) {
+  const alertes = controles?.alertes || [];
+  const preuve = controles?.preuve;
+  return (
+    <div className="space-y-2">
+      {alertes.length === 0 ? (
+        <p className="flex items-center gap-1.5 text-xs text-emerald-700">
+          <CheckCircle2 className="h-3.5 w-3.5" /> Aucun signal particulier dans les contrôles automatiques.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {alertes.map((x, i) => {
+            const n = NIVEAUX[x.niveau] || NIVEAUX.info;
+            const { Icone } = n;
+            return (
+              <li key={`${x.code}-${i}`} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${n.fond}`}>
+                <Icone className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${n.cls}`} aria-label={n.libelle} />
+                <span className="min-w-0 text-xs text-slate-700">
+                  <strong className={n.cls}>{x.titre}</strong>
+                  {x.detail ? <span className="block text-slate-600">{x.detail}</span> : null}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {preuve && preuve.effectif > 0 && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+          <span className="font-medium text-slate-600">Preuves :</span>
+          <span className="inline-flex items-center gap-1">
+            <QrCode className="h-3 w-3" /> {preuve.emargements_qr}/{preuve.effectif} ont émargé eux-mêmes par QR
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <FileCheck className="h-3 w-3" /> {preuve.rapport ? "rapport joint" : "pas de rapport"}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Camera className="h-3 w-3" /> {preuve.photos} photo{preuve.photos > 1 ? "s" : ""}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ActivityRow({ a, onValider, onRejeter, onAnnuler, busy }) {
+  const [detail, setDetail] = useState(false);
+  const [liste, setListe] = useState(false);
+  const alertes = a.controles?.alertes || [];
+  const nbAlertes = alertes.filter((x) => x.niveau === "alerte").length;
+  const nbAttention = alertes.filter((x) => x.niveau === "attention").length;
+  const decidee = a.reliability_status !== "a_verifier";
 
   return (
-    <div className="anim-fade-in-up card-solid p-4">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 flex-1">
+    <article className="card-solid space-y-3 p-4" aria-label={a.title}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-semibold text-slate-900">{activity.title}</p>
-            <span className="badge bg-slate-100 border-slate-200 text-slate-600 text-xs">
-              {activity.mode === "ligne" ? "En ligne" : "Présentiel"}
-            </span>
-            {status !== "a_verifier" && statusMeta && (
-              <span className={`badge text-xs ${statusMeta.className}`}>
-                {statusMeta.label}
-                {activity.reliability_manual_override ? " (manuel)" : ""}
+            <Link to={`/activities/${a.id}`} className="font-semibold text-slate-900 hover:text-orange-700 hover:underline">
+              {a.title}
+            </Link>
+            <StatutValidation statut={a.reliability_status} score={a.reliability_score} admin />
+            {nbAlertes > 0 && (
+              <span className="badge border-red-200 bg-red-50 text-xs text-red-700">
+                {nbAlertes} alerte{nbAlertes > 1 ? "s" : ""}
               </span>
             )}
-            {hasRealList === false && (
-              <span
-                className="badge bg-amber-50 border-amber-200 text-amber-700 text-xs"
-                title="Aucune liste nominative importée — effectif estimé uniquement"
-              >
-                Effectif estimé{activity.participants_manual != null ? ` (~${activity.participants_manual})` : ""}
-              </span>
-            )}
-            {activity.duplicate_of && (
-              <span
-                className="badge bg-violet-50 border-violet-200 text-violet-700 text-xs"
-                title={`Doublon potentiel de : ${activity.duplicate_of_title}`}
-              >
-                Doublon potentiel
+            {nbAttention > 0 && (
+              <span className="badge border-amber-200 bg-amber-50 text-xs text-amber-700">
+                {nbAttention} à regarder
               </span>
             )}
           </div>
-          <p className="text-sm text-slate-500 mt-1">
-            {activity.partner_name || activity.coach_name || "—"} ·{" "}
-            {activity.activity_date
-              ? format(parseISO(activity.activity_date), "dd/MM/yyyy", { locale: fr })
-              : "—"}{" "}
-            · {activity.participants_count} participant{activity.participants_count !== 1 ? "s" : ""}
+          <p className="text-sm text-slate-500">
+            {a.partner_name || a.coach_name || "Sans partenaire"} · {dateFr(a.activity_date)} · {a.participants_count} participant
+            {a.participants_count !== 1 ? "s" : ""}
+            {a.declare_par_nom ? ` · déclarée par ${a.declare_par_nom}` : ""}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => setExpanded((e) => !e)}
-              className="text-xs text-orange-600 hover:text-orange-700 font-medium"
-            >
-              {expanded ? "Masquer le détail" : "Voir le détail du score"}
-            </button>
-            <button
-              onClick={() => setShowList((s) => !s)}
-              className="inline-flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
-            >
-              <Table className="w-3 h-3" />
-              {showList ? "Masquer la liste" : "Voir la liste des participants"}
-            </button>
-          </div>
-          {expanded && (
-            <div className="mt-3 max-w-md rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-              <ScoreBreakdown details={activity.reliability_details} duplicateOfTitle={activity.duplicate_of_title} />
-            </div>
-          )}
-          {showList && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-              <ParticipantsList activityId={activity.id} />
-            </div>
-          )}
+          <Origine a={a} />
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-center">
-            <p className={`text-2xl font-bold ${scoreTextColor(score)}`}>{score.toFixed(0)}%</p>
-            <p className="text-xs text-slate-500">Fiabilité</p>
-          </div>
-          <div className="flex gap-2">
-            {status === "a_verifier" ? (
-              <>
-                <button
-                  onClick={() => onValidate(activity.id)}
-                  disabled={busy}
-                  className="btn bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  Valider
-                </button>
-                <button
-                  onClick={() => onReject(activity.id)}
-                  disabled={busy}
-                  className="btn bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Rejeter
-                </button>
-              </>
-            ) : (
-              (activity.reliability_manual_override || status === "rejetee") && (
-                <button
-                  onClick={() => onReset(activity.id)}
-                  disabled={busy}
-                  className="btn btn-ghost border disabled:opacity-50"
-                  title="Annule la décision manuelle et repasse en évaluation automatique"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  Réinitialiser
-                </button>
-              )
-            )}
-          </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {!decidee ? (
+            <>
+              <button
+                type="button"
+                onClick={() => onValider(a)}
+                disabled={busy}
+                className="btn bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                Valider
+              </button>
+              <button
+                type="button"
+                onClick={() => onRejeter(a)}
+                disabled={busy}
+                className="btn border border-red-200 bg-white text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                <XCircle className="h-4 w-4" />
+                Rejeter
+              </button>
+            </>
+          ) : (
+            a.validation_origine !== "odc" && (
+              <button
+                type="button"
+                onClick={() => onAnnuler(a)}
+                disabled={busy}
+                className="btn btn-ghost border disabled:opacity-50"
+                title="L'activité repasse « à vérifier »"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Annuler la décision
+              </button>
+            )
+          )}
         </div>
       </div>
+
+      <Controles controles={a.controles} />
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => setDetail((x) => !x)} className="text-xs font-medium text-orange-600 hover:text-orange-700">
+          {detail ? "Masquer le score" : "Voir le score de complétude"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setListe((x) => !x)}
+          className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700"
+        >
+          <Table className="h-3 w-3" />
+          {liste ? "Masquer la liste" : "Voir la liste des participants"}
+        </button>
+        <Link to={`/activities/${a.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700">
+          <ExternalLink className="h-3 w-3" /> Ouvrir l&apos;activité
+        </Link>
+      </div>
+      {detail && (
+        <div className="max-w-md rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+          <ScoreBreakdown details={a.reliability_details} />
+        </div>
+      )}
+      {liste && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+          <ParticipantsList activityId={a.id} />
+        </div>
+      )}
+    </article>
+  );
+}
+
+function Validation() {
+  const toast = useToast();
+  const [onglet, setOnglet] = useState("a_verifier");
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [rejet, setRejet] = useState(null); /* activité en cours de rejet */
+  const [motif, setMotif] = useState("");
+
+  const charger = useCallback(async (decalage = 0) => {
+    setLoading(true);
+    try {
+      const res = await api.get("/reliability/queue", { params: { status: onglet, limit: PAGE, offset: decalage } });
+      setTotal(res.data.total);
+      setItems((avant) => (decalage ? [...avant, ...res.data.activites] : res.data.activites));
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "Impossible de charger la file.");
+    } finally {
+      setLoading(false);
+    }
+  }, [onglet, toast]);
+
+  useEffect(() => { charger(0); }, [charger]);
+
+  const agir = async (a, chemin, corps, message) => {
+    setBusyId(a.id);
+    try {
+      await api.patch(`/reliability/${a.id}/${chemin}`, corps);
+      toast.success(message);
+      await charger(0);
+      return true;
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "L'action n'a pas abouti.");
+      return false;
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const confirmerRejet = async () => {
+    if (!motif.trim() || !rejet) return;
+    const ok = await agir(rejet, "reject", { motif: motif.trim() }, `« ${rejet.title} » rejetée.`);
+    if (ok) { setRejet(null); setMotif(""); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="card-solid flex items-start gap-3 p-4 text-sm text-slate-600">
+        <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
+        <p>
+          Chaque activité déclarée par un partenaire attend la validation d&apos;un administrateur ODC — le score ne valide
+          plus rien tout seul. Les contrôles automatiques signalent ce qui mérite un regard ; ils ne sont visibles que des
+          administrateurs. Une activité validée dont la liste s&apos;allonge revient ici d&apos;elle-même.
+        </p>
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={onglet === t.key}
+            onClick={() => setOnglet(t.key)}
+            className={`-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              onglet === t.key ? "border-orange-500 text-orange-600" : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">
+          {loading && !items.length ? "Chargement…" : `${total} activité${total !== 1 ? "s" : ""}`}
+        </p>
+        <button type="button" onClick={() => charger(0)} className="btn-ghost border border-slate-200 bg-white text-sm" disabled={loading}>
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          Rafraîchir
+        </button>
+      </div>
+
+      <div className="space-y-3">
+        {!loading && items.length === 0 && (
+          <div className="card-solid p-12 text-center text-sm text-slate-500">
+            {onglet === "a_verifier" ? "Rien à valider pour le moment." : "Aucune activité dans cette catégorie."}
+          </div>
+        )}
+        {items.map((a) => (
+          <ActivityRow
+            key={a.id}
+            a={a}
+            busy={busyId === a.id}
+            onValider={(x) => agir(x, "validate", {}, `« ${x.title} » validée.`)}
+            onRejeter={(x) => { setRejet(x); setMotif(""); }}
+            onAnnuler={(x) => agir(x, "reset", {}, "Décision annulée.")}
+          />
+        ))}
+        {items.length < total && (
+          <button
+            type="button"
+            onClick={() => charger(items.length)}
+            disabled={loading}
+            className="w-full rounded-xl border border-slate-200 bg-white py-2 text-sm font-medium text-orange-700 hover:bg-orange-50"
+          >
+            {loading ? "Chargement…" : `Afficher ${Math.min(PAGE, total - items.length)} de plus (${total - items.length} restantes)`}
+          </button>
+        )}
+      </div>
+
+      <Modal
+        open={Boolean(rejet)}
+        onClose={() => setRejet(null)}
+        title="Rejeter la déclaration"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn btn-ghost border" onClick={() => setRejet(null)}>Annuler</button>
+            <button
+              type="button"
+              className="btn bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              disabled={!motif.trim() || busyId === rejet?.id}
+              onClick={confirmerRejet}
+            >
+              Rejeter
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-2">
+          <p className="text-sm text-slate-600">
+            « {rejet?.title} » — le partenaire verra ce motif sur son activité, et pourra la renvoyer une fois corrigée.
+          </p>
+          <label htmlFor="motif-rejet" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Ce qui ne va pas
+          </label>
+          <textarea
+            id="motif-rejet"
+            className="input min-h-[96px]"
+            value={motif}
+            onChange={(e) => setMotif(e.target.value)}
+            placeholder="Ex. : feuille d'émargement signée manquante ; plusieurs fiches partagent le même numéro."
+            maxLength={1000}
+          />
+        </div>
+      </Modal>
     </div>
   );
 }
 
 export default function Fiabilite() {
-  const [activeTab, setActiveTab] = useState("a_verifier");
-  const [queue, setQueue] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [busyId, setBusyId] = useState(null);
-  const [threshold, setThreshold] = useState(60);
-  const [thresholdInput, setThresholdInput] = useState("60");
-  const [savingThreshold, setSavingThreshold] = useState(false);
-
-  const fetchQueue = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get("/reliability/queue", { params: { status: activeTab } });
-      setQueue(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeTab]);
-
-  const fetchSettings = useCallback(async () => {
-    try {
-      const res = await api.get("/reliability/settings");
-      setThreshold(res.data.threshold);
-      setThresholdInput(String(res.data.threshold));
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchQueue();
-  }, [fetchQueue]);
-
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
-
-  const handleValidate = async (id) => {
-    setBusyId(id);
-    try {
-      await api.patch(`/reliability/${id}/validate`);
-      await fetchQueue();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handleReject = async (id) => {
-    setBusyId(id);
-    try {
-      await api.patch(`/reliability/${id}/reject`);
-      await fetchQueue();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const handleReset = async (id) => {
-    setBusyId(id);
-    try {
-      await api.patch(`/reliability/${id}/reset`);
-      await fetchQueue();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const saveThreshold = async () => {
-    const value = Number(thresholdInput);
-    if (!Number.isFinite(value) || value < 0 || value > 100) return;
-    setSavingThreshold(true);
-    try {
-      await api.put("/reliability/settings", { threshold: value });
-      setThreshold(value);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSavingThreshold(false);
-    }
-  };
-
+  const [section, setSection] = useState("validation");
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Qualité des données"
-        title="Fiabilité des données"
-        subtitle="Activités partenaires à vérifier avant leur prise en compte dans les KPI officiels"
+        eyebrow="Contrôle interne"
+        title="Fiabilité des déclarations"
+        subtitle="Le partenaire déclare, un administrateur ODC valide — puis on vérifie auprès des bénéficiaires et sur le terrain."
         icon={ShieldAlert}
-        actions={<button type="button" onClick={fetchQueue} className="btn-ghost border border-slate-200 bg-white" disabled={loading}><RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />Rafraîchir</button>}
       />
 
-      <div className="card-solid p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Settings2 className="w-4 h-4 text-slate-500" />
-          <p className="text-sm text-slate-600">
-            Seuil de validation automatique : une activité passe en <strong>validée</strong> dès que
-            son score de fiabilité atteint ce seuil.
-          </p>
-          <div className="ml-auto flex items-center gap-2">
-            <input
-              type="number"
-              min={0}
-              max={100}
-              className="input w-24 text-sm"
-              value={thresholdInput}
-              onChange={(e) => setThresholdInput(e.target.value)}
-            />
-            <span className="text-sm text-slate-500">%</span>
-            <button
-              onClick={saveThreshold}
-              disabled={savingThreshold || Number(thresholdInput) === threshold}
-              className="btn-primary text-sm disabled:opacity-50"
-            >
-              {savingThreshold ? "Enregistrement..." : "Enregistrer"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex gap-1 border-b border-slate-200">
-        {TABS.map((tab) => (
+      <nav className="flex flex-wrap gap-2" aria-label="Sections">
+        {SECTIONS.map(({ key, label, Icone }) => (
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              activeTab === tab.key
-                ? "border-orange-500 text-orange-600"
-                : "border-transparent text-slate-500 hover:text-slate-700"
+            key={key}
+            type="button"
+            onClick={() => setSection(key)}
+            aria-pressed={section === key}
+            className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition ${
+              section === key
+                ? "bg-orange-500 text-white shadow-sm shadow-orange-200"
+                : "border border-orange-200 bg-white text-orange-800 hover:bg-orange-50"
             }`}
           >
-            {tab.label}
+            <Icone className="h-4 w-4" />
+            {label}
           </button>
         ))}
-      </div>
+      </nav>
 
-      <p className="text-sm text-slate-500">
-        {loading ? "Chargement..." : `${queue.length} activité${queue.length !== 1 ? "s" : ""}`}
-      </p>
-
-      <div className="space-y-3">
-        {!loading && queue.length === 0 && (
-          <div className="card-solid p-12 text-center text-sm text-slate-500">
-            {activeTab === "a_verifier"
-              ? "Rien à vérifier — toutes les activités déclarées sont au-dessus du seuil de fiabilité."
-              : "Aucune activité dans cette catégorie."}
-          </div>
-        )}
-        {queue.map((activity) => (
-          <ActivityRow
-            key={activity.id}
-            activity={activity}
-            onValidate={handleValidate}
-            onReject={handleReject}
-            onReset={handleReset}
-            busy={busyId === activity.id}
-          />
-        ))}
-      </div>
+      {section === "validation" && <Validation />}
+      {section === "beneficiaires" && <ContreVerification />}
+      {section === "visites" && <VisitesInopinees />}
     </div>
   );
 }
