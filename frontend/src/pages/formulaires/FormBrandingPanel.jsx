@@ -1,5 +1,40 @@
 import { Palette } from "lucide-react";
 
+/* Une photo téléversée telle quelle pèse souvent plusieurs mégaoctets. Elle
+   alourdissait chaque ouverture du formulaire, et WhatsApp renonce à
+   l'afficher en miniature quand le lien est partagé. On la ramène à 1 200
+   pixels de large en JPEG : la différence ne se voit pas dans un en-tête.
+   Un GIF ou une image déjà petite passe telle quelle. */
+export async function imageAllegee(file, largeurMax = 1200, qualite = 0.82) {
+  const brute = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  if (file.type === "image/gif" || file.size < 250 * 1024) return brute;
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = brute;
+    });
+    const echelle = Math.min(1, largeurMax / img.naturalWidth);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(img.naturalWidth * echelle);
+    canvas.height = Math.round(img.naturalHeight * echelle);
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const allegee = canvas.toDataURL("image/jpeg", qualite);
+    return allegee.length < brute.length ? allegee : brute;
+  } catch {
+    return brute;
+  }
+}
+
 const PRESET_COLORS = [
   "#0f766e", "#0369a1", "#7c3aed", "#db2777",
   "#DE6A00", "#16a34a", "#ca8a04", "#374151",
@@ -61,13 +96,11 @@ export default function FormBrandingPanel({ settings, title, description, onChan
             <label className="text-xs text-slate-500 cursor-pointer hover:text-orange-600">
               ou uploader une image locale :
               <input type="file" accept="image/*" className="hidden"
-                onChange={(e) => {
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (!file || !file.type.startsWith("image/")) return;
-                  const reader = new FileReader();
-                  reader.onload = () => set({ header_image_url: String(reader.result || "") });
-                  reader.readAsDataURL(file);
                   e.target.value = "";
+                  if (!file || !file.type.startsWith("image/")) return;
+                  set({ header_image_url: await imageAllegee(file) });
                 }} />
             </label>
           </div>

@@ -389,6 +389,76 @@ router.get("/public/:slug", async (req, res) => {
   }
 });
 
+/* ===== APERÇU D'UN LIEN PARTAGÉ =====
+ *
+ * WhatsApp, Facebook, LinkedIn… composent l'aperçu d'un lien à partir de la
+ * page qu'ils reçoivent, sans exécuter de JavaScript. Le site leur servait la
+ * même coquille pour toutes les adresses : le lien d'un formulaire montrait la
+ * page d'accueil. Une fonction du site (frontend/api/apercu.js) leur sert
+ * désormais une page d'aperçu, faite de ce qui suit.
+ *
+ * Répond même si le formulaire est fermé : le lien a pu circuler avant, et son
+ * aperçu doit rester le sien. Seul un brouillon reste invisible.
+ */
+const IMAGE_DATA = /^data:(image\/(?:png|jpe?g|gif|webp));base64,([A-Za-z0-9+/=\s]+)$/i;
+const adresseApi = (req) =>
+  String(process.env.API_BASE_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
+const httpOuRien = (url) => (/^https?:\/\//i.test(String(url || "").trim()) ? String(url).trim() : null);
+
+async function formulairePublie(slug) {
+  const { rows } = await pool.query(
+    "SELECT id, title, description, slug, settings, status FROM forms WHERE slug = $1 LIMIT 1",
+    [slug]
+  );
+  const form = rows[0];
+  return form && form.status === "active" ? form : null;
+}
+
+router.get("/public/:slug/apercu", async (req, res) => {
+  try {
+    const form = await formulairePublie(req.params.slug);
+    if (!form) return res.status(404).json({ error: "Formulaire introuvable" });
+    const settings = sanitizeSettings(form.settings);
+    /* L'image d'en-tête d'abord ; téléversée, elle est rangée dans les
+       réglages en « data: », qu'un robot ne sait pas lire — on la sert alors
+       par sa propre adresse. Le logo à défaut. */
+    let image = httpOuRien(settings.header_image_url);
+    if (!image && IMAGE_DATA.test(settings.header_image_url)) {
+      image = `${adresseApi(req)}/forms/public/${encodeURIComponent(form.slug)}/image`;
+    }
+    if (!image) image = httpOuRien(settings.logo_url);
+    res.set("Cache-Control", "public, max-age=300");
+    res.json({
+      titre: form.title,
+      description: String(form.description || "").replace(/\s+/g, " ").trim().slice(0, 300),
+      image,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
+router.get("/public/:slug/image", async (req, res) => {
+  try {
+    const form = await formulairePublie(req.params.slug);
+    if (!form) return res.status(404).end();
+    const url = String(sanitizeSettings(form.settings).header_image_url || "");
+    const externe = httpOuRien(url);
+    if (externe) return res.redirect(302, externe);
+    const m = IMAGE_DATA.exec(url);
+    if (!m) return res.status(404).end();
+    const octets = Buffer.from(m[2].replace(/\s+/g, ""), "base64");
+    res.set("Content-Type", m[1].toLowerCase().replace("image/jpg", "image/jpeg"));
+    res.set("Cache-Control", "public, max-age=3600");
+    res.set("Content-Length", String(octets.length));
+    res.send(octets);
+  } catch (err) {
+    console.error(err);
+    res.status(500).end();
+  }
+});
+
 router.post("/public/:slug/submissions", async (req, res) => {
   try {
     const { slug } = req.params;
