@@ -21,6 +21,10 @@ const DEFAULT_SETTINGS = {
   primary_color: "#0f766e",
   logo_url: "",
   header_image_url: "",
+  /* Comment l'image se pose : « bandeau » (en tête, recadrée), « affiche »
+     (entière, au-dessus du formulaire) ou « fond » (fond de scène, derrière
+     le formulaire). */
+  image_mode: "bandeau",
   open_at: null,
   close_at: null,
   submit_label: "Envoyer",
@@ -107,6 +111,7 @@ function sanitizeSettings(input) {
   const primary_color = String(merged.primary_color || "").trim().toLowerCase();
   const logo_url = String(merged.logo_url || "").trim();
   const header_image_url = String(merged.header_image_url || "").trim();
+  const image_mode = ["bandeau", "affiche", "fond"].includes(merged.image_mode) ? merged.image_mode : "bandeau";
   const submit_label = String(merged.submit_label || "").trim();
   const success_message = String(merged.success_message || "").trim();
   const redirect_url = String(merged.redirect_url || "").trim();
@@ -124,6 +129,7 @@ function sanitizeSettings(input) {
       : DEFAULT_SETTINGS.primary_color,
     logo_url: logo_url || "",
     header_image_url: header_image_url || "",
+    image_mode,
     open_at,
     close_at,
     submit_label: submit_label || DEFAULT_SETTINGS.submit_label,

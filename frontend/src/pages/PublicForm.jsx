@@ -191,6 +191,8 @@ export default function PublicForm() {
   const primaryColor = /^#[0-9a-f]{6}$/i.test(settings.primary_color)
     ? settings.primary_color
     : "#0f766e";
+  /* Bandeau (défaut), affiche ou fond de scène. */
+  const imageMode = ["bandeau", "affiche", "fond"].includes(settings.image_mode) ? settings.image_mode : "bandeau";
 
   const orderedFields = useMemo(() => {
     const fields = Array.isArray(form?.fields) ? form.fields : [];
@@ -492,7 +494,7 @@ export default function PublicForm() {
   /* ── Loading / Error ── */
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-slate-500">
+      <div className="police-formulaire min-h-screen flex items-center justify-center text-slate-500">
         Chargement du formulaire...
       </div>
     );
@@ -500,7 +502,7 @@ export default function PublicForm() {
 
   if (error && !form) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="police-formulaire min-h-screen flex items-center justify-center px-4">
         <div className="card max-w-xl p-6 text-red-700">{error}</div>
       </div>
     );
@@ -526,13 +528,24 @@ export default function PublicForm() {
   /* ── Main render ── */
   return (
     <div
-      className="min-h-screen py-10 px-4 sm:px-6"
-      style={{
-        background:
-          `radial-gradient(1100px 500px at -5% -10%, ${hexToRgba(primaryColor, 0.14)}, transparent 55%),
-           radial-gradient(800px 400px at 100% 0%, ${hexToRgba(primaryColor, 0.1)}, transparent 60%),
-           linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)`,
-      }}
+      className="police-formulaire min-h-screen py-10 px-4 sm:px-6"
+      style={
+        /* Fond de scène : l'image derrière tout le formulaire, voilée juste
+           assez pour que les cartes blanches se détachent. */
+        imageMode === "fond" && settings.header_image_url
+          ? {
+              backgroundImage: `linear-gradient(180deg, rgba(15,23,42,0.35), rgba(15,23,42,0.55)), url("${settings.header_image_url}")`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundAttachment: "fixed",
+            }
+          : {
+              background:
+                `radial-gradient(1100px 500px at -5% -10%, ${hexToRgba(primaryColor, 0.14)}, transparent 55%),
+                 radial-gradient(800px 400px at 100% 0%, ${hexToRgba(primaryColor, 0.1)}, transparent 60%),
+                 linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%)`,
+            }
+      }
     >
       <div className="mx-auto max-w-3xl space-y-4">
         {/* Header */}
@@ -541,8 +554,12 @@ export default function PublicForm() {
             className="h-2 w-full"
             style={{ background: `linear-gradient(90deg, ${primaryColor}, ${hexToRgba(primaryColor, 0.65)})` }}
           />
+          {/* Affiche : l'image entière, sans recadrage, en tête de la carte. */}
+          {imageMode === "affiche" && settings.header_image_url && (
+            <img src={settings.header_image_url} alt={form?.title || "Affiche"} className="block h-auto w-full" />
+          )}
           <div className="p-6 sm:p-8">
-            {settings.header_image_url && (
+            {imageMode === "bandeau" && settings.header_image_url && (
               <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200">
                 <img src={settings.header_image_url} alt="Entête" className="h-36 w-full object-cover" />
               </div>
