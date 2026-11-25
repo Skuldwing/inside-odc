@@ -1,4 +1,5 @@
 const pool = require("../db");
+const { validationPrete } = require("../migrations/validationActivites");
 
 const WEIGHTS = {
   participants: 0.45,
@@ -25,14 +26,9 @@ async function setReliabilityThreshold(threshold) {
     [JSON.stringify({ threshold })]
   );
 
-  // Réévalue le statut de toutes les activités non forcées manuellement,
-  // pour que le changement de seuil s'applique aussi aux scores déjà calculés.
-  await pool.query(
-    `UPDATE activities
-     SET reliability_status = CASE WHEN reliability_score >= $1 THEN 'validee' ELSE 'a_verifier' END
-     WHERE reliability_manual_override = FALSE AND reliability_score IS NOT NULL`,
-    [threshold]
-  );
+  /* Le seuil ne décide plus de rien : depuis la validation par un
+     administrateur, il ne sert qu'à colorer le score. On ne touche donc plus
+     aux statuts quand il change. */
 }
 
 /* Repère une activité déclarée par le même partenaire/coach, le même jour :
@@ -59,10 +55,15 @@ async function findDuplicateActivity(activity) {
 }
 
 async function computeAndStoreReliability(activityId) {
+  await validationPrete();
   const activityRes = await pool.query(
-    `SELECT id, activity_date, device_id, partner_id, coach_id, location,
-            duration_hours, report_filename, reliability_manual_override, reliability_status
-     FROM activities WHERE id = $1`,
+    `SELECT a.id, a.activity_date, a.device_id, a.partner_id, a.coach_id, a.location,
+            a.duration_hours, a.report_filename, a.reliability_manual_override,
+            a.reliability_status, a.validation_origine, a.validation_effectif,
+            u.role AS role_declarant
+     FROM activities a
+     LEFT JOIN users u ON u.id = a.created_by
+     WHERE a.id = $1`,
     [activityId]
   );
   const activity = activityRes.rows[0];
@@ -136,26 +137,63 @@ async function computeAndStoreReliability(activityId) {
     },
   };
 
-  const status = activity.reliability_manual_override
-    ? activity.reliability_status
-    : score >= threshold
-      ? "validee"
-      : "a_verifier";
+  /* Le statut ne vient plus du score. Le partenaire déclare, un
+     administrateur ODC valide :
+     - une décision d'administrateur tient, sauf si la liste s'est allongée
+       depuis — l'activité revient alors « à vérifier » ;
+     - une activité déclarée par un administrateur est validée d'office ;
+     - toute autre attend qu'un administrateur la regarde. */
+  let status;
+  let override = Boolean(activity.reliability_manual_override);
+  let origine = activity.validation_origine;
+  if (override) {
+    status = activity.reliability_status;
+    const effectifValide = activity.validation_effectif;
+    if (status === "validee" && effectifValide != null && realCount > effectifValide) {
+      status = "a_verifier";
+      override = false;
+      origine = "reouverte";
+    }
+  } else if (activity.role_declarant === "admin") {
+    status = "validee";
+    origine = "odc";
+  } else {
+    status = "a_verifier";
+    if (origine === "odc") origine = null;
+  }
 
   await pool.query(
     `UPDATE activities
      SET reliability_score = $1,
          reliability_details = $2::jsonb,
          reliability_status = $3,
-         duplicate_of = $4
-     WHERE id = $5`,
-    [score, JSON.stringify(details), status, duplicateOfId, activityId]
+         duplicate_of = $4,
+         reliability_manual_override = $5,
+         validation_origine = $6
+     WHERE id = $7`,
+    [score, JSON.stringify(details), status, duplicateOfId, override, origine, activityId]
   );
 
   return { score, status, details };
 }
 
+/* Ce que voit un compte qui n'est pas administrateur : le statut de sa
+   déclaration (et le motif d'un rejet), jamais le score ni les contrôles. */
+const CHAMPS_ADMIN = [
+  "reliability_score", "reliability_details", "reliability_manual_override",
+  "duplicate_of", "validation_origine", "validation_par", "validation_le",
+  "validation_effectif",
+];
+function masquerControles(activite, req) {
+  if (!activite || req?.user?.role === "admin") return activite;
+  const copie = { ...activite };
+  for (const champ of CHAMPS_ADMIN) delete copie[champ];
+  if (copie.reliability_status !== "rejetee") delete copie.validation_motif;
+  return copie;
+}
+
 module.exports = {
+  masquerControles,
   computeAndStoreReliability,
   getReliabilityThreshold,
   setReliabilityThreshold,

@@ -28,6 +28,7 @@ const Formulaires = lazy(() => import("./pages/Formulaires"));
 const FormulaireEditor = lazy(() => import("./pages/FormulaireEditor"));
 const PublicForm = lazy(() => import("./pages/PublicForm"));
 const CheckinPage = lazy(() => import("./pages/CheckinPage"));
+const Verification = lazy(() => import("./pages/Verification"));
 const MentionsLegales = lazy(() => import("./pages/MentionsLegales"));
 const VoteJoin = lazy(() => import("./pages/VoteJoin"));
 const VoteJury = lazy(() => import("./pages/VoteJury"));
@@ -89,6 +90,15 @@ export default function App() {
         element={
           <Suspense fallback={<PageLoader />}>
             <PublicForm />
+          </Suspense>
+        }
+      />
+      {/* Contre-vérification : réponse d'un bénéficiaire, protégée par son jeton. */}
+      <Route
+        path="/verification/:jeton"
+        element={
+          <Suspense fallback={<PageLoader />}>
+            <Verification />
           </Suspense>
         }
       />

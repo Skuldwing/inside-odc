@@ -54,6 +54,7 @@ import {
   EmptyState,
 } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
+import StatutValidation from "../components/StatutValidation";
 
 export default function Activities({
   forceUploadOpen = false,
@@ -4220,6 +4221,8 @@ function ActivityCard({
   showQrCode = true,
   cardPadding = "p-5",
 }) {
+  /* Le score reste aux administrateurs ; les autres voient le statut. */
+  const { isAdmin: isAdminCarte } = useAuth();
   /* Le partenaire peut avoir fermé l'émargement par lien et QR code pour ses
      séances. On combine ici plutôt qu'à chaque endroit qui affiche une carte :
      une vue oubliée laisserait le bouton proposer un lien que le serveur
@@ -4337,19 +4340,12 @@ function ActivityCard({
                 Sans liste
               </span>
             )}
-            {activity.reliability_score != null && (
-              <span
-                className={`badge text-xs ${
-                  activity.reliability_status === "validee"
-                    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                    : activity.reliability_status === "rejetee"
-                      ? "bg-red-50 border-red-200 text-red-700"
-                      : "bg-amber-50 border-amber-200 text-amber-700"
-                }`}
-                title="Score de fiabilité des données"
-              >
-                Fiabilité {activity.reliability_score.toFixed(0)}%
-              </span>
+            {activity.reliability_status && (
+              <StatutValidation
+                statut={activity.reliability_status}
+                score={activity.reliability_score}
+                admin={isAdminCarte}
+              />
             )}
             {activity.photo_count > 0 && (
               <button

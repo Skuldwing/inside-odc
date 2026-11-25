@@ -9,7 +9,8 @@ const { attestationPourActivite, moduleRetenu } = require("../services/attestati
 
 const { getTemplate, renderTemplate, phraseOrganisateur, blocDetails, lienSignalement, composerEmail } = require("./emailTemplates.routes");
 const { logAudit } = require("../services/audit");
-const { computeAndStoreReliability } = require("../services/reliability");
+const { computeAndStoreReliability, masquerControles } = require("../services/reliability");
+const { validationPrete } = require("../migrations/validationActivites");
 const { ensureCoachDevicesSchema, tableAbsente } = require("../migrations/coachDevices");
 const { ensureActivityTasksSchema } = require("../migrations/activityTasks");
 const { ensureAttestationsEnvoyees } = require("../migrations/attestationsEnvoyees");
@@ -127,6 +128,7 @@ function isOwner(req, activity) {
 /* ===== GET ACTIVITIES ===== */
 router.get("/", authMiddleware, async (req, res) => {
   try {
+    await validationPrete();
     /* Le role du JWT peut rester ancien jusqu'a son expiration. La liste des
        activites s'appuie donc sur le compte courant en base : un compte
        partenaire est toujours borne a son propre partenaire, meme si son
@@ -141,6 +143,7 @@ router.get("/", authMiddleware, async (req, res) => {
 
     let query = `
       SELECT ${ACTIVITY_COLUMNS},
+             a.validation_origine, a.validation_motif,
              p.name AS partner_name,
              d.name AS device_name,
              u.full_name AS coach_name,
@@ -235,7 +238,8 @@ router.get("/", authMiddleware, async (req, res) => {
       await ensureListeTelleQuelle();
       result = await pool.query(query, params);
     }
-    res.json(result.rows);
+    const pourRole = { user: { role: accessRole } };
+    res.json(result.rows.map((row) => masquerControles(row, pourRole)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur serveur" });
@@ -618,9 +622,11 @@ router.delete("/tasks/:taskId", authMiddleware, requireWriteAccess, async (req, 
 /* ===== GET ACTIVITY DETAIL (Vue complète avec présences et formulaire) ===== */
 router.get("/:id", authMiddleware, async (req, res) => {
   try {
+    await validationPrete();
     const { id } = req.params;
     const query = `
       SELECT ${ACTIVITY_COLUMNS},
+             a.validation_origine, a.validation_motif,
              p.name AS partner_name,
              d.name AS device_name,
              u.full_name AS coach_name,
@@ -767,7 +773,7 @@ router.get("/:id", authMiddleware, async (req, res) => {
     });
 
     res.json({
-      activity,
+      activity: masquerControles(activity, req),
       participants,
       form: {
         is_open,
@@ -1514,6 +1520,39 @@ router.get("/:id/report", authMiddleware, async (req, res) => {
 });
 
 /* ===== SUPPRIMER RAPPORT ===== */
+/* ===== RENVOYER POUR VALIDATION =====
+   Une déclaration rejetée, une fois corrigée, revient dans la file des
+   administrateurs à la demande de son partenaire. Rien d'autre ne change : il
+   faudra toujours qu'un administrateur la valide. */
+router.post("/:id/resoumettre", authMiddleware, requireWriteAccess, async (req, res) => {
+  try {
+    await validationPrete();
+    const { id } = req.params;
+    const actRes = await pool.query(
+      "SELECT id, title, partner_id, coach_id, reliability_status FROM activities WHERE id = $1",
+      [id]
+    );
+    const activite = actRes.rows[0];
+    if (!activite) return res.status(404).json({ error: "Activité introuvable" });
+    if (!isOwner(req, activite)) return res.status(403).json({ error: "Accès refusé" });
+    if (activite.reliability_status !== "rejetee") {
+      return res.status(409).json({ error: "Seule une déclaration rejetée peut être renvoyée." });
+    }
+    await pool.query(
+      `UPDATE activities
+          SET reliability_status = 'a_verifier', reliability_manual_override = FALSE,
+              validation_origine = 'resoumise', validation_par = NULL, validation_le = NULL
+        WHERE id = $1`,
+      [id]
+    );
+    logAudit(req, "UPDATE", "activities", id, activite.title, { action: "reliability_resoumise" });
+    res.json({ success: true, reliability_status: "a_verifier" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 router.delete("/:id/report", authMiddleware, requireWriteAccess, async (req, res) => {
   try {
     const { id } = req.params;
