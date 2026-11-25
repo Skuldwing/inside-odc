@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Arimo:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -821,4 +821,28 @@ body {
 }
 :root[data-offline="true"] aside {
   padding-top: var(--offline-bar);
+}
+
+/* Les formulaires publics, en Helvetica — la police de la marque Orange.
+   Elle est installée sur iPhone et Mac, pas sur Android ni Windows, et sa
+   licence interdit de la servir depuis le site : ailleurs, Arimo, libre, au
+   dessin d'Arial — lui-même fait pour remplacer Helvetica. Un navigateur ne
+   télécharge Arimo que s'il n'a pas trouvé Helvetica. Les titres suivent,
+   au lieu de Sora. */
+.police-formulaire,
+.police-formulaire h1,
+.police-formulaire h2,
+.police-formulaire h3,
+.police-formulaire h4,
+.police-formulaire input,
+.police-formulaire textarea,
+.police-formulaire select,
+.police-formulaire button {
+  font-family: "Helvetica Neue", Helvetica, Arimo, Arial, sans-serif;
+}
+.police-formulaire h1,
+.police-formulaire h2,
+.police-formulaire h3,
+.police-formulaire h4 {
+  letter-spacing: -0.01em;
 }
