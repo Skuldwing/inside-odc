@@ -59,7 +59,7 @@ export default function Activities({
   forceUploadOpen = false,
   initialSearchQuery: initialSearchQueryProp = "",
 }) {
-  const { role, user, isViewer, isCoach } = useAuth();
+  const { role, user, isViewer, isCoach, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   /* La recherche pouvait arriver par l'URL : c'est OperationsHub qui lisait
@@ -1514,7 +1514,8 @@ export default function Activities({
                 )}
               </FormSection>
 
-              {/* Génération automatique de rapport */}
+              {/* Génération automatique de rapport : administrateurs seulement. */}
+              {isAdmin && (
               <FormSection
                 icon={Sparkles}
                 title="Génération de rapport"
@@ -1577,6 +1578,7 @@ export default function Activities({
                   </div>
                 )}
               </FormSection>
+              )}
 
               <div className="flex justify-end gap-3 pt-2">
                 <button
@@ -1745,7 +1747,8 @@ export default function Activities({
             </FormSection>
           </div>
 
-          {/* Génération de rapport depuis les données */}
+          {/* Génération de rapport depuis les données : administrateurs seulement. */}
+          {isAdmin && (
           <div className="mt-5">
             <FormSection
               icon={Sparkles}
@@ -1823,6 +1826,7 @@ export default function Activities({
               </button>
             </FormSection>
           </div>
+          )}
 
           {/* Import liste de présences */}
           <div className="mt-5">

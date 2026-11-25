@@ -2212,13 +2212,15 @@ export default function ActivityDetail() {
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center">
                   <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-xs text-slate-500">
-                    Aucun rapport. Générez-en un ci-dessous depuis les données de l&apos;activité.
+                    {isAdmin
+                      ? "Aucun rapport. Générez-en un ci-dessous depuis les données de l'activité."
+                      : "Aucun rapport pour le moment."}
                   </p>
                 </div>
               )}
 
-              {/* Génération de rapport */}
-              {!isViewer && (
+              {/* Génération de rapport : administrateurs seulement. */}
+              {isAdmin && (
                 <div className="rounded-xl border border-orange-200/60 bg-orange-50/30 p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
