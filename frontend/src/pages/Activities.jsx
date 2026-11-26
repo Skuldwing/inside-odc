@@ -81,6 +81,9 @@ export default function Activities({
   const [realisePar, setRealisePar] = useState("toutes");
   const [partnerFilter, setPartnerFilter] = useState("");
   const [deviceFilter, setDeviceFilter] = useState("");
+  /* Coach / formateur : « » (tous), « avec » (animées par un coach), « sans »
+     (aucun coach), ou l'identifiant d'un coach. */
+  const [coachFilter, setCoachFilter] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const listGap = "gap-2";
   const cardPadding = "p-3";
@@ -375,11 +378,35 @@ export default function Activities({
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
   }, [devices, activities]);
 
+  /* Les coachs proposés au filtre : ceux du compte, et ceux qui figurent sur
+     une activité — un coach désactivé garde ses activités, et doit pouvoir
+     les retrouver. Chacun avec son nombre d'activités. */
+  const coachOptions = useMemo(() => {
+    const map = new Map();
+    coaches.forEach((c) =>
+      map.set(String(c.id), { id: String(c.id), name: c.full_name || c.email || `Coach ${c.id}`, count: 0 }),
+    );
+    activities.forEach((a) => {
+      if (!a.coach_id) return;
+      const id = String(a.coach_id);
+      if (!map.has(id)) map.set(id, { id, name: a.coach_name || `Coach ${id}`, count: 0 });
+      map.get(id).count += 1;
+    });
+    return [...map.values()].sort((x, y) => x.name.localeCompare(y.name, "fr"));
+  }, [coaches, activities]);
+  const nbAvecCoach = useMemo(() => activities.filter((a) => a.coach_id).length, [activities]);
+
   const filteredActivities = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activities.filter((a) => {
       if (role === "admin" && partnerFilter) {
         if (String(a.partner_id) !== String(partnerFilter)) return false;
+      }
+      if (role === "admin" && coachFilter) {
+        if (coachFilter === "avec" && !a.coach_id) return false;
+        if (coachFilter === "sans" && a.coach_id) return false;
+        if (!["avec", "sans"].includes(coachFilter) && String(a.coach_id || "") !== String(coachFilter))
+          return false;
       }
       if (deviceFilter) {
         if (String(a.device_id || "") !== String(deviceFilter)) return false;
@@ -390,7 +417,7 @@ export default function Activities({
       if (q && !(a.title || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [activities, role, partnerFilter, deviceFilter, status, search, realisePar]);
+  }, [activities, role, partnerFilter, coachFilter, deviceFilter, status, search, realisePar]);
   const nbParCoachs = useMemo(() => activities.filter((a) => a.par_un_coach).length, [activities]);
   const totalPages = Math.ceil(filteredActivities.length / ITEMS_PER_PAGE);
   const sectionPageActivities = filteredActivities.slice(
@@ -1122,6 +1149,19 @@ export default function Activities({
       clear: () => setPartnerFilter(""),
     });
   }
+  if (role === "admin" && coachFilter) {
+    activeFilterChips.push({
+      key: "coach",
+      label: "Coach / formateur",
+      value:
+        coachFilter === "avec"
+          ? "avec un coach"
+          : coachFilter === "sans"
+            ? "sans coach"
+            : coachOptions.find((c) => c.id === String(coachFilter))?.name || "—",
+      clear: () => setCoachFilter(""),
+    });
+  }
   if (deviceFilter) {
     activeFilterChips.push({
       key: "device",
@@ -1144,6 +1184,7 @@ export default function Activities({
 
   const resetFilters = () => {
     setPartnerFilter("");
+    setCoachFilter("");
     setDeviceFilter("");
     setStatus("all");
   };
@@ -1218,7 +1259,7 @@ export default function Activities({
         <CountCard label="Terminées" value={stats.completed} icon={CheckCircle2} accent="emerald" />
       </section>
 
-      {/* La recherche reste toujours accessible ; partenaire, dispositif et
+      {/* La recherche reste toujours accessible ; partenaire, coach, dispositif et
           statut se replient, avec leurs valeurs actives resumees en pastilles.
           Le panneau deplie occupait 290 px avant la premiere activite. */}
       <section className="card rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 lg:p-5">
@@ -1279,7 +1320,7 @@ export default function Activities({
 
         <div
           hidden={!filtersOpen}
-          className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3"
+          className={`mt-4 grid grid-cols-1 gap-3 ${role === "admin" ? "md:grid-cols-2 xl:grid-cols-4" : "md:grid-cols-3"}`}
         >
           {role === "admin" ? (
             <select
@@ -1296,6 +1337,30 @@ export default function Activities({
             </select>
           ) : (
             <div className="hidden md:block" />
+          )}
+
+          {role === "admin" && (
+            <select
+              className="select"
+              value={coachFilter}
+              onChange={(e) => setCoachFilter(e.target.value)}
+              aria-label="Coach / formateur"
+            >
+              <option value="">Tous les coachs / formateurs</option>
+              <option value="avec">{`Animées par un coach (${nbAvecCoach})`}</option>
+              <option value="sans">
+                {`Sans coach (${activities.length - nbAvecCoach})`}
+              </option>
+              {coachOptions.length > 0 && (
+                <optgroup label="Coach / formateur">
+                  {coachOptions.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {`${c.name} (${c.count})`}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
           )}
 
           <select
