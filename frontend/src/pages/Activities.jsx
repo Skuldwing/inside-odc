@@ -55,6 +55,10 @@ import {
 } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 import StatutValidation from "../components/StatutValidation";
+import RevueDoublons, {
+  decisionsParDefaut,
+  fusionsDepuis,
+} from "../components/import/RevueDoublons";
 
 export default function Activities({
   forceUploadOpen = false,
@@ -119,12 +123,23 @@ export default function Activities({
      bouton qui n'a pas marché. */
   const [listeEnAttente, setListeEnAttente] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  /* Ce que la personne qui importe a décidé de chaque groupe de doublons.
+     Chaque changement rejoue la simulation : le décompte affiché est celui
+     que l'import produira, pas une estimation. */
+  const [importDecisions, setImportDecisions] = useState({});
+  const [recalcul, setRecalcul] = useState(false);
   const [importMapping, setImportMapping] = useState({}); // {original: field} overrides
   const [previewing, setPreviewing] = useState(false);
   const [createImportPreview, setCreateImportPreview] = useState(null);
   const [createImportMapping, setCreateImportMapping] = useState({});
   const [createPreviewing, setCreatePreviewing] = useState(false);
   const [createPreviewError, setCreatePreviewError] = useState("");
+  /* Les doublons de la liste, à la création : cherchés dans le fichier seul,
+     montrés avant de créer quoi que ce soit. */
+  const [createDoublons, setCreateDoublons] = useState(null);
+  const [createDecisions, setCreateDecisions] = useState({});
+  const [createDoublonsChargement, setCreateDoublonsChargement] = useState(false);
+  const [createDoublonsErreur, setCreateDoublonsErreur] = useState("");
 
   const [editForm, setEditForm] = useState({
     id: null,
@@ -692,17 +707,60 @@ export default function Activities({
     }
   };
 
+  /* Les doublons de la liste, dès que le fichier est analysé — et de
+     nouveau si une colonne est réassignée : ce sont les colonnes qui disent
+     où lire le nom et le numéro. */
+  useEffect(() => {
+    if (!form.file || !createImportPreview) {
+      setCreateDoublons(null);
+      setCreateDoublonsErreur("");
+      return undefined;
+    }
+    let annule = false;
+    const minuterie = setTimeout(async () => {
+      setCreateDoublonsChargement(true);
+      setCreateDoublonsErreur("");
+      try {
+        const fd = new FormData();
+        fd.append("file", form.file);
+        if (Object.keys(createImportMapping).length > 0)
+          fd.append("manual_mapping", JSON.stringify(createImportMapping));
+        const r = await api.post("/import/analyse-doublons", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (annule) return;
+        setCreateDoublons(r.data);
+        setCreateDecisions(decisionsParDefaut(r.data?.groupes));
+      } catch (err) {
+        if (!annule)
+          setCreateDoublonsErreur(
+            err?.response?.data?.error ||
+              "La recherche des doublons a échoué.",
+          );
+      } finally {
+        if (!annule) setCreateDoublonsChargement(false);
+      }
+    }, 400);
+    return () => {
+      annule = true;
+      clearTimeout(minuterie);
+    };
+  }, [form.file, createImportPreview, createImportMapping]);
+
   /* Ce que le fichier fera, avant qu'il le fasse.
      Le nombre de lignes ne dit rien : une liste déjà importée en a autant et
      n'ajoute personne. Le serveur rejoue l'import pour de vrai puis annule
      tout, et renvoie le compte exact. */
-  const envoyerImport = async (simulation) => {
+  const envoyerImport = async (simulation, fusions = null) => {
     const fd = new FormData();
     fd.append("file", importFile);
     if (Object.keys(importMapping).length > 0)
       fd.append("manual_mapping", JSON.stringify(importMapping));
     if (simulation) fd.append("simulation", "1");
     if (importTelleQuelle) fd.append("telle_quelle", "1");
+    /* Les groupes de doublons que la personne a décidé de réunir. Absents à
+       la première vérification : le serveur applique ses propositions. */
+    if (fusions) fd.append("fusions", JSON.stringify(fusions));
     const res = await api.post(`/import/direct/${editForm.id}`, fd, {
       headers: { "Content-Type": "multipart/form-data" },
     });
@@ -717,12 +775,42 @@ export default function Activities({
     setImportSimulation(null);
   };
 
+  /* Une première simulation : les propositions de l'analyse deviennent les
+     décisions de départ. */
+  const premiereSimulation = async () => {
+    const sim = await envoyerImport(true);
+    setImportDecisions(decisionsParDefaut(sim?.doublons?.groupes));
+    setImportSimulation(sim);
+  };
+
+  /* Les fusions qui découlent des décisions affichées — ce que l'import
+     enregistrera. */
+  const fusionsChoisies = (decisions = importDecisions) =>
+    importSimulation?.doublons
+      ? fusionsDepuis(importSimulation.doublons.groupes, decisions)
+      : null;
+
+  const changerDecisionsImport = async (decisions) => {
+    setImportDecisions(decisions);
+    setRecalcul(true);
+    setImportDirectError("");
+    try {
+      setImportSimulation(await envoyerImport(true, fusionsChoisies(decisions)));
+    } catch (err) {
+      setImportDirectError(
+        err?.response?.data?.error || "La vérification a échoué.",
+      );
+    } finally {
+      setRecalcul(false);
+    }
+  };
+
   const handleSimuler = async () => {
     if (!importFile) return;
     setSimulating(true);
     setImportDirectError("");
     try {
-      setImportSimulation(await envoyerImport(true));
+      await premiereSimulation();
     } catch (err) {
       setImportDirectError(
         err?.response?.data?.error || "La vérification a échoué.",
@@ -737,7 +825,7 @@ export default function Activities({
     setImporting(true);
     setImportDirectError("");
     try {
-      const data = await envoyerImport(false);
+      const data = await envoyerImport(false, fusionsChoisies());
       setImportDirectResult(data);
       setImportPreview(null);
       setImportSimulation(null);
@@ -812,7 +900,7 @@ export default function Activities({
         setListeEnAttente(true);
         setImportDirectError("");
         try {
-          setImportSimulation(await envoyerImport(true));
+          await premiereSimulation();
         } catch (err) {
           setImportDirectError(
             err?.response?.data?.error || "La vérification a échoué.",
@@ -943,6 +1031,14 @@ export default function Activities({
         fd.append("file", form.file);
         if (Object.keys(createImportMapping).length > 0) {
           fd.append("manual_mapping", JSON.stringify(createImportMapping));
+        }
+        /* Les doublons tels que la personne les a tranchés. Sans analyse
+           (fichier non analysé), le serveur applique ses propositions. */
+        if (createDoublons) {
+          fd.append(
+            "fusions",
+            JSON.stringify(fusionsDepuis(createDoublons.groupes, createDecisions)),
+          );
         }
         const res = await api.post("/import/activity", fd, {
           headers: { "Content-Type": "multipart/form-data" },
@@ -1553,6 +1649,16 @@ export default function Activities({
                       }}
                       showConfirmButton={false}
                     />
+                    <div className="mt-3">
+                      <RevueDoublons
+                        analyse={createDoublons}
+                        decisions={createDecisions}
+                        onChange={setCreateDecisions}
+                        chargement={createDoublonsChargement}
+                        erreur={createDoublonsErreur}
+                        lignesAnalysees={createDoublons?.lignes_lues}
+                      />
+                    </div>
                   </div>
                 )}
               </FormSection>
@@ -2047,6 +2153,10 @@ export default function Activities({
                   <ResumeSimulation
                     sim={importSimulation}
                     importing={importing}
+                    decisions={importDecisions}
+                    onDecisions={changerDecisionsImport}
+                    telleQuelle={importTelleQuelle}
+                    recalcul={recalcul}
                     onAnnuler={() => {
                       setImportSimulation(null);
                       setListeEnAttente(false);
@@ -2063,10 +2173,16 @@ export default function Activities({
                     {importDirectResult.participants_importes} participant(s)
                     importé(s) sur {importDirectResult.total_lignes} ligne(s)
                   </p>
+                  {importDirectResult.doublons_reunis?.length > 0 && (
+                    <p className="text-xs text-emerald-700">
+                      {importDirectResult.doublons_reunis.length} ligne(s)
+                      réunie(s) à une autre : doublons du fichier
+                    </p>
+                  )}
                   {importDirectResult.doublons_dans_activite > 0 && (
                     <p className="text-xs text-emerald-700">
-                      {importDirectResult.doublons_dans_activite} doublon(s)
-                      ignoré(s)
+                      {importDirectResult.doublons_dans_activite} personne(s)
+                      déjà inscrite(s) à cette activité
                     </p>
                   )}
                   {importDirectResult.lignes_ignorees_nom_prenom_manquants >
@@ -2336,6 +2452,9 @@ function ImportResultSummary({ result }) {
   const ignored = result.lignes_ignorees_nom_prenom_manquants ?? 0;
   const incompletes = result.lignes_incompletes ?? [];
   const duplicates = result.doublons_dans_activite ?? 0;
+  /* Les lignes du fichier réunies à une autre : la même personne écrite deux
+     fois. Distinctes des personnes déjà inscrites à l'activité. */
+  const reunies = result.doublons_reunis?.length ?? 0;
   const nomsRepetes = result.noms_repetes ?? 0;
 
   if (result.sans_fichier) {
@@ -2357,11 +2476,12 @@ function ImportResultSummary({ result }) {
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-700">
         Activité créée et liste importée avec succès.
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <SummaryCard label="Lignes Excel" value={total} />
         <SummaryCard label="Importées" value={imported} />
+        <SummaryCard label="Doublons du fichier" value={reunies} />
+        <SummaryCard label="Déjà inscrites" value={duplicates} />
         <SummaryCard label="Lignes vides" value={ignored} />
-        <SummaryCard label="Doublons" value={duplicates} />
       </div>
       {/* Le nom de famille recopié dans la case « Prénom » : signalé tant que
           le fichier est encore en tête, pas au moment d'envoyer. */}
@@ -2432,6 +2552,12 @@ const MOTIFS_DOUBLON = {
      lignes et l'activité n'en compterait qu'une. */
   meme_fiche_existante:
     "les deux lignes désignaient une même fiche déjà enregistrée",
+  /* Les niveaux de la détection actuelle. La raison détaillée accompagne
+     chaque ligne ; ces libellés servent quand elle manque. */
+  certain: "doublon certain : même nom et même téléphone ou email",
+  probable: "doublon probable : même nom, rien qui les sépare",
+  a_verifier: "réunies sur décision : homonymes possibles",
+  choix: "réunies sur décision",
 };
 
 /**
@@ -2716,7 +2842,10 @@ function DoublonsReunisInfo({ result }) {
               d.email ||
               d.telephone ||
               "ligne sans nom"}
-            {d.avec && ` → ${d.avec}`} — {MOTIFS_DOUBLON[d.motif] || d.motif}
+            {d.ligne_excel ? ` (ligne ${d.ligne_excel})` : ""}
+            {d.avec &&
+              ` → ${d.avec}${d.avec_ligne_excel ? ` (ligne ${d.avec_ligne_excel})` : ""}`}{" "}
+            — {d.raison || MOTIFS_DOUBLON[d.motif] || d.motif}
           </li>
         ))}
       </ul>
@@ -2727,6 +2856,7 @@ function DoublonsReunisInfo({ result }) {
         Une seule fiche par personne, et un seul bénéficiaire compté pour cette
         activité. Si l&apos;un de ces rapprochements est faux — deux homonymes
         —, ajoutez la ligne manquante depuis la liste de l&apos;activité.
+        Aucune de ces fiches n&apos;a été mêlée à celles des autres listes.
       </p>
     </div>
   );
@@ -2740,8 +2870,8 @@ function DoublonsReunisInfo({ result }) {
 const MOTIFS_CONTACT = {
   adresse_differente: (c) =>
     c.detenteur
-      ? `déjà enregistrée sous une autre adresse pour ${c.detenteur} — c'est celle-là qui est conservée`
-      : "cette personne est déjà enregistrée sous une autre adresse",
+      ? `ligne réunie à ${c.detenteur}, qui portait déjà une autre adresse — c'est celle-là qui est conservée`
+      : "ligne réunie à une autre qui portait déjà une autre adresse",
   /* Motifs des versions précédentes, quand une adresse ne pouvait désigner
      qu'une personne. Conservés pour ne pas afficher un code brut si un ancien
      rapport est relu. */
@@ -2751,6 +2881,10 @@ const MOTIFS_CONTACT = {
       : "déjà enregistrée pour quelqu'un d'autre",
   doublon_fichier: () =>
     "la même adresse figure sur plusieurs lignes du fichier",
+  telephone_different: (c) =>
+    c.detenteur
+      ? `ligne réunie à ${c.detenteur}, qui portait déjà un autre numéro — c'est celui-là qui est conservé`
+      : "ligne réunie à une autre qui portait déjà un autre numéro",
 };
 
 function ContactsIgnoresInfo({ result }) {
@@ -2768,9 +2902,9 @@ function ContactsIgnoresInfo({ result }) {
       {champs > 0 && (
         <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
           {champs} information{champs > 1 ? "s" : ""} ajoutée
-          {champs > 1 ? "s" : ""} à des fiches déjà enregistrées (email,
-          téléphone, genre, tranche d&apos;âge, statut ou structure qui y
-          manquaient)
+          {champs > 1 ? "s" : ""} à des personnes déjà inscrites à cette
+          activité (email, téléphone, genre, tranche d&apos;âge, statut ou
+          structure qui y manquaient)
           {rattachees > 0 &&
             `, dont ${rattachees} personne${rattachees > 1 ? "s" : ""} reconnue${rattachees > 1 ? "s" : ""} par son nom`}
           .
@@ -2779,11 +2913,8 @@ function ContactsIgnoresInfo({ result }) {
       {ignores.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <p className="font-semibold">
-            {ignores.length} adresse{ignores.length > 1 ? "s" : ""} du fichier
-            différente
-            {ignores.length > 1 ? "s" : ""} de celle
-            {ignores.length > 1 ? "s" : ""} enregistrée
-            {ignores.length > 1 ? "s" : ""}
+            {ignores.length} coordonnée{ignores.length > 1 ? "s" : ""} du
+            fichier non retenue{ignores.length > 1 ? "s" : ""}
           </p>
           <ul className="mt-1 space-y-0.5">
             {ignores.map((c, i) => (
@@ -2796,9 +2927,9 @@ function ContactsIgnoresInfo({ result }) {
             ))}
           </ul>
           <p className="mt-1.5 text-amber-700">
-            L&apos;adresse déjà enregistrée est conservée — le fichier
-            n&apos;est pas forcément plus à jour. Si c&apos;est la nouvelle qui
-            vaut, corrigez la fiche dans Participants.
+            Deux lignes réunies ne gardent qu&apos;une adresse et un numéro :
+            ceux de la ligne la mieux renseignée. Si c&apos;est l&apos;autre
+            qui vaut, corrigez la fiche dans Participants.
           </p>
         </div>
       )}
@@ -2836,7 +2967,16 @@ const FIELD_LABELS = {
  * à importer, et insister ne ferait que créer des fiches en double que
  * quelqu'un devra retirer un mois plus tard, sur le seul nom.
  */
-function ResumeSimulation({ sim, importing, onAnnuler, onImporter }) {
+function ResumeSimulation({
+  sim,
+  importing,
+  onAnnuler,
+  onImporter,
+  decisions,
+  onDecisions,
+  telleQuelle,
+  recalcul,
+}) {
   const rien = (sim.nouvelles_inscriptions ?? 0) === 0;
   const dejaLa = sim.deja_inscrites ?? 0;
 
@@ -2869,10 +3009,9 @@ function ResumeSimulation({ sim, importing, onAnnuler, onImporter }) {
           fort
         />
         <Chiffre valeur={dejaLa} libelle="déjà inscrites" />
-        <Chiffre
-          valeur={sim.personnes_nouvelles}
-          libelle="personnes inconnues de la base"
-        />
+        {/* La liste n'est plus rapprochée du reste de la base : chaque
+            personne qui n'est pas déjà inscrite à l'activité reçoit sa fiche. */}
+        <Chiffre valeur={sim.personnes_nouvelles} libelle="fiches créées" />
       </div>
 
       {rien && (
@@ -2899,18 +3038,18 @@ function ResumeSimulation({ sim, importing, onAnnuler, onImporter }) {
         </p>
       )}
 
-      {sim.doublons_dans_le_fichier > 0 && (
-        <p className="text-xs text-slate-600">
-          {sim.doublons_dans_le_fichier} personne
-          {sim.doublons_dans_le_fichier > 1 ? "s figurent" : " figure"}{" "}
-          plusieurs fois dans le fichier lui-même.{" "}
-          {/* Sans cette phrase, le chiffre ne se vérifie pas : on lit « 170
-              ignorées » sans pouvoir dire lesquelles ni pourquoi. Le détail
-              ligne par ligne est juste en dessous. */}
-          <span className="text-slate-500">
-            Le détail ci-dessous dit, pour chacune, ce qui a servi de preuve.
-          </span>
-        </p>
+      {/* Les doublons du fichier, groupe par groupe, avec ce qui a servi de
+          preuve et la décision à prendre. Chaque changement rejoue la
+          simulation : les chiffres ci-dessus restent exacts. */}
+      {sim.doublons && (
+        <RevueDoublons
+          analyse={sim.doublons}
+          decisions={decisions}
+          onChange={onDecisions}
+          lectureSeule={telleQuelle}
+          chargement={recalcul}
+          lignesAnalysees={sim.total_lignes}
+        />
       )}
 
       {sim.lignes_ignorees_nom_prenom_manquants > 0 && (
@@ -2924,7 +3063,7 @@ function ResumeSimulation({ sim, importing, onAnnuler, onImporter }) {
         <button
           type="button"
           onClick={onImporter}
-          disabled={importing}
+          disabled={importing || recalcul}
           className={`text-sm ${rien ? "btn-ghost border border-slate-300" : "btn-primary"} disabled:opacity-50`}
         >
           {importing

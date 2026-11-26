@@ -163,7 +163,11 @@ router.get("/summary", authMiddleware, async (req, res) => {
                     ELSE e.effective_count END AS effective_count,
                CASE WHEN r.coach_id IS NOT NULL AND r.participations > 0 AND e.effective_count > 0
                     THEN ROUND(e.effective_count::numeric * r.retenu / r.participations)::int
-                    ELSE e.estimated_count END AS estimated_count
+                    ELSE e.estimated_count END AS estimated_count,
+               /* Ce que l'objectif du coach a écarté : la réserve des coachs. */
+               CASE WHEN r.coach_id IS NOT NULL AND r.participations > 0
+                    THEN e.effective_count - ROUND(e.effective_count::numeric * r.retenu / r.participations)::int
+                    ELSE 0 END AS reserve_coach
         FROM eff_brut e
         LEFT JOIN (${RETENU_PAR_ACTIVITE}) r ON r.activity_id = e.activity_id
       )
@@ -175,7 +179,8 @@ router.get("/summary", authMiddleware, async (req, res) => {
         COUNT(*)::int                                AS activities,
         COALESCE(SUM(effective_count), 0)::int      AS participants,
         COALESCE(SUM(estimated_count), 0)::int      AS participants_estimated,
-        COALESCE(SUM(duration_hours), 0)::int       AS hours
+        COALESCE(SUM(duration_hours), 0)::int       AS hours,
+        COALESCE(SUM(reserve_coach), 0)::int        AS reserve_coachs
       FROM eff
     `;
 
@@ -590,6 +595,9 @@ router.get("/summary", authMiddleware, async (req, res) => {
            pourcentages au-dela de cent. */
         participants_reels: totals.participants,
         participants_en_reserve: totauxPlafonnes.en_reserve,
+        /* Le surplus des coachs au-delà de leurs objectifs, retiré de tous les
+           chiffres ci-dessus. Dit aux administrateurs seulement. */
+        ...(req.user.role === "admin" ? { participants_reserve_coachs: totals.reserve_coachs } : {}),
         participants_estimated: totauxPlafonnes.estime,
         participants_estimated_reels: totals.participants_estimated,
         hours: totals.hours,

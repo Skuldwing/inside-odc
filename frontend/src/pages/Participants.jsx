@@ -1979,13 +1979,16 @@ export default function Participants() {
   const [correction, setCorrection] = useState(false);
 
   const chercherDoublons = useCallback(async () => {
+    /* Les outils de qualité des données sont réservés aux administrateurs :
+       un partenaire ou un coach n'en voit pas les alertes. */
+    if (!isAdmin) { setDoublons(null); return; }
     try {
       const res = await api.get("/participants/doublons-nom");
       setDoublons(res.data);
     } catch {
       setDoublons(null);   /* silencieux : c'est un bonus, pas la page */
     }
-  }, []);
+  }, [isAdmin]);
 
   const corrigerDoublons = async () => {
     if (!doublons?.participants?.length) return;
@@ -2031,6 +2034,7 @@ export default function Participants() {
   const idsRetenus = groupesRetenus.flatMap((g) => g.absorber.map((f) => f.id));
 
   const chercherFiches = useCallback(async () => {
+    if (!isAdmin) { setFiches(null); return; }
     try {
       const res = await api.get("/participants/fiches-doublons");
       setFiches(res.data);
@@ -2050,7 +2054,7 @@ export default function Participants() {
     } catch {
       setFiches(null);
     }
-  }, []);
+  }, [isAdmin]);
 
   const completerFiches = async () => {
     const ids = idsRetenus;
@@ -2262,7 +2266,7 @@ export default function Participants() {
           s'il y a quelque chose à corriger, et la liste est consultable avant
           d'agir : une correction en masse sur des identités ne se fait pas à
           l'aveugle. */}
-      {doublons?.total > 0 && (
+      {isAdmin && doublons?.total > 0 && (
         <section className="card-solid overflow-hidden border border-amber-300">
           <button
             type="button"
@@ -2317,19 +2321,19 @@ export default function Participants() {
         </section>
       )}
 
-      <FichesARestaurer onChange={rechargerListe} />
+      {isAdmin && <FichesARestaurer onChange={rechargerListe} />}
 
       {/* Deux inscriptions pour une personne sur la même liste de présence :
           l'effectif compte un bénéficiaire de trop, et elle recevrait deux fois
           son attestation. Ce panneau retire le lien en trop, jamais la fiche. */}
-      <DoublonsActivite onChange={rechargerListe} />
+      {isAdmin && <DoublonsActivite onChange={rechargerListe} />}
 
       {/* Une personne suit plusieurs formations et figure sur autant de listes,
           qui ne portent pas les mêmes colonnes. Les anciens imports créaient
           une fiche par liste au lieu de compléter la sienne : son information
           s'est retrouvée éparpillée entre plusieurs fiches dont aucune n'est
           complète. Ce panneau les réunit. */}
-      {fiches?.personnes > 0 && (
+      {isAdmin && fiches?.personnes > 0 && (
         <section className="card-solid overflow-hidden border border-sky-300">
           <button
             type="button"
@@ -2425,7 +2429,7 @@ export default function Participants() {
       )}
 
       {/* La revue : les groupes que le nom seul soutient, un par un. */}
-      <RevueDesGroupes onChange={rechargerListe} />
+      {isAdmin && <RevueDesGroupes onChange={rechargerListe} />}
 
       {/* Les noms inversés d'abord : une fois remis dans l'ordre, la case
           prénom porte enfin un prénom, et la déduction du genre peut s'en

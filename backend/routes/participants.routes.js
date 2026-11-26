@@ -385,7 +385,9 @@ router.get("/assiduite/export.csv", authMiddleware, async (req, res) => {
    casse et accents — alors on la fait ici, sur les seules colonnes utiles. */
 router.get("/doublons-nom", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    /* Outil de qualité des données : réservé aux administrateurs, comme les
+       genres et les noms inversés. */
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
     /* Le cloisonnement des roles s'applique : un partenaire ne voit, et ne
        corrige, que les participants de ses propres activites. */
@@ -599,7 +601,9 @@ router.patch("/:id", authMiddleware, async (req, res) => {
    ligne avant de la toucher. */
 router.post("/doublons-nom/corriger", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    /* Outil de qualité des données : réservé aux administrateurs, comme les
+       genres et les noms inversés. */
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
     if (!ids.length) return res.status(400).json({ error: "Aucun participant à corriger." });
@@ -1009,7 +1013,9 @@ async function attacherActivites(groupes) {
 
 router.get("/fiches-doublons", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    /* Outil de qualité des données : réservé aux administrateurs, comme les
+       genres et les noms inversés. */
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
     const { baseFrom, params } = buildFilters(req);
     const r = await pool.query(
@@ -1372,7 +1378,9 @@ router.post("/fiches-doublons/completer", authMiddleware, async (req, res) => {
   const client = await pool.connect();
   let ouverte = false;
   try {
-    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    /* Outil de qualité des données : réservé aux administrateurs, comme les
+       genres et les noms inversés. */
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : [];
     if (!ids.length) return res.status(400).json({ error: "Aucun groupe à compléter." });
@@ -1721,7 +1729,9 @@ async function lignesInscrites(req) {
 
 router.get("/doublons-activite", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    /* Outil de qualité des données : réservé aux administrateurs, comme les
+       genres et les noms inversés. */
+    if (req.user.role !== "admin") return res.status(403).json({ error: "Accès refusé" });
 
     const groupes = doublonsSurActivite(await lignesInscrites(req));
     res.json({
