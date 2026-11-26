@@ -125,17 +125,12 @@ function isOwner(req, activity) {
   return true; // admin
 }
 
-/* Lecture seule : un partenaire voit aussi ce qu'ont réalisé les coachs qui
-   lui sont rattachés. Il ne les modifie pas — l'activité reste celle du
-   coach : toutes les écritures continuent de passer par isOwner. */
+/* Qui peut lire une activité. Un partenaire ne voit pas celles de ses coachs :
+   du travail de ses coachs, il ne connaît que les chiffres retenus, par
+   modalité (GET /dashboard/coachs) — leurs listes lui feraient recompter un
+   surplus qui n'appartient qu'au coach et aux administrateurs. */
 async function peutConsulter(req, activite) {
-  if (isOwner(req, activite)) return true;
-  if (req.user.role !== "partner" || req.user.partner_id == null || !activite?.coach_id) return false;
-  const r = await pool.query(
-    "SELECT 1 FROM users WHERE id = $1 AND role = 'coach' AND partner_id = $2",
-    [activite.coach_id, req.user.partner_id]
-  );
-  return r.rowCount > 0;
+  return isOwner(req, activite);
 }
 
 /* ===== GET ACTIVITIES ===== */
@@ -226,9 +221,7 @@ router.get("/", authMiddleware, async (req, res) => {
       (linkedPartnerId != null && !["admin", "coach"].includes(accessRole));
     if (partnerScoped) {
       if (!linkedPartnerId) return res.json([]);
-      /* Les siennes, et celles de ses coachs — affichées à part, en lecture. */
-      query += ` WHERE (a.partner_id = $1
-                  OR a.coach_id IN (SELECT id FROM users WHERE role = 'coach' AND partner_id = $1))`;
+      query += " WHERE a.partner_id = $1";
       params.push(linkedPartnerId);
     } else if (accessRole === "coach") {
       query += " WHERE a.coach_id = $1";

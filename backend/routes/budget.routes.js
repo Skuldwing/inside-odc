@@ -8,6 +8,7 @@ const { logAudit } = require("../services/audit");
 const { ensureBudget } = require("../migrations/budget");
 const { CAS_ZONE, chiffrer } = require("../services/budget");
 
+const { RETENU_PAR_ACTIVITE } = require("../services/retenuCoach");
 const router = express.Router();
 
 /* Tout ce qui suit est reserve aux Admin +. La chaine est toujours la meme :
@@ -245,10 +246,13 @@ router.get("/synthese", ...ADMIN_PLUS, async (req, res) => {
                COALESCE(a.partner_id, uc.partner_id)  AS partner_id,
                ${CAS_ZONE}                            AS zone,
                COALESCE(a.duration_hours, 0)          AS heures,
-               (SELECT COUNT(*) FROM activity_participants ap
-                 WHERE ap.activity_id = a.id)::int    AS beneficiaires
+               /* La part retenue : pour une activité de coach, son surplus
+                  au-delà de l'objectif du coach n'entre pas
+                  (services/retenuCoach.js). */
+               COALESCE(rc.retenu, 0)::int            AS beneficiaires
         FROM activities a
         LEFT JOIN users uc ON uc.id = a.coach_id
+        LEFT JOIN (${RETENU_PAR_ACTIVITE}) rc ON rc.activity_id = a.id
         WHERE a.activity_date BETWEEN $1 AND LEAST($2::date, CURRENT_DATE)
       )
       SELECT e.partner_id,

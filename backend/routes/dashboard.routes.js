@@ -3,6 +3,8 @@ const pool = require("../db");
 const authMiddleware = require("../middleware/auth.middleware");
 const { plafonnerObjectif } = require("../services/reservePartenaire");
 
+const { RETENU_PAR_ACTIVITE } = require("../services/retenuCoach");
+const { CAS_ZONE } = require("../services/budget");
 const router = express.Router();
 
 /* « reserve_activee » n'existe pas avant la migration de demarrage, et le
@@ -125,7 +127,7 @@ router.get("/summary", authMiddleware, async (req, res) => {
          Un effectif manuel (participants_manual) n'est qu'une estimation non
          verifiee ; il ne compte pas dans les KPIs tant qu'aucune liste reelle
          n'a ete importee, meme si l'activite reste comptee comme realisee. */
-      , eff AS (
+      , eff_brut AS (
         SELECT
           activity_id,
           MAX(device_name)    AS device_name,
@@ -148,6 +150,22 @@ router.get("/summary", authMiddleware, async (req, res) => {
         FROM base
         GROUP BY activity_id
         HAVING COUNT(participant_id) > 0 OR COALESCE(MAX(participants_manual), 0) > 0
+      )
+      /* Une activité de coach ne compte que pour sa part retenue dans
+         l'objectif du coach — le surplus est en réserve, hors des chiffres du
+         coach comme de son partenaire (services/retenuCoach.js). Avec un filtre
+         de genre, la part retenue s'applique en proportion. */
+      , eff AS (
+        SELECT e.activity_id, e.device_name, e.device_color, e.partner_id, e.partner_name,
+               e.par_coach, e.activity_date, e.duration_hours, e.location, e.mode,
+               CASE WHEN r.coach_id IS NOT NULL AND r.participations > 0
+                    THEN ROUND(e.effective_count::numeric * r.retenu / r.participations)::int
+                    ELSE e.effective_count END AS effective_count,
+               CASE WHEN r.coach_id IS NOT NULL AND r.participations > 0 AND e.effective_count > 0
+                    THEN ROUND(e.effective_count::numeric * r.retenu / r.participations)::int
+                    ELSE e.estimated_count END AS estimated_count
+        FROM eff_brut e
+        LEFT JOIN (${RETENU_PAR_ACTIVITE}) r ON r.activity_id = e.activity_id
       )
     `;
 
@@ -237,6 +255,9 @@ router.get("/summary", authMiddleware, async (req, res) => {
         SELECT DISTINCT ON (activity_id)
           activity_id, title, activity_date, partner_name
         FROM base
+        /* Un partenaire ne voit que des chiffres du travail de ses coachs,
+           pas leurs activités. */
+        ${req.user.role === "partner" ? "WHERE NOT par_coach" : ""}
         ORDER BY activity_id, activity_date DESC
       ) t
       ORDER BY activity_date DESC
@@ -599,6 +620,90 @@ router.get("/summary", authMiddleware, async (req, res) => {
   }
 });
 
+/* ===== LE TRAVAIL DES COACHS =====
+ *
+ * Par coach : la part retenue dans son objectif, par modalité — en ligne,
+ * Dakar, région — sur la période du tableau de bord. La réserve (ce qui
+ * dépasse l'objectif) n'est donnée qu'au coach lui-même et aux
+ * administrateurs : un partenaire ne voit que ce qui compte.
+ *
+ *  - partenaire : ses coachs, chiffres retenus seulement ;
+ *  - coach      : lui seul, avec son objectif et sa réserve ;
+ *  - admin      : les coachs du partenaire demandé, réserve comprise.
+ */
+router.get("/coachs", authMiddleware, async (req, res) => {
+  try {
+    const { params } = buildFilters(req);
+    const [du, au] = params;
+    const role = req.user.role;
+    let filtre;
+    let cle;
+    if (role === "partner") {
+      if (!req.user.partner_id) return res.json({ coachs: [], reserve_visible: false });
+      filtre = "u.partner_id = $3";
+      cle = req.user.partner_id;
+    } else if (role === "coach") {
+      filtre = "u.id = $3";
+      cle = req.user.id;
+    } else if (role === "admin") {
+      if (!req.query.partner_id) return res.json({ coachs: [], reserve_visible: true });
+      filtre = "u.partner_id = $3";
+      cle = Number(req.query.partner_id);
+    } else {
+      return res.json({ coachs: [], reserve_visible: false });
+    }
+    const voitReserve = role !== "partner";
+    const { rows } = await pool.query(
+      `SELECT u.id, u.full_name,
+              COALESCE(u.objective_beneficiaries, 0)::int AS objectif,
+              COALESCE(SUM(x.retenu) FILTER (WHERE x.zone = 'ligne'), 0)::int AS en_ligne,
+              COALESCE(SUM(x.retenu) FILTER (WHERE x.zone = 'dakar'), 0)::int AS dakar,
+              COALESCE(SUM(x.retenu) FILTER (WHERE x.zone = 'region'), 0)::int AS region,
+              COALESCE(SUM(x.retenu) FILTER (WHERE x.zone = 'non_renseigne'), 0)::int AS non_renseigne,
+              COALESCE(SUM(x.retenu), 0)::int AS total,
+              COALESCE(SUM(x.participations - x.retenu), 0)::int AS reserve_periode,
+              (SELECT COALESCE(SUM(r2.retenu), 0) FROM activities a2
+                 JOIN (${RETENU_PAR_ACTIVITE}) r2 ON r2.activity_id = a2.id
+                WHERE a2.coach_id = u.id)::int AS retenu_total,
+              (SELECT COALESCE(SUM(r2.participations - r2.retenu), 0) FROM activities a2
+                 JOIN (${RETENU_PAR_ACTIVITE}) r2 ON r2.activity_id = a2.id
+                WHERE a2.coach_id = u.id)::int AS reserve_totale
+         FROM users u
+         LEFT JOIN (
+           SELECT a.coach_id, ${CAS_ZONE} AS zone, r.retenu, r.participations
+             FROM activities a
+             JOIN (${RETENU_PAR_ACTIVITE}) r ON r.activity_id = a.id
+            WHERE a.activity_date BETWEEN $1 AND LEAST($2::date, CURRENT_DATE)
+         ) x ON x.coach_id = u.id
+        WHERE u.role = 'coach' AND ${filtre}
+        GROUP BY u.id
+        ORDER BY COALESCE(SUM(x.retenu), 0) DESC, u.full_name`,
+      [du, au, cle]
+    );
+    res.json({
+      reserve_visible: voitReserve,
+      coachs: rows.map((r) => {
+        const ligne = {
+          id: r.id, nom: r.full_name, en_ligne: r.en_ligne, dakar: r.dakar,
+          region: r.region, non_renseigne: r.non_renseigne, total: r.total,
+        };
+        if (voitReserve) {
+          Object.assign(ligne, {
+            objectif: r.objectif,
+            retenu_total: r.retenu_total,
+            reserve_periode: r.reserve_periode,
+            reserve_totale: r.reserve_totale,
+          });
+        }
+        return ligne;
+      }),
+    });
+  } catch (err) {
+    console.error("[DASHBOARD COACHS]", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 router.get("/export", authMiddleware, async (req, res) => {
   try {
     const { where, params, year } = buildFilters(req);
@@ -629,7 +734,7 @@ router.get("/export", authMiddleware, async (req, res) => {
         WHERE ${where}
       )
       , eff AS (
-        SELECT partner_id,
+        SELECT activity_id, partner_id,
                CASE WHEN COUNT(participant_id) > 0
                     THEN COUNT(participant_id)::int
                     ELSE 0
@@ -638,13 +743,21 @@ router.get("/export", authMiddleware, async (req, res) => {
         FROM base
         GROUP BY activity_id, partner_id
       )
+      , eff_retenu AS (
+        SELECT b.partner_id, b.par_coach,
+               CASE WHEN r.coach_id IS NOT NULL AND r.participations > 0
+                    THEN ROUND(b.effective_count::numeric * r.retenu / r.participations)::int
+                    ELSE b.effective_count END AS effective_count
+        FROM eff b
+        LEFT JOIN (${RETENU_PAR_ACTIVITE}) r ON r.activity_id = b.activity_id
+      )
       SELECT pr.name,
              pr.objective_beneficiaries,
              ${reserveExpr}::int AS reserve_activee,
              COALESCE(SUM(b.effective_count), 0)::int AS realized,
              COALESCE(SUM(b.effective_count) FILTER (WHERE b.par_coach), 0)::int AS realized_coachs
       FROM partners pr
-      LEFT JOIN eff b ON b.partner_id = pr.id
+      LEFT JOIN eff_retenu b ON b.partner_id = pr.id
       /* Sur la cle primaire : les autres colonnes de « pr » en dependent
          fonctionnellement, donc Postgres les accepte sans les enumerer. C'est
          necessaire ici parce que la colonne de reserve peut etre remplacee par

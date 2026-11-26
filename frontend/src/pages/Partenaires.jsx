@@ -562,6 +562,9 @@ export default function Partenaires() {
                     <span className="text-purple-600/80">
                       — en direct : {beneficiaries - Number(p.coach_beneficiaries_count || 0)}
                     </span>
+                    {Number(p.coach_reserve_count || 0) > 0 && (
+                      <span className="text-purple-600/80">· {p.coach_reserve_count} en réserve (au-delà de leurs objectifs)</span>
+                    )}
                   </p>
                 )}
 

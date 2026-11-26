@@ -41,6 +41,7 @@ function scoreTextColor(score) {
 function RepartitionRealise({ partner, beneficiaries }) {
   const coachs = partner.coachs || [];
   const parCoachs = Number(partner.coach_beneficiaries_count || 0);
+  const reserveCoachs = Number(partner.coach_reserve_count || 0);
   const activitesCoachs = Number(partner.coach_activities_count || 0);
   const activites = Number(partner.activities_count || 0);
   if (!coachs.length && !activitesCoachs) return null;
@@ -64,7 +65,10 @@ function RepartitionRealise({ partner, beneficiaries }) {
           <p className="mt-0.5 text-lg font-semibold text-purple-900">
             {parCoachs} <span className="text-xs font-normal text-purple-700">participations</span>
           </p>
-          <p className="text-xs text-purple-700">{activitesCoachs} activité{activitesCoachs > 1 ? "s" : ""}</p>
+          <p className="text-xs text-purple-700">
+            {activitesCoachs} activité{activitesCoachs > 1 ? "s" : ""}
+            {reserveCoachs > 0 && ` · ${reserveCoachs} en réserve, non comptées`}
+          </p>
         </div>
       </div>
       {coachs.length > 0 && (
@@ -74,15 +78,17 @@ function RepartitionRealise({ partner, beneficiaries }) {
               <tr>
                 <th className="px-3 py-2">Coach</th>
                 <th className="px-3 py-2 text-right">Activités</th>
-                <th className="px-3 py-2 text-right">Participations</th>
-                <th className="px-3 py-2">Objectif confié</th>
+                <th className="px-3 py-2 text-right">Réalisé</th>
+                <th className="px-3 py-2">Retenu / objectif confié</th>
+                <th className="px-3 py-2 text-right">En réserve</th>
                 <th className="px-3 py-2">Dernière activité</th>
               </tr>
             </thead>
             <tbody>
               {coachs.map((c) => {
                 const obj = Number(c.objective_beneficiaries || 0);
-                const pctCoach = obj > 0 ? Math.min(100, Math.round((c.participations / obj) * 100)) : null;
+                const retenues = Number(c.retenues ?? c.participations);
+                const pctCoach = obj > 0 ? Math.min(100, Math.round((retenues / obj) * 100)) : null;
                 return (
                   <tr key={c.id} className="table-row">
                     <td className="px-3 py-2">
@@ -97,11 +103,14 @@ function RepartitionRealise({ partner, beneficiaries }) {
                           <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
                             <span className="block h-full rounded-full bg-purple-500" style={{ width: `${pctCoach}%` }} />
                           </span>
-                          <span className="text-xs tabular-nums text-slate-600">{c.participations} / {obj}</span>
+                          <span className="text-xs tabular-nums text-slate-600">{retenues} / {obj}</span>
                         </span>
                       ) : (
                         <span className="text-xs text-slate-400">non défini</span>
                       )}
+                    </td>
+                    <td className={`px-3 py-2 text-right tabular-nums ${c.en_reserve > 0 ? "font-semibold text-purple-700" : "text-slate-400"}`}>
+                      {c.en_reserve || 0}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate-500">{derniere(c.derniere_activite)}</td>
                   </tr>
