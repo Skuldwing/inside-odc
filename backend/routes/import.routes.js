@@ -8,16 +8,15 @@ const authMiddleware = require("../middleware/auth.middleware");
 const { logAudit } = require("../services/audit");
 const { computeAndStoreReliability } = require("../services/reliability");
 
-const {
-  repetitionsDans, normaliser, compacterNom,
-  clePersonne, cleApprochee, nomsCompatibles, memePersonne,
-} = require("../services/nomsDoublons");
+const { repetitionsDans } = require("../services/nomsDoublons");
 const { construireModeleListePresence } = require("../services/modeleListePresence");
-/* Les regles qui disent que deux fiches ne peuvent pas designer la meme
-   personne. Elles vivent la-bas et servent partout : une regle d'identite
-   ecrite en deux exemplaires finirait par diverger, et l'import ne dirait
-   plus la meme chose que le reste de la plateforme. */
-const { genresIncompatibles, agesIncompatibles } = require("../services/assiduite");
+/* La detection des doublons d'une liste : noms (ordre, accents, variantes,
+   fautes), numeros et adresses normalises, contacts collectifs, homonymes
+   attendus sur les grandes listes. Elle vit a part pour etre eprouvee sans
+   base ni fichier. */
+const {
+  analyserDoublons, regrouper, preparer, comparer, contactsCollectifs, telephonesDe,
+} = require("../services/doublonsListe");
 
 const router = express.Router();
 
@@ -295,18 +294,21 @@ function parseRowsFromSheet(sheet, manualMapping = {}) {
     }
   }
 
-  // Convertir les lignes de données en objets
-  const dataRows = rawRows.slice(headerIdx + 1).filter(
-    (row) => Array.isArray(row) && row.some((c) => c != null && String(c).trim() !== "")
-  );
-
-  const rows = dataRows.map((rawRow) => {
+  /* Convertir les lignes de données en objets, en gardant le numéro de ligne
+     Excel : c'est par lui que l'écran désigne un doublon (« lignes 14 et
+     87 »), et qu'on le retrouve dans le fichier. */
+  const debut = sheet["!ref"] ? xlsx.utils.decode_range(sheet["!ref"]).s.r : 0;
+  const rows = [];
+  for (let r = headerIdx + 1; r < rawRows.length; r++) {
+    const rawRow = rawRows[r];
+    if (!Array.isArray(rawRow) || !rawRow.some((c) => c != null && String(c).trim() !== "")) continue;
     const obj = {};
     colMapping.forEach(({ field }, idx) => {
       if (field) obj[field] = rawRow[idx] ?? null;
     });
-    return obj;
-  });
+    Object.defineProperty(obj, "__ligneExcel", { value: debut + r + 1, enumerable: false });
+    rows.push(obj);
+  }
 
   return { rows, headerRowIndex: headerIdx, recognizedColumns, unrecognizedColumns };
 }
@@ -336,583 +338,370 @@ function parseParticipantFromMapped(obj) {
   };
 }
 
-/* ===== FONCTIONS DB ===== */
-
-async function insertParticipant(client, payload) {
-  const { nom, prenom, normalizedGender, ageRange, email, telephone, statut, structure } = payload;
-  const res = await client.query(
-    `INSERT INTO participants (nom, prenom, genre, age_range, email, telephone, statut, structure)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-     ON CONFLICT DO NOTHING RETURNING id`,
-    [nom, prenom, normalizedGender, ageRange || null, email || null, telephone || null, statut || null, structure || null]
-  );
-  return res.rows[0]?.id || null;
-}
-
-/**
- * @param {boolean} [options.telleQuelle] n'applique aucun rapprochement entre
- *   lignes du fichier : une ligne, une inscription. Ce que l'import aurait
- *   reuni est rendu dans « rapprochementsEcartes » plutot que d'etre tu.
- */
-async function importParticipantsRowsBatch(client, rows, activityId, options = {}) {
-  const telleQuelle = options.telleQuelle === true;
+/* ===== LECTURE DES LIGNES =====
+   Une ligne n'est ecartee que si elle ne designe personne. L'import exigeait
+   auparavant un nom ET un prenom : une feuille de presence ou quelqu'un
+   n'avait ecrit que son nom de famille perdait cette personne — sans que rien
+   ne la remplace dans les compteurs. On garde donc toute ligne portant de quoi
+   designer quelqu'un : un nom, un prenom, une adresse ou un numero. Ce qui
+   manque reste vide et se voit. */
+function lireLignes(rows) {
   let skippedMissingName = 0;
-
-  /* 1. Lecture de toutes les lignes.
-     Une ligne n'est ecartee que si elle ne designe personne. L'import exigeait
-     auparavant un nom ET un prenom : une feuille de presence ou quelqu'un
-     n'avait ecrit que son nom de famille, ou dont la colonne « Nom complet »
-     ne tenait qu'en un mot, perdait cette personne — sans que rien ne la
-     remplace dans les compteurs. Des beneficiaires reels disparaissaient
-     ainsi des statistiques du centre.
-     On garde donc toute ligne portant de quoi designer quelqu'un : un nom, un
-     prenom, une adresse ou un numero. Ce qui manque reste vide et se voit,
-     plutot que de faire disparaitre la personne. */
   const items = [];
   const lignesIncompletes = [];
-  for (const row of rows) {
+  rows.forEach((row, ligne) => {
     const p = parseParticipantFromMapped(row);
-    if (!p.nom && !p.prenom && !p.email && !p.telephone) { skippedMissingName++; continue; }
-
+    if (!p.nom && !p.prenom && !p.email && !p.telephone) { skippedMissingName++; return; }
     if (!p.nom || !p.prenom) {
       lignesIncompletes.push({
         nom: p.nom || null,
         prenom: p.prenom || null,
         email: p.email || null,
         telephone: p.telephone || null,
+        ligne_excel: row.__ligneExcel ?? null,
         manque: [!p.nom && "nom", !p.prenom && "prénom"].filter(Boolean),
       });
     }
-
-    /* Les colonnes nom et prenom n'acceptent pas l'absence de valeur : une
-       chaine vide dit « non renseigne » sans rien inventer. */
-    const nom = p.nom || "";
-    const prenom = p.prenom || "";
     items.push({
       ...p,
-      nom,
-      prenom,
+      /* Les colonnes nom et prenom n'acceptent pas l'absence de valeur : une
+         chaine vide dit « non renseigne » sans rien inventer. */
+      nom: p.nom || "",
+      prenom: p.prenom || "",
       normalizedGender: normalizeGender(p.genre),
-      cle: clePersonne(nom, prenom),
-      /* La cle de repli, pour les lignes dont le nom est a moitie vide : elles
-         n'avaient aucune cle, et deux fois la meme ligne donnait deux fiches. */
-      approchee: cleApprochee(nom, prenom),
-      resolvedId: null,
+      /* La position dans le fichier : c'est par elle que l'ecran designe les
+         lignes a reunir, et par le numero Excel qu'on les retrouve. */
+      ligne,
+      ligneExcel: row.__ligneExcel ?? null,
     });
-  }
+  });
+  return { items, skippedMissingName, lignesIncompletes };
+}
 
-  /* Ce que l'import n'a pas pu enregistrer. Depuis que les contacts peuvent
-     figurer sur plusieurs fiches, il n'ecarte plus d'adresse ni de numero :
-     seule subsiste la mention d'une personne connue sous une autre adresse,
-     qui n'est pas un rejet mais un avertissement. */
+const nomAffiche = (p) => `${p.prenom || ""} ${p.nom || ""}`.trim();
+
+/* Les groupes de doublons, tels que l'ecran les montre : chaque ligne avec son
+   numero Excel, son nom et ses contacts. Les indices renvoyes sont les
+   positions dans le fichier, celles que l'ecran renverra pour dire quoi
+   reunir. */
+function detaillerGroupes(groupes, items) {
+  const decrire = (k) => ({
+    ligne: items[k].ligne,
+    ligne_excel: items[k].ligneExcel,
+    nom: items[k].nom || null,
+    prenom: items[k].prenom || null,
+    email: items[k].email || null,
+    telephone: items[k].telephone || null,
+    genre: items[k].normalizedGender || null,
+    tranche_age: items[k].ageRange || null,
+  });
+  return groupes.map((g) => ({
+    id: g.id,
+    niveau: g.niveau,
+    defaut: g.defaut,
+    raisons: g.raisons,
+    lignes: g.lignes.map((k) => items[k].ligne),
+    cotes: g.cotes ? g.cotes.map((c) => c.map((k) => items[k].ligne)) : null,
+    detail: g.lignes.map(decrire),
+  }));
+}
+
+/* Ce que l'ecran a decide de reunir : une liste d'ensembles de positions dans
+   le fichier. Absente, ce sont les reunions par defaut (doublons certains et
+   probables) qui s'appliquent. */
+function lireFusions(req) {
+  const brut = req.body?.fusions;
+  if (brut === undefined || brut === null || brut === "") return null;
+  try {
+    const v = typeof brut === "string" ? JSON.parse(brut) : brut;
+    if (!Array.isArray(v)) return null;
+    return v
+      .filter(Array.isArray)
+      .map((e) => e.map(Number).filter(Number.isInteger))
+      .filter((e) => e.length >= 2);
+  } catch {
+    return null;
+  }
+}
+
+/* Ce qu'une ligne apporte a une autre qui designe la meme personne :
+   seulement ce qui manque. Deux lignes d'un meme fichier peuvent porter l'une
+   l'adresse, l'autre le numero — la fiche doit recevoir les deux. */
+const CHAMPS_LIGNE = ["nom", "prenom", "email", "telephone", "normalizedGender", "ageRange", "statut", "structure"];
+
+/**
+ * Importe les lignes d'une liste de presence dans une activite.
+ *
+ * Une liste est un document a part entiere. Elle ne se fond pas dans les
+ * autres : l'import ne cherche plus la personne dans le reste de la base.
+ *
+ * Il le faisait. Une personne deja connue — par son adresse, son numero, ou
+ * par son seul nom quand la fiche existante n'avait pas de contact — etait
+ * reconnue, la ligne rattachee a sa fiche, et la fiche completee de ce que la
+ * liste apportait. Sur le nom seul, c'etait confondre deux homonymes : la
+ * « Awa Niang » d'un atelier de 2024, sans numero, recevait le numero de la
+ * « Awa Niang » d'une formation de 2026, et les deux personnes n'en faisaient
+ * plus qu'une. Et comme la base intervenait avant la liste, deux lignes d'une
+ * meme liste pouvaient tomber sur deux fiches differentes de la base : le
+ * doublon dans la liste n'etait alors meme plus vu.
+ *
+ * Desormais :
+ *   1. les doublons de la liste sont cherches dans la liste seule
+ *      (services/doublonsListe.js) ; l'ecran les montre et la personne qui
+ *      importe decide, groupe par groupe, de ce qui est reuni ;
+ *   2. chaque personne de la liste recoit sa propre fiche — rien n'est ecrit
+ *      sur la fiche d'une autre liste ;
+ *   3. seule exception : quelqu'un deja inscrit a CETTE activite (la meme
+ *      liste importee deux fois, ou completee) n'est pas inscrit une seconde
+ *      fois.
+ *
+ * Le rapprochement entre listes — la meme personne venue a trois formations —
+ * reste possible, mais c'est un acte a part : Participants → fiches en
+ * double, ou un administrateur le fait en le voyant, et peut le defaire.
+ *
+ * @param {boolean} [options.telleQuelle] n'applique aucune reunion entre
+ *   lignes du fichier : une ligne, une inscription. Ce que l'import aurait
+ *   reuni est rendu dans « rapprochementsEcartes » plutot que d'etre tu.
+ * @param {Array<Array<number>>} [options.fusions] les ensembles de lignes (par
+ *   position dans le fichier) que l'ecran a decide de reunir.
+ */
+async function importParticipantsRowsBatch(client, rows, activityId, options = {}) {
+  const telleQuelle = options.telleQuelle === true;
+  const { items, skippedMissingName, lignesIncompletes } = lireLignes(rows);
   const contactsIgnores = [];
+
   if (items.length === 0) {
     return {
       imported: 0, skippedMissingName, duplicatesInActivity: 0,
       contactsIgnores, rattachements: 0, champsCompletes: 0, lignesIncompletes,
-      doublonsReunis: [], rapprochementsEcartes: [],
+      doublonsReunis: [], rapprochementsEcartes: [], fichesCreees: 0, personnesConnues: 0,
+      doublons: { groupes: [], resume: { groupes: 0, certains: 0, probables: 0, a_verifier: 0 }, decide_par: "defaut" },
     };
   }
 
-  /* 2. Qui est deja connu ?
-     Une adresse peut desormais figurer sur plusieurs fiches : la recherche
-     rend donc une liste, et c'est le nom qui departage. */
-  const emailSet = new Set(items.filter(it => it.email).map(it => it.email));
-  const phoneSet = new Set(items.filter(it => it.telephone).map(it => it.telephone));
-  const byEmail = new Map(); // email normalise → [fiches]
-  const byPhone = new Map(); // telephone → [fiches]
-  const ajouter = (carte, cle, fiche) => {
-    if (!cle) return;
-    if (!carte.has(cle)) carte.set(cle, []);
-    if (!carte.get(cle).some((f) => f.id === fiche.id)) carte.get(cle).push(fiche);
-  };
+  /* 1. Les doublons de la liste, et ce qu'on en fait. */
+  const analyse = analyserDoublons(items);
+  const groupeDe = new Map(); // indice de ligne → groupe qui la contient
+  for (const g of analyse.groupes) for (const k of g.lignes) if (!groupeDe.has(k)) groupeDe.set(k, g);
 
-  if (emailSet.size > 0 || phoneSet.size > 0) {
-    const parts = [], params = [];
-    if (emailSet.size > 0) { params.push([...emailSet]); parts.push(`LOWER(email) = ANY($${params.length})`); }
-    if (phoneSet.size > 0) { params.push([...phoneSet]); parts.push(`telephone = ANY($${params.length})`); }
-    const { rows: existing } = await client.query(
-      `SELECT id, nom, prenom, email, telephone, genre, age_range, statut, structure
-         FROM participants WHERE ${parts.join(' OR ')}`,
-      params
-    );
-    for (const r of existing) {
-      ajouter(byEmail, normalizeEmail(r.email), r);
-      ajouter(byPhone, normalizePhone(r.telephone), r);
-    }
+  const parPosition = new Map(items.map((it, k) => [it.ligne, k]));
+  let fusions;
+  let decidePar;
+  if (telleQuelle) {
+    fusions = [];
+    decidePar = "telle_quelle";
+  } else if (Array.isArray(options.fusions)) {
+    fusions = options.fusions.map((e) => e.map((pos) => parPosition.get(pos)).filter((k) => k !== undefined));
+    decidePar = "utilisateur";
+  } else {
+    fusions = analyse.groupes.filter((g) => g.defaut === "fusionner").map((g) => g.lignes);
+    decidePar = "defaut";
   }
+  const personnes = regrouper(items.length, fusions);
 
-  /* 2b. Rapprochement par le nom.
-     Les listes de presence ne portent pas toutes les memes colonnes : l'une a
-     les adresses, l'autre les telephones, une troisieme ni l'un ni l'autre.
-     Une personne connue par son numero qui revient sur une liste ne portant
-     que son adresse n'etait rattachable par rien — l'import creait un second
-     exemplaire d'elle-meme, et son information restait eparpillee entre deux
-     fiches dont aucune n'etait complete. */
-  /* La recherche se fait sur la forme compacte du nom : sans accent, sans
-     casse, sans apostrophe. Comparee a « lower(trim(nom)) », elle ne manquait
-     pas seulement « N'Diaye » face a « Ndiaye » — elle manquait aussi
-     « Ndiayé », puisque la valeur cherchee etait deja desaccentuee et celle de
-     la base non. La fiche existante n'etait alors pas trouvee, et l'import en
-     creait une seconde.
-
-     Les deux colonnes sont interrogees avec l'ensemble des noms ET des prenoms
-     du fichier : sur les feuilles de presence, « Nom » et « Prenom » sont
-     remplies dans un sens ou dans l'autre selon qui tient la feuille. */
-  const nomsCherches = [...new Set(
-    items.flatMap((it) => [compacterNom(it.nom), compacterNom(it.prenom)]).filter(Boolean)
-  )];
-  const parNom = new Map(); // cle personne → fiche, ou null si le nom est ambigu
-  if (nomsCherches.length > 0) {
-    /* translate() desaccentue, regexp_replace() ote tout le reste — espaces,
-       tirets, apostrophes. Les deux colonnes de la base passent par la meme
-       transformation que compacterNom() applique au fichier. */
-    const COMPACT = (colonne) => `regexp_replace(
-      translate(lower(trim(${colonne})),
-                'àáâãäåçèéêëìíîïñòóôõöùúûüýÿ',
-                'aaaaaaceeeeiiiinooooouuuuyy'),
-      '[^a-z0-9]+', '', 'g')`;
-    const { rows: connus } = await client.query(
-      `SELECT id, nom, prenom, email, telephone, genre, age_range, statut, structure
-         FROM participants
-        WHERE ${COMPACT("nom")} = ANY($1) OR ${COMPACT("prenom")} = ANY($1)`,
-      [nomsCherches]
-    );
-    for (const r of connus) {
-      const cle = clePersonne(r.nom, r.prenom);
-      /* Deux fiches sous le meme nom : on ne devine pas laquelle est la bonne,
-         l'import creera une fiche plutot que de confondre deux homonymes. */
-      if (!cle) continue;
-      if (parNom.has(cle)) parNom.set(cle, null);
-      else parNom.set(cle, r);
-    }
-  }
-
-  /* Rapprocher par le seul nom deux fiches portant des identifiants
-     differents reviendrait a confondre deux homonymes. On ne le fait que si
-     rien ne les oppose : le fichier n'apporte pas une adresse ou un numero
-     different de ceux deja enregistres. Une information absente d'un cote ne
-     s'oppose a rien — c'est precisement le cas qu'on veut rattraper. */
-  const riensOppose = (fiche, ligne) => {
-    if (ligne.email && fiche.email && normalizeEmail(fiche.email) !== ligne.email) return false;
-    if (ligne.telephone && fiche.telephone && normalizePhone(fiche.telephone) !== ligne.telephone) return false;
-    /* Le genre et la tranche d'age separent aussi deux personnes : c'est ce
-       qui distingue un enfant de Kids Tech d'un adulte de Tech Academy quand
-       ni l'un ni l'autre ne porte de coordonnees. */
-    if (genresIncompatibles(normalizeGender(fiche.genre), ligne.normalizedGender)) return false;
-    if (agesIncompatibles(fiche.age_range, ligne.ageRange)) return false;
-    return true;
-  };
-
-  /* Parmi les fiches qui portent ce contact, celle qui designe la meme
-     personne. Le contact seul ne suffit plus a identifier quelqu'un : un
-     numero de famille en designe plusieurs.
-     A defaut d'une identite identique, une identite compatible : le meme
-     contact et un nom qui dit la meme chose en plus court ou en plus long
-     (« Awa Diop » et « Awa Marie Diop »). Si deux fiches s'y reconnaissent, on
-     ne devine pas laquelle — l'import en creera une plutot que de confondre. */
-  const memeNom = (fiches, it) => {
-    const liste = fiches || [];
-    const exact = liste.find((f) => memePersonne(f, it));
-    if (exact) return exact;
-    const compatibles = liste.filter((f) => nomsCompatibles(f, it));
-    return compatibles.length === 1 ? compatibles[0] : null;
-  };
-
-  /* Ce que le fichier peut completer sur une fiche deja connue, au-dela des
-     coordonnees. L'import les jetait : une liste apportant le genre et la
-     structure d'une personne deja enregistree n'en gardait rien, et sa fiche
-     restait incomplete pour toujours. */
-  const CHAMPS_COMPLETABLES = [
-    ["nom", "nom"],
-    ["prenom", "prenom"],
-    ["genre", "normalizedGender"],
-    ["age_range", "ageRange"],
-    ["statut", "statut"],
-    ["structure", "structure"],
-  ];
-
-  // 3. Rapprochement ligne par ligne
-  const aCompleter = [];  // fiches existantes auxquelles il manque quelque chose
-
-  /* Ce qu'une ligne apporte a une autre qui designe la meme personne :
-     seulement ce qui manque. Deux lignes d'un meme fichier peuvent porter
-     l'une l'adresse, l'autre le numero — la fiche doit recevoir les deux. */
-  const completerDepuis = (cible, source) => {
-    const ajoutes = {};
-    if (source.email && !cible.email) ajoutes.email = source.email;
-    if (source.telephone && !cible.telephone) ajoutes.telephone = source.telephone;
-    for (const [colonne, champ] of CHAMPS_COMPLETABLES) {
-      if (!cible[champ] && source[champ]) ajoutes[colonne] = source[champ];
-    }
-    return ajoutes;
-  };
-
-  /* Deux lignes du meme fichier qui designent la meme personne ne doivent
-     donner qu'une fiche. Le rapprochement se fait sur l'identite, non sur le
-     contact : deux personnes differentes partageant une adresse restent deux
-     personnes, et gardent chacune cette adresse.
-     Trois lectures, de la plus sure a la plus prudente : la meme identite,
-     puis le meme contact avec un nom compatible, puis — pour les lignes dont le
-     nom est a moitie vide, qui n'ont donc pas d'identite — les memes mots sans
-     rien qui les oppose. */
-  /* Plusieurs indices par nom, et non un seul : deux homonymes que leurs
-     numeros separent sont deux personnes, et la troisieme ligne du meme nom
-     doit pouvoir se reconnaitre dans l'une ou dans l'autre. */
-  const dejaVu = new Map();          // cle personne → [indices dans items]
-  const parContactLigne = new Map(); // email ou telephone → [indices]
-  const parApprochee = new Map();    // cle approchee → [indices]
-
-  const noter = (carte, cle, i) => {
-    if (!cle) return;
-    if (!carte.has(cle)) carte.set(cle, []);
-    carte.get(cle).push(i);
-  };
-
-  /* Ce qui separe deux lignes.
-   *
-   * Toutes deux portent une adresse, ou toutes deux un numero, et ce n'est pas
-   * le meme. Ou elles decrivent deux personnes differentes : un homme et une
-   * femme, un enfant et un adulte. Une information absente ne contredit rien —
-   * c'est justement le cas qu'on veut rattraper.
-   *
-   * Le genre et la tranche d'age comptent au meme titre que les coordonnees.
-   * Les regles viennent d'assiduite.js plutot que d'etre reecrites ici : une
-   * regle d'identite qui existerait en deux exemplaires finirait par diverger,
-   * et l'import ne dirait plus la meme chose que le reste de la plateforme. */
-  const seContredisent = (a, b) =>
-    Boolean(
-      (a.email && b.email && a.email !== b.email) ||
-      (a.telephone && b.telephone && a.telephone !== b.telephone) ||
-      genresIncompatibles(a.normalizedGender, b.normalizedGender) ||
-      agesIncompatibles(a.ageRange, b.ageRange)
-    );
-
-  const jumelleDe = (it) => {
-    /* Le meme nom, deux fois sur la meme feuille.
-     *
-     * L'import y voyait une seule personne, sans rien verifier d'autre. Sur
-     * une liste de 1825 inscrits a une journee scientifique, 170 lignes ont
-     * ainsi disparu : 147 noms differents, et 171 numeros de telephone
-     * distincts — autant de personnes reelles fondues en une seule parce
-     * qu'elles s'appelaient comme quelqu'un d'autre. A cette echelle, quatre
-     * « Aissatou Diallo » ne sont pas une erreur de saisie, c'est ce que
-     * donnent les noms les plus portes du pays.
-     *
-     * Le nom seul ne suffit donc plus. Il faut qu'il ne reste rien pour les
-     * separer : ni deux numeros differents, ni deux adresses differentes, ni
-     * deux genres, ni deux tranches d'age qui ne peuvent designer la meme
-     * personne. C'est la regle appliquee partout ailleurs depuis qu'on a vu
-     * ce que l'autre coutait. */
-    for (const j of dejaVu.get(it.cle) || []) {
-      if (!seContredisent(items[j], it)) {
-        return { indice: j, motif: "identite_identique" };
-      }
-    }
-
-    for (const contact of [it.email, it.telephone].filter(Boolean)) {
-      for (const j of parContactLigne.get(contact) || []) {
-        if (nomsCompatibles(items[j], it)) {
-          return { indice: j, motif: "meme_contact" };
-        }
-      }
-    }
-
-    /* Deux lignes sans identite complete : « Diop » sans prenom, deux fois. Ni
-       l'une ni l'autre ne porte de quoi les distinguer — pas d'adresse
-       differente, pas de numero different. Les compter deux fois gonflerait
-       l'effectif de l'activite d'une personne qui n'existe pas. */
-    if (!it.cle && it.approchee) {
-      for (const j of parApprochee.get(it.approchee) || []) {
-        if (!items[j].cle && !seContredisent(items[j], it)) {
-          return { indice: j, motif: "identite_incomplete" };
-        }
-      }
-    }
-    return null;
-  };
-
-  /* Ce que cette ligne apporte pour reconnaitre les suivantes. */
-  const enregistrer = (i, distincte) => {
-    const it = items[i];
-    /* Seules les lignes qui designent une personne de plus entrent dans
-       l'index des noms : une ligne reunie a une autre n'est pas quelqu'un
-       qu'une troisieme pourrait reconnaitre, et la designer comme jumelle
-       ferait pointer les rapprochements sur un doublon plutot que sur
-       l'originale. Les contacts, eux, s'enregistrent toujours. */
-    if (distincte) noter(dejaVu, it.cle, i);
-    noter(parContactLigne, it.email, i);
-    noter(parContactLigne, it.telephone, i);
-    noter(parApprochee, it.approchee, i);
-  };
-
-  /* Les lignes reunies, avec le motif : un import qui ramene 18 lignes pour 20
-     doit pouvoir dire lesquelles, et pourquoi. */
-  const doublonsReunis = [];
-
-  /* Et, en liste telle quelle, celles qu'on aurait reunies et qu'on laisse :
-     le diagnostic que l'administrateur tranchera. */
+  /* En liste telle quelle : ce qu'on aurait reuni et qu'on laisse, consigne
+     pour l'administrateur. */
   const rapprochementsEcartes = [];
-  /* Quelle ligne a deja pris quelle fiche de la base. */
-  const fichesPrises = new Map();
-
-  const signaler = (it, champ, valeur, motif, detenteur) => {
-    contactsIgnores.push({
-      nom: it.nom, prenom: it.prenom, champ, valeur, motif,
-      detenteur: detenteur ? `${detenteur.prenom || ""} ${detenteur.nom || ""}`.trim() : null,
-    });
-  };
-
-  let rattachements = 0;
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-
-    let ex = it.email ? memeNom(byEmail.get(it.email), it) : null;
-    if (!ex && it.telephone) ex = memeNom(byPhone.get(it.telephone), it);
-
-    /* Une ligne dont le nom est incomplet ne peut etre comparee par le nom.
-       Son adresse la rattache alors seule — c'est le seul moyen de ne pas en
-       faire une seconde fiche anonyme. */
-    if (!ex && !it.cle && it.email) {
-      const candidats = byEmail.get(it.email) || [];
-      if (candidats.length === 1) ex = candidats[0];
+  if (telleQuelle) {
+    for (const g of analyse.groupes) {
+      if (g.defaut !== "fusionner") continue;
+      const [premier, ...autres] = g.lignes;
+      for (const k of autres) {
+        rapprochementsEcartes.push({
+          indice: k, avecIndice: premier, motif: g.niveau,
+          raison: g.raisons.join(", "),
+          nom: items[k].nom, prenom: items[k].prenom,
+          email: items[k].email || null, telephone: items[k].telephone || null,
+          ligne_excel: items[k].ligneExcel, avec_ligne_excel: items[premier].ligneExcel,
+          avec: nomAffiche(items[premier]),
+        });
+      }
     }
+  }
 
-    if (!ex && it.cle) {
-      const candidat = parNom.get(it.cle);
-      if (candidat && riensOppose(candidat, it)) { ex = candidat; rattachements++; }
-    }
-
-    /* Deux lignes du fichier qui tombent sur la meme fiche deja en base.
-     *
-     * Le rapprochement se fait une ligne a la fois, et chacune pouvait donc
-     * designer la meme personne sans que l'autre le sache. En temps normal
-     * c'est sans consequence : deux lignes, une inscription, la personne n'est
-     * comptee qu'une fois. En liste telle quelle, c'est la garantie qui tombe
-     * — le fichier a beau porter deux lignes, l'activite n'en compterait
-     * qu'une, et on aurait promis l'inverse. Elle repart donc sur une fiche
-     * neuve, et le doute est consigne comme les autres. */
-    if (ex && telleQuelle && fichesPrises.has(ex.id)) {
-      rapprochementsEcartes.push({
-        indice: i, avecIndice: fichesPrises.get(ex.id), motif: "meme_fiche_existante",
-        nom: it.nom, prenom: it.prenom,
-        email: it.email || null, telephone: it.telephone || null,
-        avec: `${ex.prenom || ""} ${ex.nom || ""}`.trim(),
-      });
-      enregistrer(i, true);
-      items[i].aInserer = true;
-      continue;
-    }
-
-    if (ex) {
-      fichesPrises.set(ex.id, i);
-      items[i].resolvedId = ex.id;
-
-      /* Tout ce que cette liste apporte et qui manque a la fiche. Une personne
-         inscrite a trois formations voit ainsi sa fiche se completer au fil
-         des listes, chacune apportant les colonnes que les autres n'avaient
-         pas. Rien de deja renseigne n'est ecrase. */
-      const maj = {};
-      if (it.email && !ex.email) maj.email = it.email;
-      if (it.telephone && !ex.telephone) maj.telephone = it.telephone;
-      for (const [colonne, champ] of CHAMPS_COMPLETABLES) {
-        if (!ex[colonne] && it[champ]) maj[colonne] = it[champ];
+  /* 2. Chaque personne du fichier : sa ligne la mieux renseignee (a egalite,
+     la premiere), completee par les autres. Rien de ce qui est renseigne
+     n'est ecrase ; une seconde adresse ou un second numero ne disparaissent
+     pas sans un mot. */
+  const renseignes = (it) => CHAMPS_LIGNE.filter((c) => it[c]).length;
+  const doublonsReunis = [];
+  const fiches = personnes.map((indices) => {
+    const ordre = [...indices].sort((a, b) => renseignes(items[b]) - renseignes(items[a]) || a - b);
+    const premier = items[ordre[0]];
+    const donnees = {};
+    for (const c of CHAMPS_LIGNE) donnees[c] = premier[c] || null;
+    for (const k of ordre.slice(1)) {
+      const it = items[k];
+      for (const c of CHAMPS_LIGNE) if (!donnees[c] && it[c]) donnees[c] = it[c];
+      if (it.email && donnees.email && normalizeEmail(it.email) !== normalizeEmail(donnees.email)) {
+        contactsIgnores.push({
+          nom: it.nom, prenom: it.prenom, champ: "email", valeur: it.email,
+          motif: "adresse_differente", detenteur: nomAffiche(premier),
+        });
       }
-      if (Object.keys(maj).length) {
-        aCompleter.push({ id: ex.id, maj });
-        /* La fiche en memoire suit la base : deux lignes du meme fichier
-           portant la meme personne ne doivent pas compter deux fois le meme
-           champ complete. */
-        Object.assign(ex, maj);
-        if (maj.email) ajouter(byEmail, maj.email, ex);
-        if (maj.telephone) ajouter(byPhone, maj.telephone, ex);
+      if (it.telephone && donnees.telephone && telephonesDe(it.telephone).join() !== telephonesDe(donnees.telephone).join()) {
+        contactsIgnores.push({
+          nom: it.nom, prenom: it.prenom, champ: "telephone", valeur: it.telephone,
+          motif: "telephone_different", detenteur: nomAffiche(premier),
+        });
       }
-
-      /* La personne est connue sous une autre adresse. On garde celle de la
-         base — le fichier n'est pas forcement plus a jour — mais on le dit,
-         faute de quoi la campagne partirait a l'ancienne adresse sans que
-         rien ne l'indique. */
-      if (it.email && ex.email && normalizeEmail(ex.email) !== it.email) {
-        signaler(it, "email", it.email, "adresse_differente", ex);
-      }
-
-      enregistrer(i, true);
-      continue;
-    }
-
-    /* Deja rencontree plus haut dans ce meme fichier : une seule fiche, qui
-       recoit ce que cette ligne-ci apporte en plus. */
-    const jumelle = jumelleDe(it);
-
-    /* Sauf si on a demande la liste telle quelle.
-     *
-     * Aucune regle ne peut savoir si deux « Aissatou Diallo » sont une ou deux
-     * personnes. Le responsable qui etait en salle, lui, le sait souvent. Il
-     * peut donc demander que le fichier entre tel qu'il a ete ecrit : une
-     * ligne, une inscription.
-     *
-     * Ce que l'import aurait reuni n'est pas perdu : on le consigne, et un
-     * administrateur le tranchera en connaissance de cause. Ne rien dire
-     * reviendrait a echanger une erreur silencieuse contre une autre. */
-    if (jumelle && telleQuelle) {
-      rapprochementsEcartes.push({
-        indice: i, avecIndice: jumelle.indice, motif: jumelle.motif,
-        nom: it.nom, prenom: it.prenom,
-        email: it.email || null, telephone: it.telephone || null,
-        avec: `${items[jumelle.indice].prenom || ""} ${items[jumelle.indice].nom || ""}`.trim(),
-      });
-      enregistrer(i, true);
-      items[i].aInserer = true;
-      continue;
-    }
-
-    if (jumelle) {
-      const premier = items[jumelle.indice];
-      const ajoutes = completerDepuis(premier, it);
-      for (const [colonne, valeur] of Object.entries(ajoutes)) {
-        const champ = CHAMPS_COMPLETABLES.find(([c]) => c === colonne)?.[1] || colonne;
-        premier[champ] = valeur;
-        if (colonne === "email" || colonne === "telephone") premier[colonne] = valeur;
-      }
-      /* Si la premiere occurrence designait une fiche deja en base, ce
-         supplement doit y etre ecrit ; sinon il partira avec l'insertion. */
-      if (premier.resolvedId && Object.keys(ajoutes).length) {
-        aCompleter.push({ id: premier.resolvedId, maj: ajoutes });
-      }
-      items[i].memeQue = jumelle.indice;
-      /* La ligne reunie portait une autre adresse. C'est la premiere qui est
-         conservee — le fichier ne dit pas laquelle est la bonne — mais la
-         seconde ne doit pas disparaitre sans un mot : c'est peut-etre celle a
-         laquelle la personne attend son attestation. */
-      if (it.email && premier.email && it.email !== premier.email) {
-        signaler(it, "email", it.email, "adresse_differente", premier);
-      }
+      const g = groupeDe.get(k);
       doublonsReunis.push({
         nom: it.nom, prenom: it.prenom,
         email: it.email || null, telephone: it.telephone || null,
-        motif: jumelle.motif,
-        avec: `${premier.prenom || ""} ${premier.nom || ""}`.trim(),
+        ligne_excel: it.ligneExcel, avec_ligne_excel: premier.ligneExcel,
+        avec: nomAffiche(premier),
+        motif: g ? g.niveau : "choix",
+        raison: g ? g.raisons.join(", ") : "réunies à la demande",
       });
-      enregistrer(i, false);
-      continue;
     }
-
-    enregistrer(i, true);
-    items[i].aInserer = true;
-  }
-
-  /* Les fiches a creer sont relevees apres la boucle : une ligne repetee plus
-     bas a pu completer la premiere entre-temps. */
-  const toInsert = [];
-  const toInsertIdx = [];
-  items.forEach((it, i) => {
-    if (it.aInserer) { toInsert.push(it); toInsertIdx.push(i); }
+    return { indices, donnees, resolvedId: null, dejaInscrite: false };
   });
 
-  /* 3b. Completer les fiches deja connues avec ce que la liste apporte.
-     Les noms de colonnes viennent de CHAMPS_COMPLETABLES et des deux champs de
-     contact — une liste fermee, ecrite ici : aucune donnee du fichier n'entre
-     dans le texte de la requete. Les valeurs, elles, restent parametrees. */
-  const COLONNES_AUTORISEES = new Set([
-    "email", "telephone", ...CHAMPS_COMPLETABLES.map(([c]) => c),
-  ]);
+  /* 3. Deja inscrites a cette activite ?
+     La meme liste importee deux fois ne doit pas inscrire deux fois les memes
+     personnes. On compare a la seule liste de l'activite, avec les memes
+     regles que dans le fichier ; une fiche deja inscrite ne sert qu'une fois
+     — deux homonymes du fichier ne tombent pas sur la meme. */
+  const { rows: inscrites } = await client.query(
+    `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.age_range, p.statut, p.structure
+       FROM activity_participants ap
+       JOIN participants p ON p.id = ap.participant_id
+      WHERE ap.activity_id = $1
+      ORDER BY p.id`,
+    [activityId]
+  );
+  const aCompleter = [];
+  if (inscrites.length) {
+    const prepInscrites = inscrites.map((f) => preparer({ ...f, normalizedGender: normalizeGender(f.genre), ageRange: f.age_range }));
+    const prepFiches = fiches.map((f) => preparer(f.donnees));
+    const collectifs = contactsCollectifs([...prepFiches, ...prepInscrites]);
+    const index = new Map();
+    const ranger = (cle, i) => { if (!index.has(cle)) index.set(cle, []); index.get(cle).push(i); };
+    prepInscrites.forEach((p, i) => {
+      for (const s of new Set(p.sons)) ranger(`s:${s}`, i);
+      for (const t of p.tels) ranger(`t:${t}`, i);
+      for (const m of p.mails) ranger(`m:${m}`, i);
+    });
+    const prises = new Set();
+    const RANG = { certain: 0, probable: 1 };
+    fiches.forEach((f, n) => {
+      const p = prepFiches[n];
+      const candidats = new Set();
+      for (const s of new Set(p.sons)) for (const i of index.get(`s:${s}`) || []) candidats.add(i);
+      for (const t of p.tels) for (const i of index.get(`t:${t}`) || []) candidats.add(i);
+      for (const m of p.mails) for (const i of index.get(`m:${m}`) || []) candidats.add(i);
+      let meilleur = null;
+      for (const i of [...candidats].sort((a, b) => a - b)) {
+        if (prises.has(i)) continue;
+        const v = comparer(p, prepInscrites[i], collectifs);
+        if (!v || !(v.niveau in RANG)) continue;
+        if (!meilleur || RANG[v.niveau] < RANG[meilleur.v.niveau]) meilleur = { i, v };
+      }
+      if (!meilleur) return;
+      prises.add(meilleur.i);
+      const fiche = inscrites[meilleur.i];
+      f.resolvedId = fiche.id;
+      f.dejaInscrite = true;
+      /* La liste completee apporte parfois ce que la premiere n'avait pas — les
+         numeros, le genre. On le reporte sur la fiche de cette activite, sans
+         rien ecraser, et seulement quand on est sur de la personne. */
+      if (meilleur.v.niveau === "certain" || meilleur.v.nom === "identique") {
+        const maj = {};
+        const d = f.donnees;
+        if (d.email && !fiche.email) maj.email = d.email;
+        if (d.telephone && !fiche.telephone) maj.telephone = d.telephone;
+        if (d.normalizedGender && !fiche.genre) maj.genre = d.normalizedGender;
+        if (d.ageRange && !fiche.age_range) maj.age_range = d.ageRange;
+        if (d.statut && !fiche.statut) maj.statut = d.statut;
+        if (d.structure && !fiche.structure) maj.structure = d.structure;
+        if (d.nom && !fiche.nom) maj.nom = d.nom;
+        if (d.prenom && !fiche.prenom) maj.prenom = d.prenom;
+        if (Object.keys(maj).length) aCompleter.push({ id: fiche.id, maj });
+      }
+    });
+  }
+
+  /* Les noms de colonnes viennent d'une liste fermee, ecrite ici : aucune
+     donnee du fichier n'entre dans le texte de la requete. Les valeurs, elles,
+     restent parametrees. NULLIF avant COALESCE : nom et prenom portent une
+     chaine vide quand ils sont inconnus. */
+  const COLONNES_AUTORISEES = new Set(["email", "telephone", "genre", "age_range", "statut", "structure", "nom", "prenom"]);
   let champsCompletes = 0;
   for (const { id, maj } of aCompleter) {
     const colonnes = Object.keys(maj).filter((c) => COLONNES_AUTORISEES.has(c));
     if (!colonnes.length) continue;
-    /* NULLIF avant COALESCE : nom et prenom n'acceptent pas l'absence de
-       valeur et portent une chaine vide quand ils sont inconnus — sans cela
-       une fiche sans nom ne pourrait jamais en recevoir un. */
-    const affectations = colonnes
-      .map((c, i) => `${c} = COALESCE(NULLIF(${c}, ''), $${i + 2})`)
-      .join(", ");
-    await client.query(
-      `UPDATE participants SET ${affectations} WHERE id = $1`,
-      [id, ...colonnes.map((c) => maj[c])]
-    );
+    const affectations = colonnes.map((c, i) => `${c} = COALESCE(NULLIF(${c}, ''), $${i + 2})`).join(", ");
+    await client.query(`UPDATE participants SET ${affectations} WHERE id = $1`, [id, ...colonnes.map((c) => maj[c])]);
     champsCompletes += colonnes.length;
   }
 
-  /* 4. Creation des nouvelles fiches.
-     Plus rien ne peut echouer sur un index d'unicite : chaque ligne donne une
-     fiche, avec les coordonnees que la liste porte. On lit les identifiants
-     rendus dans l'ordre d'insertion plutot que de relire la table — avec des
-     contacts partages, une relecture par adresse serait ambigue. */
-  if (toInsert.length > 0) {
+  /* 4. Une fiche neuve par personne qui n'est pas deja inscrite. Les
+     identifiants sont lus dans l'ordre d'insertion. */
+  const aCreer = fiches.filter((f) => !f.resolvedId);
+  if (aCreer.length > 0) {
+    const col = (c, defaut = null) => aCreer.map((f) => f.donnees[c] || defaut);
     const { rows: crees } = await client.query(
       `INSERT INTO participants (nom, prenom, genre, age_range, email, telephone, statut, structure)
        SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[],
                             $5::text[], $6::text[], $7::text[], $8::text[])
        RETURNING id`,
       [
-        toInsert.map((p) => p.nom),
-        toInsert.map((p) => p.prenom),
-        toInsert.map((p) => p.normalizedGender || null),
-        toInsert.map((p) => p.ageRange || null),
-        toInsert.map((p) => p.email || null),
-        toInsert.map((p) => p.telephone || null),
-        toInsert.map((p) => p.statut || null),
-        toInsert.map((p) => p.structure || null),
+        col("nom", ""), col("prenom", ""), col("normalizedGender"), col("ageRange"),
+        col("email"), col("telephone"), col("statut"), col("structure"),
       ]
     );
-    if (crees.length !== toInsert.length) {
-      throw new Error(
-        `Import interrompu : ${toInsert.length} fiches a creer, ${crees.length} creees.`
-      );
+    if (crees.length !== aCreer.length) {
+      throw new Error(`Import interrompu : ${aCreer.length} fiches a creer, ${crees.length} creees.`);
     }
-    crees.forEach((r, j) => {
-      items[toInsertIdx[j]].resolvedId = r.id;
-      /* Marquee comme nouvelle : la simulation doit pouvoir dire combien de
-         personnes la base ne connaissait pas. */
-      items[toInsertIdx[j]].creee = true;
-    });
+    crees.forEach((r, j) => { aCreer[j].resolvedId = r.id; });
   }
 
-  /* Les lignes repetees dans le fichier reprennent l'identifiant de la
-     premiere occurrence, une fois celle-ci resolue. */
-  for (const it of items) {
-    if (it.resolvedId == null && it.memeQue != null) {
-      it.resolvedId = items[it.memeQue].resolvedId;
-    }
-  }
-
-  /* Le diagnostic n'est utile que s'il designe des fiches : « deux Aissatou
-     Diallo » ne se tranche pas, « la fiche 9840 et la fiche 9912 » si. Les
-     identifiants n'existent qu'ici, une fois les creations faites. */
+  /* Le diagnostic de la liste telle quelle designe des fiches : « la fiche
+     9840 et la fiche 9912 » se tranche, « deux Aissatou Diallo » non. */
+  const ficheDeLigne = new Map();
+  for (const f of fiches) for (const k of f.indices) ficheDeLigne.set(k, f.resolvedId);
   for (const r of rapprochementsEcartes) {
-    r.fiche_id = items[r.indice]?.resolvedId ?? null;
-    r.avec_fiche_id = items[r.avecIndice]?.resolvedId ?? null;
+    r.fiche_id = ficheDeLigne.get(r.indice) ?? null;
+    r.avec_fiche_id = ficheDeLigne.get(r.avecIndice) ?? null;
   }
 
-  // 5. Rattachement a l'activite
-  const validIds = [...new Set(items.filter(it => it.resolvedId).map(it => it.resolvedId))];
-  let imported = 0, duplicatesInActivity = 0;
-  if (validIds.length > 0) {
-    const linkRes = await client.query(
+  /* 5. Inscription a l'activite. */
+  const ids = [...new Set(fiches.map((f) => f.resolvedId).filter(Boolean))];
+  let imported = 0;
+  if (ids.length > 0) {
+    const lien = await client.query(
       `INSERT INTO activity_participants (activity_id, participant_id)
-       SELECT unnest($1::int[]), unnest($2::int[])
+       SELECT $1, unnest($2::int[])
        ON CONFLICT DO NOTHING`,
-      [validIds.map(() => activityId), validIds]
+      [activityId, ids]
     );
-    imported = linkRes.rowCount;
-    duplicatesInActivity = items.filter(it => it.resolvedId).length - imported;
+    imported = lien.rowCount;
   }
 
   return {
-    imported, skippedMissingName, duplicatesInActivity,
-    contactsIgnores, rattachements, champsCompletes, lignesIncompletes,
+    imported,
+    skippedMissingName,
+    /* Personnes du fichier deja inscrites a cette activite. */
+    duplicatesInActivity: fiches.filter((f) => f.dejaInscrite).length,
+    contactsIgnores,
+    /* L'import ne reconnait plus personne par son nom dans le reste de la
+       base : plus aucun rattachement de ce genre. */
+    rattachements: 0,
+    champsCompletes,
+    lignesIncompletes,
     doublonsReunis,
-    /* Ce qu'on aurait reuni et qu'on a laisse : vide hors liste telle
-       quelle. C'est le diagnostic que l'administrateur tranchera. */
     rapprochementsEcartes,
-    /* De quoi dire, avant d'ecrire, ce que le fichier va reellement produire :
-       des personnes que la base ne connaissait pas, ou des lignes qui
-       retombent sur des fiches deja la. C'est la difference entre une liste
-       nouvelle et une liste deja importee. */
-    fichesCreees: toInsert.length,
-    personnesConnues: items.filter((it) => it.resolvedId && !it.creee).length,
+    fichesCreees: aCreer.length,
+    personnesConnues: fiches.filter((f) => f.dejaInscrite).length,
+    doublons: {
+      groupes: detaillerGroupes(analyse.groupes, items),
+      resume: analyse.resume,
+      decide_par: decidePar,
+    },
   };
 }
+
 
 /* ===== CHAMPS DISPONIBLES POUR LE MAPPING MANUEL ===== */
 const AVAILABLE_FIELDS = [
@@ -965,6 +754,45 @@ router.post("/preview", authMiddleware, upload.single("file"), async (req, res) 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erreur analyse fichier" });
+  } finally {
+    safeUnlink(req.file?.path);
+  }
+});
+
+/* ===== DOUBLONS DE LA LISTE — analyse sans import =====
+ *
+ * À la création d'une activité, il n'y a pas encore d'activité sur laquelle
+ * rejouer l'import. Les doublons, eux, ne dépendent que du fichier : on les
+ * cherche ici, sans rien écrire, pour que l'écran les montre et que la
+ * personne qui importe décide de chacun avant de créer quoi que ce soit.
+ */
+router.post("/analyse-doublons", authMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    if (req.user.role === "viewer") return res.status(403).json({ error: "Accès refusé" });
+    if (!req.file) return res.status(400).json({ error: "Fichier requis" });
+
+    let manualMapping = {};
+    try {
+      manualMapping = req.body.manual_mapping ? JSON.parse(req.body.manual_mapping) : {};
+    } catch {
+      return res.status(400).json({ error: "Correspondance des colonnes illisible" });
+    }
+
+    const workbook = xlsx.readFile(req.file.path);
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const { rows } = parseRowsFromSheet(sheet, manualMapping);
+    const { items } = lireLignes(rows);
+    const analyse = analyserDoublons(items);
+
+    res.json({
+      total_lignes: rows.length,
+      lignes_lues: items.length,
+      groupes: detaillerGroupes(analyse.groupes, items),
+      resume: analyse.resume,
+    });
+  } catch (err) {
+    console.error("[ANALYSE DOUBLONS]", err);
+    res.status(500).json({ error: "L'analyse des doublons a échoué." });
   } finally {
     safeUnlink(req.file?.path);
   }
@@ -1025,7 +853,7 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
     );
 
     const activity = activityResult.rows[0];
-    const stats = await importParticipantsRowsBatch(client, rows, activity.id, { telleQuelle });
+    const stats = await importParticipantsRowsBatch(client, rows, activity.id, { telleQuelle, fusions: lireFusions(req) });
 
     if (telleQuelle) await consignerLeDoute(client, activity.id, stats.rapprochementsEcartes);
 
@@ -1053,6 +881,8 @@ router.post("/activity", authMiddleware, upload.single("file"), async (req, res)
       /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
          pouvoir le justifier, sinon le doute porte sur tout le reste. */
       doublons_reunis: stats.doublonsReunis,
+      /* Les groupes de doublons de la liste, avec ce qui en a ete fait. */
+      doublons: stats.doublons,
       /* Le nom de famille recopie dans la case « Prenom » : on le dit ici
          plutot que de le laisser decouvrir au moment d'envoyer les
          attestations, ou il est deja trop tard pour le corriger en amont. */
@@ -1153,6 +983,9 @@ function compteRenduSimulation(activity, rows, stats, { recognizedColumns, unrec
     personnes_connues: stats.personnesConnues,
     doublons_dans_le_fichier: stats.doublonsReunis.length,
     doublons_reunis: stats.doublonsReunis,
+    /* Les groupes de doublons de la liste : l’écran les montre, et la
+       personne qui importe décide de chacun avant d’écrire. */
+    doublons: stats.doublons,
     /* En liste telle quelle : ce que l'import aurait reuni et qu'il laisse.
        C'est le prix a payer, et il doit etre affiche avant de cliquer, pas
        decouvert apres. */
@@ -1200,7 +1033,7 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
     await client.query("BEGIN");
     inTransaction = true;
 
-    const stats = await importParticipantsRowsBatch(client, rows, activityId, { telleQuelle });
+    const stats = await importParticipantsRowsBatch(client, rows, activityId, { telleQuelle, fusions: lireFusions(req) });
 
     if (simulation) {
       await client.query("ROLLBACK");
@@ -1241,6 +1074,8 @@ router.post("/participants/:activityId", authMiddleware, upload.single("file"), 
       /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
          pouvoir le justifier, sinon le doute porte sur tout le reste. */
       doublons_reunis: stats.doublonsReunis,
+      /* Les groupes de doublons de la liste, avec ce qui en a ete fait. */
+      doublons: stats.doublons,
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
       /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
          Sans cette liste, la campagne partirait plus courte que la liste de
@@ -1299,7 +1134,7 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
     await client.query("BEGIN");
     inTransaction = true;
 
-    const stats = await importParticipantsRowsBatch(client, rows, activityId, { telleQuelle });
+    const stats = await importParticipantsRowsBatch(client, rows, activityId, { telleQuelle, fusions: lireFusions(req) });
 
     if (simulation) {
       await client.query("ROLLBACK");
@@ -1339,6 +1174,8 @@ router.post("/direct/:activityId", authMiddleware, upload.single("file"), async 
       /* Lesquelles, et pourquoi : un import qui ramene 18 lignes pour 20 doit
          pouvoir le justifier, sinon le doute porte sur tout le reste. */
       doublons_reunis: stats.doublonsReunis,
+      /* Les groupes de doublons de la liste, avec ce qui en a ete fait. */
+      doublons: stats.doublons,
       noms_repetes: repetitionsDans(rows.map((r) => parseParticipantFromMapped(r))).length,
       /* Les adresses que l'import n'a pas pu enregistrer, avec leur motif.
          Sans cette liste, la campagne partirait plus courte que la liste de
@@ -1371,6 +1208,7 @@ module.exports = router;
    HTTP et un fichier Excel. */
 module.exports.__interne = {
   importParticipantsRowsBatch,
+  lireLignes,
   parseRowsFromSheet,
   parseParticipantFromMapped,
 };
