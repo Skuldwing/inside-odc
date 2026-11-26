@@ -558,12 +558,19 @@ export default function Dashboard() {
           icon={Users}
           accent="from-emerald-500 to-emerald-600"
           hint={
-            Number(totals.participants_en_reserve || 0) > 0 ? (
+            Number(totals.participants_en_reserve || 0) > 0 || Number(totals.participants_reserve_coachs || 0) > 0 ? (
               <>
                 Liste nominative importée
-                <span className="mt-1 block text-sky-700">
-                  {totals.participants_en_reserve} en réserve, non comptés
-                </span>
+                {Number(totals.participants_en_reserve || 0) > 0 && (
+                  <span className="mt-1 block text-sky-700">
+                    {totals.participants_en_reserve} en réserve, non comptés
+                  </span>
+                )}
+                {Number(totals.participants_reserve_coachs || 0) > 0 && (
+                  <span className="mt-1 block text-purple-700">
+                    {totals.participants_reserve_coachs} au-delà des objectifs des coachs, non comptés
+                  </span>
+                )}
               </>
             ) : (
               "Liste nominative importée"
@@ -610,6 +617,20 @@ export default function Dashboard() {
           personnes qu'on saurait retirer d'un graphique. Sans cette phrase,
           leur somme ne tomberait pas sur le total et ça passerait pour une
           panne. */}
+      {/* La réserve des coachs : retirée de tous les chiffres, y compris des
+          répartitions — elle est rattachée à des activités précises. Dite à
+          l'administrateur, qui sinon verrait le total baisser sans raison. */}
+      {Number(totals.participants_reserve_coachs || 0) > 0 && (
+        <div className="flex items-start gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-900">
+          <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-purple-600" aria-hidden="true" />
+          <p>
+            <strong>{totals.participants_reserve_coachs}</strong> participations réalisées par des coachs au-delà
+            de leur objectif ne sont comptées nulle part — ni pour le coach, ni pour son partenaire. Le détail
+            est sur la fiche de chaque partenaire, coach par coach.
+          </p>
+        </div>
+      )}
+
       {Number(totals.participants_en_reserve || 0) > 0 && (
         <div className="flex items-start gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
           <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-sky-600" aria-hidden="true" />
