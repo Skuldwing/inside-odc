@@ -74,6 +74,9 @@ export default function Dashboard() {
   const [showRapport, setShowRapport] = useState(false);
   const [error, setError] = useState("");
   const [summary, setSummary] = useState(null);
+  /* Le travail des coachs : chiffres retenus par modalité, et la réserve
+     pour le coach lui-même. */
+  const [coachs, setCoachs] = useState(null);
   const [partners, setPartners] = useState([]);
   const [devices, setDevices] = useState([]);
   const [geoPoints, setGeoPoints] = useState([]);
@@ -121,6 +124,12 @@ export default function Dashboard() {
     if (filters.partner_id) params.partner_id = filters.partner_id;
     if (filters.device_id) params.device_id = filters.device_id;
     if (filters.gender) params.gender = filters.gender;
+
+    if (role === "partner" || role === "coach") {
+      api.get("/dashboard/coachs", { params })
+        .then((res) => setCoachs(res.data))
+        .catch(() => setCoachs(null));
+    }
 
     setLoading(true);
     api
@@ -645,6 +654,8 @@ export default function Dashboard() {
         />
       </section>
 
+      {(isPartner || isCoach) && <RealisationsCoachsCard data={coachs} pourLeCoach={isCoach} />}
+
       <section className={`grid grid-cols-1 gap-6 ${!isCoach ? "xl:grid-cols-3" : ""}`}>
         {!isCoach && (
           <div className="xl:col-span-2">
@@ -677,6 +688,92 @@ export default function Dashboard() {
         />
       )}
     </div>
+  );
+}
+
+/* Partenaire : ce que ses coachs ont réalisé, en chiffres retenus — la part
+   qui entre dans l'objectif de chacun —, par modalité. Rien sur le surplus.
+   Coach : son objectif, ce qui en est retenu, et sa réserve, qu'il est seul
+   (avec les administrateurs) à voir. */
+function RealisationsCoachsCard({ data, pourLeCoach }) {
+  const coachs = data?.coachs || [];
+  if (!coachs.length) return null;
+  const avecNonRenseigne = coachs.some((c) => c.non_renseigne > 0);
+  const moi = pourLeCoach ? coachs[0] : null;
+  const pct = moi && moi.objectif > 0 ? Math.min(100, Math.round((moi.retenu_total / moi.objectif) * 100)) : null;
+  return (
+    <section className="card-solid space-y-4 p-5" aria-labelledby="titre-coachs">
+      <div>
+        <h2 id="titre-coachs" className="text-lg font-semibold text-slate-900">
+          {pourLeCoach ? "Mon objectif" : "Réalisations de vos coachs"}
+        </h2>
+        <p className="text-xs text-slate-500">
+          {pourLeCoach
+            ? "Ce qui est retenu dans votre objectif, par modalité, sur la période choisie."
+            : "Participations retenues dans l'objectif de chaque coach, par modalité, sur la période choisie."}
+        </p>
+      </div>
+
+      {moi && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-100 p-3">
+            <p className="text-xs text-slate-500">Retenu dans l&apos;objectif</p>
+            <p className="text-2xl font-semibold text-slate-900">
+              {moi.retenu_total}
+              {moi.objectif > 0 && <span className="text-sm font-normal text-slate-500"> / {moi.objectif}</span>}
+            </p>
+            {pct != null && (
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+              </div>
+            )}
+          </div>
+          <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3">
+            <p className="text-xs text-purple-700">En réserve</p>
+            <p className="text-2xl font-semibold text-purple-900">{moi.reserve_totale}</p>
+            <p className="text-xs text-purple-700">
+              {moi.reserve_totale > 0
+                ? "Au-delà de votre objectif : visible de vous et des administrateurs seulement, non compté."
+                : "Rien au-delà de votre objectif."}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-100 p-3">
+            <p className="text-xs text-slate-500">Sur la période</p>
+            <p className="text-2xl font-semibold text-slate-900">{moi.total}</p>
+            {moi.reserve_periode > 0 && (
+              <p className="text-xs text-purple-700">+ {moi.reserve_periode} en réserve</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="table text-sm">
+          <thead className="table-head">
+            <tr>
+              {!pourLeCoach && <th className="px-3 py-2">Coach</th>}
+              <th className="px-3 py-2 text-right">En ligne</th>
+              <th className="px-3 py-2 text-right">Dakar</th>
+              <th className="px-3 py-2 text-right">Région</th>
+              {avecNonRenseigne && <th className="px-3 py-2 text-right">Lieu non renseigné</th>}
+              <th className="px-3 py-2 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {coachs.map((c) => (
+              <tr key={c.id} className="table-row">
+                {!pourLeCoach && <td className="px-3 py-2 font-medium text-slate-800">{c.nom}</td>}
+                <td className="px-3 py-2 text-right tabular-nums">{c.en_ligne}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{c.dakar}</td>
+                <td className="px-3 py-2 text-right tabular-nums">{c.region}</td>
+                {avecNonRenseigne && <td className="px-3 py-2 text-right tabular-nums">{c.non_renseigne}</td>}
+                <td className="px-3 py-2 text-right font-semibold tabular-nums">{c.total}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 

@@ -10,6 +10,7 @@ const { ensureIdentitePersonnes } = require("../migrations/identitePersonnes");
 const { ensureReservePartenaire } = require("../migrations/reservePartenaire");
 const { plafonnerObjectif } = require("../services/reservePartenaire");
 
+const { RETENU_PAR_ACTIVITE } = require("../services/retenuCoach");
 const router = express.Router();
 
 /* Si une migration de demarrage a echoue, ces ecrans tomberaient sur
@@ -54,36 +55,54 @@ async function avecSchema(travail) {
    comptaient déjà ainsi ; cette page ne voyait que la première moitié.
    « _coachs » isole ce qui a été fait par les coachs, pour l'afficher à part. */
 const COMPTES_PAR_PARTENAIRE = `
-  SELECT COALESCE(a.partner_id, uc.partner_id) AS partner_id,
-         COUNT(DISTINCT a.id)::int AS activites,
-         COUNT(ap.participant_id)::int AS participations,
-         COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id))::int AS personnes,
-         COUNT(DISTINCT a.id) FILTER (WHERE a.coach_id IS NOT NULL)::int AS activites_coachs,
-         COUNT(ap.participant_id) FILTER (WHERE a.coach_id IS NOT NULL)::int AS participations_coachs
-  FROM activities a
-  LEFT JOIN users uc ON uc.id = a.coach_id
-  LEFT JOIN activity_participants ap ON ap.activity_id = a.id
-  LEFT JOIN participants pa ON pa.id = ap.participant_id
-  WHERE COALESCE(a.partner_id, uc.partner_id) IS NOT NULL
-  GROUP BY COALESCE(a.partner_id, uc.partner_id)
+  SELECT c.partner_id, c.activites, c.participations, c.activites_coachs,
+         c.participations_coachs, c.reserve_coachs,
+         COALESCE(pe.personnes, 0)::int AS personnes
+  FROM (
+    SELECT COALESCE(a.partner_id, uc.partner_id) AS partner_id,
+           COUNT(*)::int AS activites,
+           /* Pour une activité de coach, la seule part retenue dans son
+              objectif : le surplus d'un coach ne compte pas non plus pour son
+              partenaire. Voir services/retenuCoach.js. */
+           COALESCE(SUM(r.retenu), 0)::int AS participations,
+           COUNT(*) FILTER (WHERE r.coach_id IS NOT NULL)::int AS activites_coachs,
+           COALESCE(SUM(r.retenu) FILTER (WHERE r.coach_id IS NOT NULL), 0)::int AS participations_coachs,
+           COALESCE(SUM(r.participations - r.retenu), 0)::int AS reserve_coachs
+    FROM activities a
+    LEFT JOIN users uc ON uc.id = a.coach_id
+    JOIN (${RETENU_PAR_ACTIVITE}) r ON r.activity_id = a.id
+    WHERE COALESCE(a.partner_id, uc.partner_id) IS NOT NULL
+    GROUP BY 1
+  ) c
+  LEFT JOIN (
+    SELECT COALESCE(a.partner_id, uc.partner_id) AS partner_id,
+           COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id))::int AS personnes
+    FROM activities a
+    LEFT JOIN users uc ON uc.id = a.coach_id
+    JOIN activity_participants ap ON ap.activity_id = a.id
+    JOIN participants pa ON pa.id = ap.participant_id
+    GROUP BY 1
+  ) pe ON pe.partner_id = c.partner_id
 `;
 
-/* Le détail par coach : ce que chacun a réalisé, face à l'objectif qui lui a
-   été confié sur celui du partenaire. */
+/* Le détail par coach, pour l'administrateur : ce que chacun a réalisé, la
+   part retenue dans l'objectif qui lui a été confié, et la réserve.
+   « is_active » et non « status » : c'est la colonne qui existe sur users. */
 const REALISE_PAR_COACH = `
-  SELECT u.id, u.full_name, u.email, u.status,
+  SELECT u.id, u.full_name, u.email,
+         CASE WHEN COALESCE(u.is_active, TRUE) THEN 'active' ELSE 'inactive' END AS status,
          COALESCE(u.objective_beneficiaries, 0)::int AS objective_beneficiaries,
-         COUNT(DISTINCT a.id)::int AS activites,
-         COUNT(ap.participant_id)::int AS participations,
-         COUNT(DISTINCT COALESCE(pa.personne_id, -pa.id)) FILTER (WHERE pa.id IS NOT NULL)::int AS personnes,
+         COUNT(a.id)::int AS activites,
+         COALESCE(SUM(r.participations), 0)::int AS participations,
+         COALESCE(SUM(r.retenu), 0)::int AS retenues,
+         COALESCE(SUM(r.participations - r.retenu), 0)::int AS en_reserve,
          MAX(a.activity_date) AS derniere_activite
   FROM users u
   LEFT JOIN activities a ON a.coach_id = u.id
-  LEFT JOIN activity_participants ap ON ap.activity_id = a.id
-  LEFT JOIN participants pa ON pa.id = ap.participant_id
+  LEFT JOIN (${RETENU_PAR_ACTIVITE}) r ON r.activity_id = a.id
   WHERE u.role = 'coach' AND u.partner_id = $1
   GROUP BY u.id
-  ORDER BY COUNT(ap.participant_id) DESC, u.full_name
+  ORDER BY COALESCE(SUM(r.retenu), 0) DESC, u.full_name
 `;
 
 /* Le plafond et la reserve, joints a la fiche.
@@ -117,6 +136,7 @@ router.get("/", authMiddleware, requireAdmin, async (req, res) => {
         COALESCE(c.personnes, 0) AS personnes_distinctes,
         COALESCE(c.activites_coachs, 0) AS coach_activities_count,
         COALESCE(c.participations_coachs, 0) AS coach_beneficiaries_count,
+        COALESCE(c.reserve_coachs, 0) AS coach_reserve_count,
         COALESCE((
           SELECT SUM(u.objective_beneficiaries)
           FROM users u
@@ -150,7 +170,8 @@ router.get("/:id", authMiddleware, requireAdmin, async (req, res) => {
         COALESCE(c.participations, 0) AS beneficiaries_count,
         COALESCE(c.personnes, 0) AS personnes_distinctes,
         COALESCE(c.activites_coachs, 0) AS coach_activities_count,
-        COALESCE(c.participations_coachs, 0) AS coach_beneficiaries_count
+        COALESCE(c.participations_coachs, 0) AS coach_beneficiaries_count,
+        COALESCE(c.reserve_coachs, 0) AS coach_reserve_count
       FROM partners p
       LEFT JOIN (${COMPTES_PAR_PARTENAIRE}) c ON c.partner_id = p.id
       WHERE p.id = $1
