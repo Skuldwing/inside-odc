@@ -80,8 +80,8 @@ function LigneFichier({ l }) {
   const contacts = [l.telephone, l.email].filter(Boolean).join(" · ");
   return (
     <li className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 py-0.5">
-      <span className="w-14 shrink-0 font-mono text-[11px] text-slate-500">
-        {l.ligne_excel ? `ligne ${l.ligne_excel}` : ""}
+      <span className="min-w-[3.5rem] shrink-0 font-mono text-[11px] text-slate-500">
+        {l.ligne_excel ? `ligne ${l.ligne_excel}` : l.etiquette || ""}
       </span>
       <span className="font-medium text-slate-800">{nom}</span>
       {contacts ? (
@@ -92,6 +92,12 @@ function LigneFichier({ l }) {
       {(l.genre || l.tranche_age) && (
         <span className="text-slate-500">
           {[l.genre, l.tranche_age].filter(Boolean).join(", ")}
+        </span>
+      )}
+      {l.autres_activites > 0 && (
+        <span className="text-slate-500">
+          · inscrite à {l.autres_activites} autre{l.autres_activites > 1 ? "s" : ""} activité
+          {l.autres_activites > 1 ? "s" : ""}
         </span>
       )}
     </li>
@@ -227,6 +233,7 @@ export default function RevueDoublons({
   chargement = false,
   erreur = "",
   lignesAnalysees,
+  aide,
 }) {
   const groupes = useMemo(() => analyse?.groupes ?? [], [analyse]);
   const parNiveau = useMemo(() => {
@@ -297,10 +304,8 @@ export default function RevueDoublons({
             )}
           </p>
           <p className="mt-1 text-[11px] text-slate-500">
-            Les groupes « certains » et « probables » sont réunis, les « à
-            vérifier » restent séparés. Changez ce qui ne va pas : vous
-            connaissez la salle mieux que la règle. La liste n&apos;est jamais
-            mélangée aux fiches des autres listes.
+            {aide ||
+              "Les groupes « certains » et « probables » sont réunis, les « à vérifier » restent séparés. Changez ce qui ne va pas : vous connaissez la salle mieux que la règle. La liste n'est jamais mélangée aux fiches des autres listes."}
           </p>
         </div>
       </div>

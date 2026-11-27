@@ -19,6 +19,7 @@ const { ensureListeTelleQuelle } = require("../migrations/listeTelleQuelle");
 /* Reunir deux fiches sans rien supprimer : c'est la meme mecanique que la
    revue des doublons, et elle doit le rester. */
 const { reunir } = require("../services/identite");
+const { analyserDoublons } = require("../services/doublonsListe");
 const { generateActivityReport, REPORT_TYPES } = require("../services/activityReport");
 
 const router = express.Router();
@@ -1888,6 +1889,199 @@ router.delete("/:id/photos/:photoId", authMiddleware, requireWriteAccess, async 
  * liste dont il est sur sans trancher chaque cas. Ce qui compte, c'est que
  * quelqu'un ait regarde et signe.
  */
+/* ===== DOUBLONS D'UNE LISTE DÉJÀ IMPORTÉE =====
+ *
+ * La détection de l'import (services/doublonsListe.js) appliquée à une liste
+ * déjà en place : les listes importées avant elle ont pu laisser passer « Awa
+ * NIANG » et « NIANG Awa », ou deux lignes au même nom dont une seule avait un
+ * numéro. L'administrateur voit les groupes, avec leur raison, et décide.
+ *
+ * Corriger, c'est faire ce que l'import aurait fait : une seule inscription
+ * pour la personne. La fiche la mieux renseignée reste inscrite et reçoit ce
+ * que les autres avaient en plus (numéro, adresse…) sans rien écraser ; les
+ * autres lignes quittent la liste de cette activité. Chaque retrait est
+ * consigné et se remet en place depuis Participants → Inscriptions retirées.
+ * Les fiches elles-mêmes ne sont pas supprimées, et rien ne touche aux autres
+ * activités.
+ */
+const CHAMPS_FICHE_DOUBLON = ["email", "telephone", "genre", "age_range", "statut", "structure", "nom", "prenom"];
+
+async function fichesDeLaListe(client, activiteId) {
+  const { rows } = await client.query(
+    `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.age_range, p.statut, p.structure,
+            (SELECT COUNT(*) FROM activity_participants x WHERE x.participant_id = p.id)::int AS total_activites
+       FROM activity_participants ap
+       JOIN participants p ON p.id = ap.participant_id
+      WHERE ap.activity_id = $1
+      ORDER BY p.id`,
+    [activiteId]
+  );
+  return rows;
+}
+
+function analyserListe(fiches) {
+  const analyse = analyserDoublons(fiches);
+  const groupes = analyse.groupes.map((g) => ({
+    id: g.id,
+    niveau: g.niveau,
+    defaut: g.defaut,
+    raisons: g.raisons,
+    /* Les lignes sont désignées par leur fiche : c'est par elle qu'on
+       corrigera. */
+    lignes: g.lignes.map((k) => fiches[k].id),
+    cotes: g.cotes ? g.cotes.map((c) => c.map((k) => fiches[k].id)) : null,
+    detail: g.lignes.map((k) => ({
+      ligne: fiches[k].id,
+      etiquette: `fiche ${fiches[k].id}`,
+      nom: fiches[k].nom || null,
+      prenom: fiches[k].prenom || null,
+      email: fiches[k].email || null,
+      telephone: fiches[k].telephone || null,
+      genre: fiches[k].genre || null,
+      tranche_age: fiches[k].age_range || null,
+      autres_activites: Math.max(0, (fiches[k].total_activites || 1) - 1),
+    })),
+  }));
+  return { groupes, resume: analyse.resume };
+}
+
+router.get("/:id/doublons", authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const activiteId = Number(req.params.id);
+    if (!Number.isInteger(activiteId)) return res.status(400).json({ error: "Activité invalide" });
+    const fiches = await fichesDeLaListe(pool, activiteId);
+    res.json({ inscriptions: fiches.length, ...analyserListe(fiches) });
+  } catch (err) {
+    console.error("[DOUBLONS LISTE]", err);
+    res.status(500).json({ error: "La vérification des doublons a échoué." });
+  }
+});
+
+router.post("/:id/doublons/corriger", authMiddleware, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  let ouverte = false;
+  try {
+    const activiteId = Number(req.params.id);
+    if (!Number.isInteger(activiteId)) return res.status(400).json({ error: "Activité invalide" });
+    const demandes = (Array.isArray(req.body?.fusions) ? req.body.fusions : [])
+      .filter(Array.isArray)
+      .map((e) => [...new Set(e.map(Number).filter(Number.isInteger))])
+      .filter((e) => e.length >= 2);
+    if (!demandes.length) return res.status(400).json({ error: "Aucun groupe à corriger." });
+
+    const { rows: [activite] } = await pool.query("SELECT id, title FROM activities WHERE id = $1", [activiteId]);
+    if (!activite) return res.status(404).json({ error: "Activité introuvable" });
+
+    await client.query("BEGIN");
+    ouverte = true;
+
+    /* On ne retire que ce que la détection rapproche, sur la liste telle
+       qu'elle est maintenant : l'écran ne peut pas désigner n'importe quelles
+       lignes, ni agir sur un état périmé. Chaque ensemble demandé doit tenir
+       dans un même groupe détecté. */
+    const fiches = await fichesDeLaListe(client, activiteId);
+    const parId = new Map(fiches.map((f) => [f.id, f]));
+    const { groupes } = analyserListe(fiches);
+    const ensembleDe = (id) => groupes.filter((g) => g.lignes.includes(id));
+
+    const renseignes = (f) => CHAMPS_FICHE_DOUBLON.filter((c) => f[c] && String(f[c]).trim()).length;
+    const retirees = [];
+    const completees = [];
+    let refusees = 0;
+    const dejaRetirees = new Set();
+
+    for (const demande of demandes) {
+      const presentes = demande.filter((id) => parId.has(id) && !dejaRetirees.has(id));
+      if (presentes.length < 2) { refusees += 1; continue; }
+      const communs = ensembleDe(presentes[0]).filter((g) => presentes.every((id) => g.lignes.includes(id)));
+      if (!communs.length) { refusees += 1; continue; }
+
+      const ordre = presentes.map((id) => parId.get(id)).sort((a, b) =>
+        renseignes(b) - renseignes(a) || (b.total_activites || 0) - (a.total_activites || 0) || a.id - b.id);
+      const garder = ordre[0];
+      const autres = ordre.slice(1);
+
+      /* Ce que les autres lignes avaient en plus : sur la fiche gardée,
+         seulement là où elle est vide. */
+      const maj = {};
+      for (const f of autres) {
+        for (const c of CHAMPS_FICHE_DOUBLON) {
+          const vide = !garder[c] || !String(garder[c]).trim();
+          if (vide && !maj[c] && f[c] && String(f[c]).trim()) maj[c] = f[c];
+        }
+      }
+      const colonnes = Object.keys(maj);
+      if (colonnes.length) {
+        await client.query(
+          `UPDATE participants SET ${colonnes.map((c, i) => `${c} = COALESCE(NULLIF(${c}, ''), $${i + 2})`).join(", ")} WHERE id = $1`,
+          [garder.id, ...colonnes.map((c) => maj[c])]
+        );
+        completees.push({ fiche: garder, maj });
+      }
+
+      for (const f of autres) {
+        const { rowCount } = await client.query(
+          "DELETE FROM activity_participants WHERE activity_id = $1 AND participant_id = $2",
+          [activiteId, f.id]
+        );
+        if (!rowCount) continue;
+        dejaRetirees.add(f.id);
+        retirees.push({ fiche: f, garder, groupe: communs[0] });
+      }
+    }
+
+    await client.query("COMMIT");
+    ouverte = false;
+
+    /* Une trace par ligne retirée : c'est elle qui permet de la remettre
+       (Participants → Inscriptions retirées). */
+    for (const { fiche, garder, groupe } of retirees) {
+      await logAudit(
+        req, "DELETE", "activity_participants", `${activiteId}:${fiche.id}`,
+        `${fiche.prenom || ""} ${fiche.nom || ""}`.trim() || `fiche ${fiche.id}`,
+        {
+          motif: `doublon dans la liste : même personne que ${`${garder.prenom || ""} ${garder.nom || ""}`.trim() || `la fiche ${garder.id}`}`,
+          suppression: true,
+          doublon_de: garder.id,
+          niveau: groupe.niveau,
+          raisons: groupe.raisons,
+          activite_id: activiteId,
+          activite: activite.title,
+          participant_id: fiche.id,
+          fiche: {
+            nom: fiche.nom || "", prenom: fiche.prenom || "",
+            email: fiche.email || null, telephone: fiche.telephone || null,
+          },
+        }
+      );
+    }
+    for (const { fiche, maj } of completees) {
+      await logAudit(
+        req, "UPDATE", "participants", fiche.id,
+        `${fiche.prenom || ""} ${fiche.nom || ""}`.trim() || `fiche ${fiche.id}`,
+        { motif: "complétée par une ligne en double de la même liste", activite_id: activiteId, champs: maj }
+      );
+    }
+    if (retirees.length) {
+      await computeAndStoreReliability(activiteId).catch((e) =>
+        console.warn("[DOUBLONS LISTE] fiabilité:", e.message)
+      );
+    }
+
+    res.json({
+      retirees: retirees.length,
+      fiches_completees: completees.length,
+      refusees,
+    });
+  } catch (err) {
+    if (ouverte) await client.query("ROLLBACK").catch(() => {});
+    console.error("[DOUBLONS LISTE CORRIGER]", err);
+    res.status(500).json({ error: "La correction a échoué." });
+  } finally {
+    client.release();
+  }
+});
+
 router.get("/:id/liste/rapprochements", authMiddleware, requireAdmin, async (req, res) => {
   try {
     const { rows: act } = await pool.query(
