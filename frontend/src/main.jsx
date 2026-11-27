@@ -10,7 +10,15 @@ import {
   ServiceWorkerUpdate,
   OfflineBanner,
 } from "./components/ui";
+import ErreurPage, { rechargerUneFois } from "./components/ErreurPage";
 import "./index.css";
+
+/* Après une mise en ligne, une page restée ouverte peut demander un fichier de
+   l'ancienne version, qui n'existe plus. Vite le signale ici : on recharge,
+   une fois, pour prendre la nouvelle version au lieu d'échouer. */
+window.addEventListener("vite:preloadError", (event) => {
+  if (rechargerUneFois()) event.preventDefault();
+});
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -24,7 +32,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <TopProgressBar />
             <OfflineBanner />
             <ServiceWorkerUpdate />
-            <App />
+            <ErreurPage pleinePage>
+              <App />
+            </ErreurPage>
           </AuthProvider>
         </ConfirmProvider>
       </ToastProvider>

@@ -7,6 +7,7 @@ import CommandPalette from "../components/ui/CommandPalette";
 import { useAuth } from "../auth/useAuth";
 import { appliquerMeta, PAGES } from "../seo/meta";
 import { IDENTITE } from "../config/identite";
+import ErreurPage from "../components/ErreurPage";
 
 export default function Layout() {
   const { isAdmin, isTeamOdc } = useAuth();
@@ -128,7 +129,12 @@ export default function Layout() {
 
         <main className="p-4 lg:p-6">
           <div key={location.pathname} className="anim-page-enter">
-            <Outlet />
+            {/* Une erreur dans une page reste dans la page : le menu et
+                l'en-tête restent utilisables, et l'écran dit ce qui s'est
+                passé au lieu de rester blanc. */}
+            <ErreurPage cle={location.pathname}>
+              <Outlet />
+            </ErreurPage>
           </div>
         </main>
       </div>

@@ -128,7 +128,11 @@ self.addEventListener("fetch", (event) => {
       caches.match(request).then((cached) => {
         if (cached) return cached;
         return fetch(request).then((response) => {
-          if (response.ok && response.status === 200) {
+          /* Une page HTML servie à la place d'un script — un fichier d'une
+             version retirée — ne doit jamais être gardée : elle serait
+             resservie à chaque demande de ce fichier. */
+          const html = (response.headers.get("content-type") || "").includes("text/html");
+          if (response.ok && response.status === 200 && !html) {
             const copy = response.clone();
             caches.open(ASSET_CACHE).then((cache) => cache.put(request, copy));
           }

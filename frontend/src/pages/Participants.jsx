@@ -1917,6 +1917,48 @@ function RevueDesGroupes({ onChange }) {
   );
 }
 
+/**
+ * La réserve, masquée.
+ *
+ * Les inscriptions au-delà de l'objectif d'un partenaire ou d'un coach ne
+ * comptent nulle part tant qu'un administrateur ne les a pas libérées ; elles
+ * ne figurent donc pas non plus dans la liste. L'administrateur sait qu'elles
+ * existent, et peut les regarder avant de décider.
+ */
+function ReserveMasquee({ nombre, mode, onChange }) {
+  const choix = [
+    ["", "Masquer"],
+    ["avec", "Afficher avec la liste"],
+    ["seule", "Seulement la réserve"],
+  ];
+  return (
+    <section className="flex flex-wrap items-center gap-3 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-900">
+      <p className="min-w-0 flex-1">
+        <strong>{nombre.toLocaleString("fr-FR")}</strong> inscription{nombre > 1 ? "s" : ""} en réserve —
+        au-delà de l&apos;objectif d&apos;un partenaire ou d&apos;un coach —{" "}
+        {mode ? "affichée" : "masquée"}{nombre > 1 ? "s" : ""}
+        {mode ? ", signalées dans la colonne Activité." : " : elles apparaîtront quand un administrateur les libérera sur la fiche du partenaire."}
+      </p>
+      <div className="inline-flex overflow-hidden rounded-lg border border-purple-300" role="radiogroup" aria-label="Réserve">
+        {choix.map(([valeur, libelle], i) => (
+          <button
+            key={valeur || "masquer"}
+            type="button"
+            role="radio"
+            aria-checked={(mode || "") === valeur}
+            onClick={() => onChange(valeur)}
+            className={`px-2.5 py-1 text-xs font-semibold transition ${i ? "border-l border-purple-300" : ""} ${
+              (mode || "") === valeur ? "bg-purple-700 text-white" : "bg-white text-purple-800 hover:bg-purple-100"
+            }`}
+          >
+            {libelle}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export default function Participants() {
   const { isCompact } = useDensity();
   const { isViewer, isAdmin } = useAuth();
@@ -1939,6 +1981,10 @@ export default function Participants() {
   const FILTRES_VIDES = {
     search: "", genre: "", dispositif: "", partenaire: "",
     statut: "", age: "", du: "", au: "",
+    /* La réserve (au-delà des objectifs) : masquée tant qu'un administrateur
+       ne l'a pas libérée. « avec » ou « seule » : l'administrateur demande à
+       la voir. Le serveur ignore ce choix pour tout autre rôle. */
+    reserve: "",
   };
   const [filtres, setFiltres] = useState(() => ({
     ...FILTRES_VIDES,
@@ -1961,11 +2007,13 @@ export default function Participants() {
   const [choixEnPanne, setChoixEnPanne] = useState(false);
 
   const filtresActifs = Object.entries(filtres)
-    .filter(([cle, v]) => cle !== "search" && String(v || "").trim() !== "").length;
+    .filter(([cle, v]) => !["search", "reserve"].includes(cle) && String(v || "").trim() !== "").length;
 
   const [rows, setRows]               = useState([]);
   const [total, setTotal]             = useState(0);
   const [stats, setStats]             = useState({ male: 0, female: 0 });
+  /* Administrateurs : inscriptions en réserve, non affichées par défaut. */
+  const [enReserve, setEnReserve]     = useState(0);
   const [pages, setPages]             = useState(1);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState("");
@@ -2123,6 +2171,7 @@ export default function Participants() {
       setTotal(d.total || 0);
       setPages(d.pages || 1);
       setStats({ male: d.male || 0, female: d.female || 0 });
+      setEnReserve(d.en_reserve || 0);
     } catch {
       setError("Erreur de chargement des participants.");
       setRows([]);
@@ -2507,6 +2556,14 @@ export default function Participants() {
 
       {vue === "liste" && (
       <>
+      {isAdmin && (enReserve > 0 || filtres.reserve) && (
+        <ReserveMasquee
+          nombre={enReserve}
+          mode={filtres.reserve}
+          onChange={(v) => changerFiltre("reserve", v)}
+        />
+      )}
+
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard label="Total filtrés"  value={total} />
         <StatCard label="Hommes"         value={stats.male} />
@@ -2727,7 +2784,17 @@ export default function Participants() {
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.email || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.telephone || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.statut || "-"}</td>
-                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.activite || "-"}</td>
+                  <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>
+                    {p.activite || "-"}
+                    {p.en_reserve && (
+                      <span
+                        className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[11px] font-medium text-purple-800"
+                        title="Au-delà de l'objectif : non comptée, et masquée de la liste tant qu'un administrateur ne l'a pas libérée."
+                      >
+                        {p.en_reserve === "coach" ? "Réserve coach" : "Réserve partenaire"}
+                      </span>
+                    )}
+                  </td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{formatDate(p.date_activite)}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.partenaire || "-"}</td>
                   <td className={`${isCompact ? "px-3 py-1.5" : "p-3"}`}>{p.dispositif || "-"}</td>

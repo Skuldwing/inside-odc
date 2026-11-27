@@ -23,7 +23,7 @@
       "destination": "/api/apercu?type=checkin&id=:id"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/).*)",
       "destination": "/index.html"
     }
   ],
