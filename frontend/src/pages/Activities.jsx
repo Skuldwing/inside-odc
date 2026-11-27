@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useLocation, useNavigationType } from "react-router-dom";
 import {
   Calendar,
   MapPin,
@@ -55,10 +55,14 @@ import {
 } from "../components/ui";
 import { useAuth } from "../auth/useAuth";
 import StatutValidation from "../components/StatutValidation";
+import { memoriser, relire, oublier } from "../navigation/memoireListe";
 import RevueDoublons, {
   decisionsParDefaut,
   fusionsDepuis,
 } from "../components/import/RevueDoublons";
+
+/* Ce que la liste retient quand on ouvre une fiche. */
+const MEMOIRE_LISTE = "inside-odc:activites";
 
 export default function Activities({
   forceUploadOpen = false,
@@ -74,20 +78,36 @@ export default function Activities({
   const initialSearchQuery =
     initialSearchQueryProp || searchParams.get("q") || "";
 
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
+  /* De retour d'une fiche — par le bouton « Retour » ou la flèche du
+     navigateur — la liste reprend là où on l'avait laissée : même page, mêmes
+     filtres, même position. Arrivé autrement (menu, lien), elle repart de
+     zéro. */
+  const location = useLocation();
+  const typeNavigation = useNavigationType();
+  const restaurationRef = useRef(undefined);
+  if (restaurationRef.current === undefined) {
+    const retourDeFiche = typeNavigation === "POP" || location.state?.retourDeFiche === true;
+    restaurationRef.current = retourDeFiche ? relire(MEMOIRE_LISTE) : null;
+  }
+  const memoire = restaurationRef.current;
+
+  const [search, setSearch] = useState(memoire?.search ?? "");
+  const [status, setStatus] = useState(memoire?.status ?? "all");
   /* Un partenaire voit aussi ce qu'ont réalisé ses coachs : « toutes »,
      « direct » (les siennes) ou « coachs ». */
-  const [realisePar, setRealisePar] = useState("toutes");
-  const [partnerFilter, setPartnerFilter] = useState("");
-  const [deviceFilter, setDeviceFilter] = useState("");
+  const [realisePar, setRealisePar] = useState(memoire?.realisePar ?? "toutes");
+  const [partnerFilter, setPartnerFilter] = useState(memoire?.partnerFilter ?? "");
+  const [deviceFilter, setDeviceFilter] = useState(memoire?.deviceFilter ?? "");
   /* Coach / formateur : « » (tous), « avec » (animées par un coach), « sans »
      (aucun coach), ou l'identifiant d'un coach. */
-  const [coachFilter, setCoachFilter] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [coachFilter, setCoachFilter] = useState(memoire?.coachFilter ?? "");
+  const [filtersOpen, setFiltersOpen] = useState(memoire?.filtersOpen ?? false);
   const listGap = "gap-2";
   const cardPadding = "p-3";
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(Number(memoire?.page) || 1);
+  /* Vrai dès que la liste a été lue une première fois : avant, son nombre de
+     pages ne veut rien dire. */
+  const listeChargee = useRef(false);
   const ITEMS_PER_PAGE = 20;
   const [activities, setActivities] = useState([]);
   const [devices, setDevices] = useState([]);
@@ -105,8 +125,11 @@ export default function Activities({
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
   const [deleteError, setDeleteError] = useState("");
-  const [viewMode, setViewMode] = useState("sections");
-  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState(memoire?.viewMode ?? "sections");
+  const [calendarDate, setCalendarDate] = useState(() => {
+    const d = memoire?.calendarDate ? new Date(memoire.calendarDate) : null;
+    return d && !Number.isNaN(d.getTime()) ? d : new Date();
+  });
   const [qrActivity, setQrActivity] = useState(null);
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -292,6 +315,7 @@ export default function Activities({
         };
       });
       setActivities(mapped);
+      listeChargee.current = true;
     } catch {
       setError("Erreur de chargement des activités.");
     } finally {
@@ -351,8 +375,10 @@ export default function Activities({
   }, [role, isViewer]);
 
   useEffect(() => {
+    /* Une recherche retrouvée au retour d'une fiche ne s'efface pas. */
+    if (!initialSearchQuery && memoire?.search) return;
     setSearch(initialSearchQuery || "");
-  }, [initialSearchQuery]);
+  }, [initialSearchQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (forceUploadOpen && !isViewer && !hasAutoOpened) {
@@ -425,9 +451,46 @@ export default function Activities({
     currentPage * ITEMS_PER_PAGE,
   );
 
+  /* Un filtre change : on repart de la première page. La liste se recharge
+     (après une modification, une suppression) : on reste sur la page où l'on
+     est, tant qu'elle existe — revenir en page 1 après avoir corrigé une
+     activité de la page 3 obligeait à tout refaire. */
+  const cleFiltres = [role, partnerFilter, coachFilter, deviceFilter, status, search, viewMode, realisePar].join("|");
+  const derniereCleFiltres = useRef(cleFiltres);
   useEffect(() => {
+    if (derniereCleFiltres.current === cleFiltres) return;
+    derniereCleFiltres.current = cleFiltres;
     setCurrentPage(1);
-  }, [activities, role, partnerFilter, deviceFilter, status, search, viewMode, realisePar]);
+  }, [cleFiltres]);
+  useEffect(() => {
+    if (loading || !listeChargee.current) return;
+    const derniere = Math.max(1, Math.ceil(filteredActivities.length / ITEMS_PER_PAGE));
+    if (currentPage > derniere) setCurrentPage(derniere);
+  }, [filteredActivities.length, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Au retour d'une fiche, une fois la liste affichée : la position dans la
+     page. Deux fois — la seconde après que les cartes ont pris leur place. */
+  useEffect(() => {
+    const m = restaurationRef.current;
+    if (!m || loading || !listeChargee.current) return;
+    restaurationRef.current = null;
+    oublier(MEMOIRE_LISTE);
+    const y = Math.max(0, Number(m.scrollY) || 0);
+    requestAnimationFrame(() => window.scrollTo(0, y));
+    const minuterie = setTimeout(() => window.scrollTo(0, y), 250);
+    return () => clearTimeout(minuterie);
+  }, [loading, activities]);
+
+  /* Ouvrir une fiche : la liste retient où l'on en est. */
+  const ouvrirFiche = (activity) => {
+    memoriser(MEMOIRE_LISTE, {
+      page: currentPage, viewMode, search, status, partnerFilter, deviceFilter,
+      coachFilter, realisePar, filtersOpen,
+      calendarDate: calendarDate.toISOString(),
+      scrollY: window.scrollY,
+    });
+    navigate(`/activities/${activity.id}`);
+  };
 
   /* La vue « Par section » affiche chaque activité sous forme de rectangle
      (grille de cartes), par opposition à la liste complète qui aligne des
@@ -1493,7 +1556,7 @@ export default function Activities({
                   key={activity.id}
                   activity={activity}
                   canEdit={!isViewer && !activity.lecture_seule}
-                  onOpenDetail={() => navigate(`/activities/${activity.id}`)}
+                  onOpenDetail={() => ouvrirFiche(activity)}
                   onEdit={() => openEdit(activity)}
                   onDelete={() => handleDelete(activity.id)}
                 />
@@ -1562,7 +1625,7 @@ export default function Activities({
                   key={activity.id}
                   activity={activity}
                   canEdit={!isViewer && !activity.lecture_seule}
-                  onOpenDetail={() => navigate(`/activities/${activity.id}`)}
+                  onOpenDetail={() => ouvrirFiche(activity)}
                   onEdit={() => openEdit(activity)}
                   onDelete={() => handleDelete(activity.id)}
                   onQrCode={() => setQrActivity(activity)}
