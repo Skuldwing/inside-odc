@@ -24,6 +24,8 @@ export function useRetour(cheminParDefaut, libelleParDefaut) {
   const chemin = valide ? retour.chemin : cheminParDefaut;
   return {
     libelle: valide && retour.libelle ? retour.libelle : libelleParDefaut,
-    aller: () => navigate(chemin),
+    /* La page d'arrivée sait qu'on revient d'une fiche : une liste reprend
+       alors là où on l'avait laissée. */
+    aller: () => navigate(chemin, { state: { retourDeFiche: true } }),
   };
 }

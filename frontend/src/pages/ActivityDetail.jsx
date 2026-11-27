@@ -934,7 +934,7 @@ export default function ActivityDetail() {
         <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-3" />
         <h2 className="text-xl font-bold text-red-900 mb-2">Activité introuvable</h2>
         <p className="text-sm text-red-700 mb-6">{error || "Cette activité n'existe pas ou vous n'avez pas les droits pour la consulter."}</p>
-        <button onClick={() => navigate("/activities")} className="btn-primary inline-flex items-center gap-2">
+        <button onClick={retour.aller} className="btn-primary inline-flex items-center gap-2">
           <ArrowLeft className="w-4 h-4" />
           Retour aux activités
         </button>
