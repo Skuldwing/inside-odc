@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { MapPin, Shuffle, Save, Trash2, OctagonAlert } from "lucide-react";
 import api from "../../api";
+import { retourVers } from "../../navigation/retour";
 import { useConfirm, useToast } from "../ui";
 
 /* Aller voir. La plateforme tire au hasard des activités à venir ; un agent
@@ -32,7 +33,7 @@ function LigneVisite({ v, onEnregistrer, onRetirer }) {
     <li className={`space-y-2 rounded-xl border p-3 ${ecart ? "border-red-200 bg-red-50/50" : "border-slate-200 bg-white"}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <Link to={`/activities/${v.activity_id}`} className="font-semibold text-slate-900 hover:text-orange-700 hover:underline">
+          <Link to={`/activities/${v.activity_id}`} state={retourVers("/fiabilite", "Retour à la fiabilité")} className="font-semibold text-slate-900 hover:text-orange-700 hover:underline">
             {v.title}
           </Link>
           <p className="text-xs text-slate-500">

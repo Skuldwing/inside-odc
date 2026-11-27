@@ -30,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import api from "../api";
+import { useRetour, retourVers } from "../navigation/retour";
 import { useAuth } from "../auth/useAuth";
 import { useToast } from "../components/ui";
 
@@ -64,6 +65,9 @@ function formatDateTime(iso) {
 export default function ParticipantProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
+  /* Ouvert depuis la fiche d'une activité, le profil y ramène. */
+  const retour = useRetour("/participants", "Retour aux participants");
+  const versCeProfil = retourVers(`/participants/${id}`, "Retour au profil du participant");
   const toast = useToast();
   const { role, isViewer } = useAuth();
 
@@ -160,11 +164,11 @@ export default function ParticipantProfile() {
       {/* Top Breadcrumb */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => navigate("/participants")}
+          onClick={retour.aller}
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Retour aux participants
+          {retour.libelle}
         </button>
 
         <div className="flex items-center gap-2">
@@ -439,6 +443,7 @@ export default function ParticipantProfile() {
                     <div className="flex flex-wrap items-center gap-2">
                       <Link
                         to={`/activities/${a.id}`}
+                        state={versCeProfil}
                         className="font-bold text-slate-900 hover:text-orange-600 transition-colors text-base"
                       >
                         {a.title}
@@ -493,6 +498,7 @@ export default function ParticipantProfile() {
 
                     <Link
                       to={`/activities/${a.id}`}
+                        state={versCeProfil}
                       className="btn-secondary text-xs flex items-center gap-1 py-1.5 px-3"
                     >
                       <Eye className="w-3.5 h-3.5" />
@@ -535,6 +541,7 @@ export default function ParticipantProfile() {
 
                       <Link
                         to={`/activities/${chk.activity_id}`}
+                        state={versCeProfil}
                         className="btn-ghost border text-xs py-1 px-2.5 flex items-center gap-1"
                       >
                         <Eye className="w-3 h-3" />
