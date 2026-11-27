@@ -15,6 +15,7 @@ const { DEPLIE, deplier, conditionsDeRecherche } = require("../services/recherch
 const { reunir, defaire } = require("../services/identite");
 const { contactsCollectifs } = require("../services/contactsCollectifs");
 const requireAdmin = require("../middleware/role.middleware");
+const { reservePourLaPage } = require("../services/lignesEnReserve");
 const { genreSourcePret } = require("../migrations/genreSource");
 const { proposer, normaliserPrenom, MIN_PERSONNES, ACCORD_MIN } = require("../services/genreParPrenom");
 const {
@@ -43,7 +44,14 @@ const COLONNES_TEXTE = [
 /* Filtres et cloisonnement, partages par la liste paginee et l'export.
    Les deux vues doivent voir exactement le meme perimetre : un partenaire
    n'exporte que ses propres participants, un coach que les siens. */
-function buildFilters(req) {
+/**
+ * @param {object} [options.reserve] { sql, mode } — la réserve des
+ *   partenaires et des coachs : « exclure » (ce que tout le monde voit),
+ *   « inclure » (signalée ligne par ligne) ou « seule ». Absente, toutes les
+ *   inscriptions comptent : c'est ce qu'il faut aux outils de qualité des
+ *   données, qui travaillent sur les fiches réelles.
+ */
+function buildFilters(req, options = {}) {
   const search = (req.query.search || "").trim();
   const genre = req.query.genre || "";
   const dispositif = req.query.dispositif || "";
@@ -110,6 +118,12 @@ function buildFilters(req) {
   params.push(...r.params);
   idx = r.nextIdx;
 
+  /* Une inscription en réserve n'existe pas pour la page tant qu'un
+     administrateur ne l'a pas libérée. */
+  const reserve = options.reserve || null;
+  if (reserve?.mode === "exclure") conditions.push("rz.participant_id IS NULL");
+  if (reserve?.mode === "seule") conditions.push("rz.participant_id IS NOT NULL");
+
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 
   const baseFrom = `
@@ -118,6 +132,7 @@ function buildFilters(req) {
     JOIN activities a ON a.id = ap.activity_id
     LEFT JOIN partners pr ON pr.id = a.partner_id
     LEFT JOIN devices   d  ON d.id  = a.device_id
+    ${reserve ? `LEFT JOIN (${reserve.sql}) rz ON rz.activity_id = ap.activity_id AND rz.participant_id = ap.participant_id` : ""}
     ${where}
   `;
 
@@ -173,9 +188,15 @@ router.get("/", authMiddleware, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const offset = (page - 1) * PAGE_SIZE;
-    const { baseFrom, params, nextIdx } = buildFilters(req);
+    const reserve = await reservePourLaPage(req);
+    const { baseFrom, params, nextIdx } = buildFilters(req, { reserve });
+    /* Combien la réserve cache, avec les mêmes filtres : l'administrateur doit
+       savoir qu'il y a quelque chose à voir. Personne d'autre ne l'apprend. */
+    const cachees = req.user.role === "admin"
+      ? buildFilters(req, { reserve: { ...reserve, mode: "seule" } })
+      : null;
 
-    const [statsRes, dataRes] = await Promise.all([
+    const [statsRes, dataRes, reserveRes] = await Promise.all([
       pool.query(`
         SELECT
           COUNT(*)::int                                     AS total,
@@ -190,11 +211,15 @@ router.get("/", authMiddleware, async (req, res) => {
           a.title         AS activite,
           a.activity_date AS date_activite,
           pr.name         AS partenaire,
-          d.name          AS dispositif
+          d.name          AS dispositif,
+          ${reserve.mode === "exclure" ? "NULL" : "rz.motif"} AS en_reserve
         ${baseFrom}
         ORDER BY a.activity_date DESC, p.nom, p.prenom
         LIMIT $${nextIdx} OFFSET $${nextIdx + 1}
       `, [...params, PAGE_SIZE, offset]),
+      cachees
+        ? pool.query(`SELECT COUNT(*)::int AS n ${cachees.baseFrom}`, cachees.params)
+        : Promise.resolve(null),
     ]);
 
     const { total, male, female } = statsRes.rows[0];
@@ -203,6 +228,9 @@ router.get("/", authMiddleware, async (req, res) => {
       total,
       male,
       female,
+      /* Administrateurs : inscriptions en réserve non libérée, et ce que la
+         liste en montre (« exclure », « inclure », « seule »). */
+      ...(reserveRes ? { en_reserve: reserveRes.rows[0].n, reserve: reserve.mode } : {}),
       page,
       pages: Math.ceil(total / PAGE_SIZE),
       limit: PAGE_SIZE,
@@ -240,7 +268,9 @@ function csvLine(cells) {
 
 router.get("/export.csv", authMiddleware, async (req, res) => {
   try {
-    const { baseFrom, params, nextIdx, search, genre } = buildFilters(req);
+    const { baseFrom, params, nextIdx, search, genre } = buildFilters(req, {
+      reserve: await reservePourLaPage(req),
+    });
 
     const countRes = await pool.query(`SELECT COUNT(*)::int AS total ${baseFrom}`, params);
     const total = countRes.rows[0].total;
@@ -308,7 +338,7 @@ router.get("/export.csv", authMiddleware, async (req, res) => {
  */
 router.get("/assiduite", authMiddleware, async (req, res) => {
   try {
-    const { baseFrom, params } = buildFilters(req);
+    const { baseFrom, params } = buildFilters(req, { reserve: await reservePourLaPage(req) });
     const r = await pool.query(
       `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure, p.age_range,
               a.id AS activity_id, a.title AS titre,
@@ -338,7 +368,7 @@ router.get("/assiduite", authMiddleware, async (req, res) => {
    dans un tableur, avec les modules de chacun sur la ligne. */
 router.get("/assiduite/export.csv", authMiddleware, async (req, res) => {
   try {
-    const { baseFrom, params } = buildFilters(req);
+    const { baseFrom, params } = buildFilters(req, { reserve: await reservePourLaPage(req) });
     const r = await pool.query(
       `SELECT p.id, p.nom, p.prenom, p.email, p.telephone, p.genre, p.structure, p.age_range,
               a.id AS activity_id, a.title AS titre,

@@ -733,7 +733,7 @@ export default function Dashboard() {
 function RapprochementChiffres({ r }) {
   const n = (v) => Number(v || 0).toLocaleString("fr-FR");
   const lignes = [
-    { libelle: "Inscriptions sur toutes les listes (ce que compte la page Participants)", valeur: r.inscriptions_toutes_periodes, total: true },
+    { libelle: "Inscriptions sur toutes les listes, toutes dates, réserve comprise", valeur: r.inscriptions_toutes_periodes, total: true },
     { libelle: "Activités en dehors de la période affichée", valeur: -r.hors_periode },
     { libelle: "Activités à venir, pas encore réalisées", valeur: -r.a_venir },
     { libelle: "Inscriptions de la période", valeur: r.inscriptions_periode, total: true },
@@ -770,7 +770,8 @@ function RapprochementChiffres({ r }) {
         </tbody>
       </table>
       <p className="mt-2 text-xs text-slate-500">
-        La page Participants compte chaque ligne de chaque liste, quelle que soit sa date. Le tableau de bord
+        La page Participants compte chaque ligne de chaque liste, quelle que soit sa date, sauf la réserve
+        qu&apos;un administrateur n&apos;a pas libérée. Le tableau de bord
         ne compte que la période choisie, et seulement les activités déjà passées ; il retire ce qui dépasse les
         objectifs des partenaires et des coachs. Les effectifs estimés sont ceux saisis à la main pour des
         activités dont la liste n&apos;a pas été importée.
