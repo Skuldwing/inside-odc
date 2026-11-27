@@ -581,8 +581,51 @@ router.get("/summary", authMiddleware, async (req, res) => {
     const partnersActive =
       partnersActiveRes.rows[0]?.active || 0;
 
+    /* D'où vient le grand chiffre, ligne par ligne.
+     *
+     * La page Participants compte toutes les inscriptions de toutes les
+     * listes ; le tableau de bord, celles de la période choisie et déjà
+     * réalisées, moins ce qui dépasse les objectifs, plus les effectifs
+     * estimés des activités sans liste. Trois chiffres justes, mais sans le
+     * chemin de l'un à l'autre, ils passaient pour contradictoires.
+     *
+     * Chaque ligne se déduit des autres : la somme tombe juste, à l'unité.
+     * Réservé aux administrateurs, comme la réserve des coachs. */
+    let rapprochement = null;
+    if (req.user.role === "admin") {
+      const CONDITION_DATES = "a.activity_date BETWEEN $1 AND LEAST($2::date, CURRENT_DATE)";
+      /* Les mêmes filtres (partenaire, dispositif, genre), toutes dates. Les
+         deux bornes restent citées pour que la requête garde ses paramètres. */
+      const sansDates = where.replace(
+        CONDITION_DATES,
+        "($1::date IS NULL OR $2::date IS NULL OR TRUE)"
+      );
+      const { rows: [h] } = await pool.query(
+        `SELECT COUNT(ap.participant_id)::int AS toutes,
+                COUNT(ap.participant_id) FILTER (WHERE a.activity_date > CURRENT_DATE)::int AS a_venir
+           FROM activities a
+           JOIN activity_participants ap ON ap.activity_id = a.id
+           LEFT JOIN participants part ON part.id = ap.participant_id
+          WHERE ${sansDates}`,
+        params
+      );
+      const periode = Number(totals.participants || 0) + Number(totals.reserve_coachs || 0);
+      rapprochement = {
+        inscriptions_toutes_periodes: h.toutes,
+        hors_periode: Math.max(0, h.toutes - h.a_venir - periode),
+        a_venir: h.a_venir,
+        inscriptions_periode: periode,
+        reserve_coachs: Number(totals.reserve_coachs || 0),
+        reserve_partenaires: Number(totals.participants || 0) - totauxPlafonnes.retenu,
+        enregistres: totauxPlafonnes.retenu,
+        sans_liste: totauxPlafonnes.estime - totauxPlafonnes.retenu,
+        estimes: totauxPlafonnes.estime,
+      };
+    }
+
     res.json({
       meta: { year, from, to },
+      rapprochement,
       totals: {
         activities: totals.activities,
         /* Ce qui est compte : le realise de chaque partenaire retenu a son

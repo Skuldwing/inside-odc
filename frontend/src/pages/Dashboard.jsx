@@ -617,6 +617,12 @@ export default function Dashboard() {
           personnes qu'on saurait retirer d'un graphique. Sans cette phrase,
           leur somme ne tomberait pas sur le total et ça passerait pour une
           panne. */}
+      {/* Le chemin d'un chiffre à l'autre : de toutes les inscriptions (la page
+          Participants) au grand chiffre du tableau de bord. */}
+      {isAdmin && summary?.rapprochement && (
+        <RapprochementChiffres r={summary.rapprochement} />
+      )}
+
       {/* La réserve des coachs : retirée de tous les chiffres, y compris des
           répartitions — elle est rattachée à des activités précises. Dite à
           l'administrateur, qui sinon verrait le total baisser sans raison. */}
@@ -716,6 +722,63 @@ export default function Dashboard() {
    qui entre dans l'objectif de chacun —, par modalité. Rien sur le surplus.
    Coach : son objectif, ce qui en est retenu, et sa réserve, qu'il est seul
    (avec les administrateurs) à voir. */
+/**
+ * D'où viennent les chiffres.
+ *
+ * La page Participants, le grand chiffre et « enregistrés + estimés » ne
+ * comptent pas la même chose, et rien ne permettait de passer de l'un à
+ * l'autre : trois chiffres justes passaient pour contradictoires. Le calcul
+ * est posé ici, ligne par ligne, et retombe à l'unité.
+ */
+function RapprochementChiffres({ r }) {
+  const n = (v) => Number(v || 0).toLocaleString("fr-FR");
+  const lignes = [
+    { libelle: "Inscriptions sur toutes les listes (ce que compte la page Participants)", valeur: r.inscriptions_toutes_periodes, total: true },
+    { libelle: "Activités en dehors de la période affichée", valeur: -r.hors_periode },
+    { libelle: "Activités à venir, pas encore réalisées", valeur: -r.a_venir },
+    { libelle: "Inscriptions de la période", valeur: r.inscriptions_periode, total: true },
+    { libelle: "Au-delà de l'objectif des partenaires (réserve)", valeur: -r.reserve_partenaires },
+    { libelle: "Au-delà de l'objectif des coachs (réserve)", valeur: -r.reserve_coachs },
+    { libelle: "Bénéficiaires enregistrés — liste nominative", valeur: r.enregistres, total: true, fort: true },
+    { libelle: "Effectifs estimés des activités sans liste", valeur: r.sans_liste },
+    { libelle: "Bénéficiaires estimés — enregistrés + effectifs estimés", valeur: r.estimes, total: true, fort: true },
+  ];
+  return (
+    <details className="group rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2 gap-y-1 marker:hidden">
+        <Info className="h-4 w-4 flex-shrink-0 text-orange-500" aria-hidden="true" />
+        <span className="font-semibold text-slate-900">D&apos;où viennent ces chiffres ?</span>
+        <span className="text-slate-500">
+          {n(r.inscriptions_toutes_periodes)} inscriptions sur les listes → {n(r.enregistres)} comptées
+          sur la période → {n(r.estimes)} avec les effectifs estimés
+        </span>
+        <span className="ml-auto text-xs font-medium text-orange-700 group-open:hidden">Voir le détail</span>
+      </summary>
+      <table className="mt-3 w-full text-sm">
+        <tbody>
+          {lignes.map((l) => (
+            <tr key={l.libelle} className={l.total ? "border-t border-slate-200" : ""}>
+              <td className={`py-1.5 pr-3 ${l.total ? "font-medium text-slate-900" : "pl-4 text-slate-600"} ${l.fort ? "font-semibold" : ""}`}>
+                {!l.total && (l.valeur < 0 ? "− " : "+ ")}
+                {l.libelle}
+              </td>
+              <td className={`py-1.5 text-right tabular-nums ${l.total ? "font-semibold text-slate-900" : l.valeur < 0 ? "text-rose-700" : "text-emerald-700"}`}>
+                {l.total ? n(l.valeur) : `${l.valeur < 0 ? "−" : "+"}${n(Math.abs(l.valeur))}`}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-xs text-slate-500">
+        La page Participants compte chaque ligne de chaque liste, quelle que soit sa date. Le tableau de bord
+        ne compte que la période choisie, et seulement les activités déjà passées ; il retire ce qui dépasse les
+        objectifs des partenaires et des coachs. Les effectifs estimés sont ceux saisis à la main pour des
+        activités dont la liste n&apos;a pas été importée.
+      </p>
+    </details>
+  );
+}
+
 function RealisationsCoachsCard({ data, pourLeCoach }) {
   const coachs = data?.coachs || [];
   if (!coachs.length) return null;
