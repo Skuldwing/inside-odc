@@ -24,6 +24,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import api from "../api";
+import { retourVers } from "../navigation/retour";
 import PageHeader from "../components/ui/PageHeader";
 import { Modal, useToast } from "../components/ui";
 import StatutValidation from "../components/StatutValidation";
@@ -247,7 +248,7 @@ function ActivityRow({ a, onValider, onRejeter, onAnnuler, busy }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Link to={`/activities/${a.id}`} className="font-semibold text-slate-900 hover:text-orange-700 hover:underline">
+            <Link to={`/activities/${a.id}`} state={retourVers("/fiabilite", "Retour à la fiabilité")} className="font-semibold text-slate-900 hover:text-orange-700 hover:underline">
               {a.title}
             </Link>
             <StatutValidation statut={a.reliability_status} score={a.reliability_score} admin />
@@ -323,7 +324,7 @@ function ActivityRow({ a, onValider, onRejeter, onAnnuler, busy }) {
           <Table className="h-3 w-3" />
           {liste ? "Masquer la liste" : "Voir la liste des participants"}
         </button>
-        <Link to={`/activities/${a.id}`} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700">
+        <Link to={`/activities/${a.id}`} state={retourVers("/fiabilite", "Retour à la fiabilité")} className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-700">
           <ExternalLink className="h-3 w-3" /> Ouvrir l&apos;activité
         </Link>
       </div>

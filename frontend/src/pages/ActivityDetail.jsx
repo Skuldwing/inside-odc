@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import QRCode from "qrcode";
 import api from "../api";
+import { useRetour, retourVers } from "../navigation/retour";
 import { useAuth } from "../auth/useAuth";
 import { useToast, useConfirm } from "../components/ui";
 import RevueDoublons, {
@@ -254,6 +255,11 @@ function VerificationDoublonsListe({ activityId, onCorrige }) {
 export default function ActivityDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  /* D'où l'on vient : la liste des activités, ou le profil d'un participant,
+     la fiabilité… Le bouton « Retour » y ramène. */
+  const retour = useRetour("/activities", "Retour à la liste des activités");
+  /* Ce que la fiche transmet aux pages qu'elle ouvre, pour qu'on y revienne. */
+  const versCetteFiche = retourVers(`/activities/${id}`, "Retour à la fiche de l'activité");
   const toast = useToast();
   const confirm = useConfirm();
   const { role, isViewer, isAdmin } = useAuth();
@@ -959,11 +965,11 @@ export default function ActivityDetail() {
       {/* Breadcrumb & Navigation */}
       <div className="flex items-center justify-between">
         <button
-          onClick={() => navigate("/activities")}
+          onClick={retour.aller}
           className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Retour à la liste des activités
+          {retour.libelle}
         </button>
 
         <div className="flex items-center gap-2">
@@ -1583,6 +1589,7 @@ export default function ActivityDetail() {
                         <td className="p-3">
                           <Link
                             to={`/participants/${p.id}`}
+                            state={versCetteFiche}
                             className="font-semibold text-slate-900 group-hover:text-orange-600 flex items-center gap-1.5"
                             title="Voir le profil complet et l'historique de ce participant"
                           >
@@ -1647,6 +1654,7 @@ export default function ActivityDetail() {
                             )}
                             <Link
                               to={`/participants/${p.id}`}
+                              state={versCetteFiche}
                               className="p-1.5 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                               title="Consulter le profil et parcours complet du jeune"
                             >

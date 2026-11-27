@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Mail, RefreshCw, Send, OctagonAlert } from "lucide-react";
 import api from "../../api";
+import { retourVers } from "../../navigation/retour";
 import { useConfirm, useToast } from "../ui";
 
 /* Demander aux bénéficiaires eux-mêmes. Chaque mois, un échantillon tiré au
@@ -256,7 +257,7 @@ export default function ContreVerification() {
                   )}
                   <span className="text-slate-500"> — sur la liste de {n.partenaire}, pour </span>
                   {n.activity_id ? (
-                    <Link to={`/activities/${n.activity_id}`} className="text-orange-700 hover:underline">« {n.title} »</Link>
+                    <Link to={`/activities/${n.activity_id}`} state={retourVers("/fiabilite", "Retour à la fiabilité")} className="text-orange-700 hover:underline">« {n.title} »</Link>
                   ) : "une activité supprimée"}
                   {n.commentaire && <p className="mt-0.5 text-xs italic text-slate-600">« {n.commentaire} »</p>}
                 </div>
