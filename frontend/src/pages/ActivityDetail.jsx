@@ -13,6 +13,7 @@ import {
   X,
   Plus,
   Search,
+  Loader2,
   Filter,
   Trash2,
   Pencil,
@@ -42,6 +43,10 @@ import QRCode from "qrcode";
 import api from "../api";
 import { useAuth } from "../auth/useAuth";
 import { useToast, useConfirm } from "../components/ui";
+import RevueDoublons, {
+  decisionsParDefaut,
+  fusionsDepuis,
+} from "../components/import/RevueDoublons";
 import StatutValidation from "../components/StatutValidation";
 
 function formatDate(iso) {
@@ -124,6 +129,127 @@ const TRANCHES_AGE = [
 const CHAMPS_FICHE = [
   "nom", "prenom", "email", "telephone", "genre", "age_range", "structure", "statut",
 ];
+
+/**
+ * Les doublons d'une liste déjà importée.
+ *
+ * Les listes importées avant la nouvelle détection ont pu laisser passer
+ * « Awa NIANG » et « NIANG Awa », ou deux lignes au même nom dont une seule
+ * avait un numéro. La même analyse que l'import est rejouée sur la liste en
+ * place ; l'administrateur décide groupe par groupe. Corriger garde une seule
+ * inscription par personne — la fiche la mieux renseignée, complétée de ce
+ * que les autres avaient — et retire les autres lignes de cette liste. Rien
+ * n'est supprimé ailleurs, et chaque retrait se remet en place depuis
+ * Participants → Inscriptions retirées.
+ */
+function VerificationDoublonsListe({ activityId, onCorrige }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [analyse, setAnalyse] = useState(null);
+  const [decisions, setDecisions] = useState({});
+  const [chargement, setChargement] = useState(false);
+  const [erreur, setErreur] = useState("");
+  const [enCours, setEnCours] = useState(false);
+
+  const verifier = async () => {
+    setChargement(true);
+    setErreur("");
+    try {
+      const r = await api.get(`/activities/${activityId}/doublons`);
+      setAnalyse(r.data);
+      setDecisions(decisionsParDefaut(r.data?.groupes));
+    } catch (err) {
+      setErreur(err?.response?.data?.error || "La vérification a échoué.");
+    } finally {
+      setChargement(false);
+    }
+  };
+
+  const fusions = analyse ? fusionsDepuis(analyse.groupes, decisions) : [];
+  const aRetirer = fusions.reduce((n, f) => n + f.length - 1, 0);
+
+  const corriger = async () => {
+    if (!fusions.length) return;
+    const ok = await confirm({
+      title: `Retirer ${aRetirer} ligne${aRetirer > 1 ? "s" : ""} en double ?`,
+      confirmLabel: "Corriger",
+      body:
+        "Pour chaque groupe marqué « Même personne », une seule inscription est gardée : la fiche la mieux renseignée, complétée de ce que les autres avaient. Les autres lignes quittent cette liste. Chaque retrait peut être annulé depuis Participants → Inscriptions retirées.",
+    });
+    if (!ok) return;
+    setEnCours(true);
+    try {
+      const r = await api.post(`/activities/${activityId}/doublons/corriger`, { fusions });
+      const { retirees = 0, fiches_completees: completees = 0, refusees = 0 } = r.data || {};
+      toast.success(
+        `${retirees} ligne${retirees > 1 ? "s" : ""} retirée${retirees > 1 ? "s" : ""}` +
+          (completees ? `, ${completees} fiche${completees > 1 ? "s" : ""} complétée${completees > 1 ? "s" : ""}` : "") +
+          (refusees ? ` — ${refusees} groupe${refusees > 1 ? "s" : ""} ignoré${refusees > 1 ? "s" : ""} (la liste a changé)` : "") +
+          ".",
+      );
+      await onCorrige?.();
+      await verifier();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "La correction a échoué.");
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <div className="card space-y-3 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-900">Doublons de la liste</p>
+          <p className="text-xs text-slate-500">
+            La vérification de l&apos;import, rejouée sur la liste déjà en place : noms inversés, lignes
+            avec et sans contact, écritures différentes, numéros +221…
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={verifier}
+          disabled={chargement || enCours}
+          className="btn-ghost border border-slate-200 text-xs disabled:opacity-50"
+        >
+          {chargement ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+          {analyse ? "Relancer la vérification" : "Vérifier les doublons"}
+        </button>
+      </div>
+
+      {(analyse || erreur) && (
+        <RevueDoublons
+          analyse={analyse}
+          decisions={decisions}
+          onChange={setDecisions}
+          chargement={chargement}
+          erreur={erreur}
+          lignesAnalysees={analyse?.inscriptions}
+          aide="« Même personne » : une seule inscription est gardée — la fiche la mieux renseignée, complétée de ce que les autres avaient — et les autres lignes quittent cette liste, sans toucher aux autres activités. Rien ne change tant que vous n'avez pas cliqué sur « Corriger »."
+        />
+      )}
+
+      {analyse?.groupes?.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={corriger}
+            disabled={!fusions.length || enCours}
+            className="btn-primary text-sm disabled:opacity-50"
+          >
+            {enCours && <Loader2 className="h-4 w-4 animate-spin" />}
+            {fusions.length
+              ? `Corriger : retirer ${aRetirer} ligne${aRetirer > 1 ? "s" : ""} en double`
+              : "Rien à corriger"}
+          </button>
+          <span className="text-xs text-slate-500">
+            Annulable depuis Participants → Inscriptions retirées.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ActivityDetail() {
   const { id } = useParams();
@@ -1210,6 +1336,11 @@ export default function ActivityDetail() {
       {/* TAB 1: LISTE DES PRÉSENCES */}
       {activeTab === "presences" && (
         <div className="space-y-4">
+          {/* Administrateurs : la vérification des doublons de l'import,
+              rejouée sur une liste déjà en place. */}
+          {isAdmin && participants.length > 1 && (
+            <VerificationDoublonsListe activityId={id} onCorrige={fetchDetail} />
+          )}
           {/* Filter Bar */}
           <div className="card p-4 flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
             <div className="relative flex-1">
